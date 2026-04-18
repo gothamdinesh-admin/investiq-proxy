@@ -339,7 +339,7 @@
     .table-row { display: grid; align-items: center; padding: 10px 16px; border-bottom: 1px solid #1a2540; transition: background 0.15s; cursor: pointer; }
     .table-row:hover { background: rgba(30,45,74,0.4); }
     .table-row:last-child { border-bottom: none; }
-    .table-header { color: #4a6080; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 16px 8px; }
+    .table-header { display: grid; align-items: center; color: #4a6080; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 16px 8px; border-bottom: 1px solid #1a2540; }
 
     .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
 
@@ -417,6 +417,10 @@
   <div class="flex items-center gap-3">
     <span id="lastUpdated" class="text-xs neutral">Not yet updated</span>
     <div id="supaUserBadge" style="display:none;align-items:center;gap:8px;">
+      <span id="adminBadge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:10px;font-weight:600;border:1px solid rgba(251,191,36,0.3);letter-spacing:0.5px;text-transform:uppercase;">
+        <i class="fas fa-shield-alt" style="font-size:9px;"></i>Admin
+      </span>
+      <span id="supaUserEmail" class="text-xs" style="color:#818cf8;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
       <button onclick="signOut()" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;">
         <i class="fas fa-sign-out-alt mr-1"></i>Logout
       </button>
@@ -609,7 +613,7 @@
           </button>
         </div>
         <div id="holdingsTableWrap">
-          <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 80px;">
+          <div class="table-header" style="grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
             <span>Asset</span><span class="text-right">Price</span><span class="text-right">Value</span><span class="text-right">Return</span><span class="text-right">Weight</span><span class="text-right">Actions</span>
           </div>
           <div id="holdingsRows"></div>
@@ -665,7 +669,7 @@
           <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Download blank CSV template">
             <i class="fas fa-download mr-1"></i>Template
           </button>
-          <div class="flex" style="border:1px solid #334155;border-radius:6px;overflow:hidden;">
+          <div class="flex items-center" style="border:1px solid #334155;border-radius:6px;overflow:hidden;">
             <label class="btn" style="background:#1e293b;border:none;border-radius:0;cursor:pointer;" title="Import / sync holdings from CSV">
               <i class="fas fa-file-import mr-1"></i>Import CSV
               <input type="file" accept=".csv" id="csvImportInput" style="display:none;" onchange="importCSV(event)">
@@ -675,6 +679,7 @@
               <option value="sync">Sync (adjust quantities)</option>
               <option value="replace">Replace platform (overwrite all)</option>
             </select>
+            <input type="date" id="csvImportDate" class="input" style="border:none;border-left:1px solid #334155;border-radius:0;background:#1e293b;padding:0 8px;width:auto;font-size:11px;color-scheme:dark;" title="Snapshot date — the portfolio state will be snapshotted as of this date">
           </div>
           <button onclick="openModal('addModal')" class="btn btn-primary">
             <i class="fas fa-plus mr-1"></i>Add Holding
@@ -1586,17 +1591,39 @@ async function loadFromSupabase() {
     if (error && error.code !== 'PGRST116') { console.warn('Supabase load:', error.message); return false; }
     if (!data) return false;
 
+    // ─── Cache/staleness guard ─────────────────────────────────
+    // If local state is NEWER than Supabase, skip the overwrite — local wins.
+    // Prevents "just-imported CSV reverted by stale cloud data" bug.
+    const localUpdatedAt  = state.settings?.updatedAt || localStorage.getItem('investiq_updated_at') || null;
+    const remoteUpdatedAt = data.updated_at || null;
+    const localPortfolioLen  = state.portfolio?.length || 0;
+    const remotePortfolioLen = (data.portfolio || []).length;
+
+    if (localUpdatedAt && remoteUpdatedAt && new Date(localUpdatedAt) > new Date(remoteUpdatedAt)) {
+      console.log(`[supabase-load] SKIPPED — local state (${localUpdatedAt}, ${localPortfolioLen} holdings) is newer than cloud (${remoteUpdatedAt}, ${remotePortfolioLen}). Pushing local to cloud instead.`);
+      saveToSupabase();
+      return false;
+    }
+    // Also skip if local has holdings but cloud is empty — cloud almost certainly hasn't synced yet
+    if (localPortfolioLen > 0 && remotePortfolioLen === 0) {
+      console.log(`[supabase-load] SKIPPED — local has ${localPortfolioLen} holdings, cloud has 0. Pushing local up instead.`);
+      saveToSupabase();
+      return false;
+    }
+
     // Snapshot LOCAL credentials first, then merge remote, then restore locals on top
     const localOnly = {};
     LOCAL_ONLY_SETTINGS.forEach(k => { if (state.settings[k]) localOnly[k] = state.settings[k]; });
 
     const remoteSettings = data.settings || {};
     state.settings = { ...state.settings, ...remoteSettings, ...localOnly };
+    if (remoteUpdatedAt) state.settings.updatedAt = remoteUpdatedAt;
 
     state.portfolio = consolidatePortfolio(data.portfolio || []);
     if (data.agent_results) state.agentResults = data.agent_results;
     localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: state.portfolio, settings: state.settings, agentResults: state.agentResults }));
-    console.log('✓ Loaded from Supabase');
+    if (remoteUpdatedAt) localStorage.setItem('investiq_updated_at', remoteUpdatedAt);
+    console.log(`✓ Loaded from Supabase (${remotePortfolioLen} holdings, updated ${remoteUpdatedAt})`);
     return true;
   } catch(e) { console.warn('Supabase load error:', e); return false; }
 }
@@ -1608,6 +1635,7 @@ async function saveToSupabase() {
     const settingsToSave = { ...state.settings };
     LOCAL_ONLY_SETTINGS.forEach(k => delete settingsToSave[k]);
 
+    const nowIso = new Date().toISOString();
     const { error } = await _supabase
       .from('investiq_portfolios')
       .upsert({
@@ -1615,10 +1643,16 @@ async function saveToSupabase() {
         portfolio: state.portfolio,
         settings: settingsToSave,
         agent_results: state.agentResults,
-        updated_at: new Date().toISOString()
+        updated_at: nowIso
       }, { onConflict: 'user_id' });
-    if (error) console.warn('Supabase save:', error.message);
-    else console.log('✓ Saved to Supabase');
+    if (error) {
+      console.warn('Supabase save:', error.message);
+    } else {
+      // Record the timestamp locally too so next loadFromSupabase can compare
+      state.settings.updatedAt = nowIso;
+      localStorage.setItem('investiq_updated_at', nowIso);
+      console.log(`✓ Saved to Supabase (${state.portfolio.length} holdings, ${nowIso})`);
+    }
   } catch(e) { console.warn('Supabase save error:', e); }
 }
 
@@ -1632,20 +1666,24 @@ function scheduleSupa() {
 // Stores one row per user per day for a long-term performance chart.
 // Called after refreshPortfolioPrices() so values reflect LIVE market data,
 // not stale CSV prices.
-async function recordDailySnapshot() {
+async function recordDailySnapshot(opts = {}) {
+  // opts.date     — YYYY-MM-DD string (defaults to today)
+  // opts.force    — if true, overwrite existing snapshot for that date
+  // opts.source   — optional label stored in breakdown (e.g. 'csv-import')
   if (!_supabase || !_supaUser) return;
   if (!state.portfolio.length) return;
 
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const date = opts.date || new Date().toISOString().slice(0, 10);
   try {
-    // Skip if today's snapshot already exists
-    const { data: existing } = await _supabase
-      .from('investiq_snapshots')
-      .select('id')
-      .eq('user_id', _supaUser.id)
-      .eq('snapshot_date', today)
-      .maybeSingle();
-    if (existing) return;
+    if (!opts.force) {
+      const { data: existing } = await _supabase
+        .from('investiq_snapshots')
+        .select('id')
+        .eq('user_id', _supaUser.id)
+        .eq('snapshot_date', date)
+        .maybeSingle();
+      if (existing) { console.log(`[snapshot] ${date} already exists, skipping`); return; }
+    }
 
     const metrics = getMetrics();
     const byType = {};
@@ -1655,20 +1693,21 @@ async function recordDailySnapshot() {
       byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
     });
 
-    await _supabase.from('investiq_snapshots').upsert({
+    const { error } = await _supabase.from('investiq_snapshots').upsert({
       user_id:        _supaUser.id,
-      snapshot_date:  today,
+      snapshot_date:  date,
       total_value:    Number(metrics.totalValue.toFixed(2)),
       total_cost:     Number(metrics.totalCost.toFixed(2)),
       total_gain:     Number(metrics.totalGain.toFixed(2)),
       total_gain_pct: Number(metrics.totalGainPct.toFixed(4)),
       holdings_count: metrics.holdings.length,
       currency:       state.settings.currency || 'NZD',
-      breakdown:      { byType, byPlatform }
+      breakdown:      { byType, byPlatform, source: opts.source || 'auto' }
     }, { onConflict: 'user_id,snapshot_date' });
-    console.log('✓ Daily snapshot recorded:', today);
+    if (error) { console.warn('[snapshot] error:', error.message); return; }
+    console.log(`✓ Snapshot recorded (${date}, source=${opts.source||'auto'}, ${metrics.holdings.length} holdings, $${metrics.totalValue.toFixed(2)})`);
   } catch(e) {
-    console.warn('Snapshot error:', e.message);
+    console.warn('[snapshot] exception:', e.message);
   }
 }
 
@@ -2000,7 +2039,26 @@ function parseCSVLine(line) {
   return result;
 }
 
+// Prevent double-fire of the file input (known browser quirk on some drag-drop flows)
+// and prevent Supabase from reloading stale data mid-import.
+let _importInProgress = false;
+
 async function importCSV(event) {
+  // Hard guard: if another import is in flight, ignore this event
+  if (_importInProgress) {
+    console.warn('[csv-import] Ignored duplicate import event while already importing');
+    if (event?.target) event.target.value = '';
+    return;
+  }
+  _importInProgress = true;
+  try {
+    await _importCSVImpl(event);
+  } finally {
+    _importInProgress = false;
+  }
+}
+
+async function _importCSVImpl(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-imported
@@ -2079,7 +2137,9 @@ async function importCSV(event) {
     }
   }
 
-  let added = 0, skipped = 0;
+  console.log(`[csv-import] mode=${importMode} | existing holdings=${state.portfolio.length} | existing platforms=${JSON.stringify([...new Set(state.portfolio.map(h => h.platform))])}`);
+
+  let added = 0, updated = 0, newCreated = 0, skipped = 0;
   for (let i = 1; i < lines.length; i++) {
     const row = parseCSVLine(lines[i]);
     if (lines[i].trim().startsWith('#')) continue; // skip comment lines
@@ -2105,17 +2165,27 @@ async function importCSV(event) {
     const notes    = iNote >= 0 ? (row[iNote]?.trim() || '') : '';
 
     const syncMode = importMode === 'sync';
-    // Case-insensitive match on symbol+platform so eToro vs etoro don't duplicate
-    const existing = state.portfolio.find(h =>
-      (h.symbol || '').toUpperCase() === symbol &&
+
+    // Case-insensitive match on symbol+platform (handles eToro vs etoro vs ETORO).
+    // Fallback: if no platform match in sync/replace mode, match by symbol only
+    // (common when CSV has no platform column → all rows become "Imported").
+    let existing = state.portfolio.find(h =>
+      (h.symbol || '').toUpperCase().trim() === symbol &&
       normPlat(h.platform) === normPlat(platform)
     );
+    if (!existing && (syncMode || importMode === 'replace')) {
+      existing = state.portfolio.find(h =>
+        (h.symbol || '').toUpperCase().trim() === symbol
+      );
+      if (existing) {
+        console.log(`[csv-import] symbol-only fallback: ${symbol} matched existing on platform "${existing.platform}" (CSV: "${platform}")`);
+      }
+    }
 
     if (existing) {
       if (syncMode) {
         // SYNC MODE: CSV is the authoritative latest state.
         // Consolidate into a SINGLE clean lot at CSV quantity + CSV price.
-        // This preserves the avg cost (from CSV) without accumulating adjustment lots.
         const finalPrice = buyPrice || getHoldingBasis(existing).avgBuyPrice || 0;
         existing.lots = [{
           quantity,
@@ -2123,14 +2193,12 @@ async function importCSV(event) {
           date: date || new Date().toISOString().slice(0,10),
           note: 'Sync (CSV)'
         }];
-        // Update metadata from CSV
         if (name && name !== symbol) existing.name = name;
         if (sector)  existing.sector  = sector;
         if (country) existing.country = country;
         if (currency) existing.currency = currency;
-        // Normalise platform casing to match CSV
         existing.platform = platform;
-        added++;
+        updated++;
       } else {
         // ADD MODE: same position, new lot (e.g. bought more)
         const basis = getHoldingBasis(existing);
@@ -2150,20 +2218,38 @@ async function importCSV(event) {
         country, notes, currentPrice: null, dayChange: null, dayChangePct: null,
         lots: [{ quantity, price: buyPrice, date, note: '' }]
       });
-      added++;
+      newCreated++;
     }
   }
 
-  if (added === 0 && skipped === 0) {
+  if (added === 0 && updated === 0 && newCreated === 0 && skipped === 0) {
     alert('No data rows found. Check your CSV has data below the header row.'); return;
   }
 
-  const modeLabel = importMode === 'sync' ? 'synced' : importMode === 'replace' ? 'replaced' : 'imported';
   saveState();
   renderAll();
-  const removedNote = removedCount ? ` · ${removedCount} removed` : '';
-  alert(`✓ ${added} holding${added!==1?'s':''} ${modeLabel}${removedNote}${skipped ? ` · ${skipped} skipped (exact duplicates)` : ''}.\n\nFetching live prices now...`);
-  refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
+  const parts = [];
+  if (updated)    parts.push(`${updated} existing updated in place`);
+  if (newCreated) parts.push(`${newCreated} new holdings created`);
+  if (added && !updated && !newCreated) parts.push(`${added} lots added`);
+  else if (added) parts.push(`${added} extra lots appended`);
+  if (removedCount) parts.push(`${removedCount} removed before re-import`);
+  if (skipped)    parts.push(`${skipped} duplicates skipped`);
+  console.log(`[csv-import] ✓ mode=${importMode} | ${parts.join(' · ')}`);
+
+  // Snapshot date captured from the date picker next to the import button
+  const snapshotDate = (document.getElementById('csvImportDate')?.value || '').trim()
+    || new Date().toISOString().slice(0,10);
+
+  alert(`✓ CSV import complete (${importMode} mode):\n\n• ${parts.join('\n• ')}\n\nSnapshot date: ${snapshotDate}\nFetching live prices…`);
+
+  // Fetch live prices, then force a snapshot using the chosen date
+  refreshMarketData()
+    .then(() => refreshPortfolioPrices())
+    .then(() => {
+      renderAll(); updateTicker();
+      recordDailySnapshot({ date: snapshotDate, force: true, source: 'csv-import' });
+    });
 }
 
 function downloadCSVTemplate() {
@@ -2557,7 +2643,7 @@ function renderSummaryCards(metrics) {
 
 function renderHoldingsTable(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
-  const cols = '2fr 1fr 1fr 1fr 1fr 80px';
+  const cols = '2.4fr 1fr 1fr 1fr 1.4fr 100px';
   const isMobile = window.matchMedia('(max-width: 768px)').matches;
   const header = document.querySelector('#section-overview .table-header');
 
@@ -2635,10 +2721,12 @@ function renderHoldingsTable(metrics) {
         <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
         <div class="text-right"><span class="${badge}">${sign}${fmt(h.gainPct)}%</span></div>
         <div class="text-right">
-          <div class="progress-bar" style="width:80px;margin-left:auto;">
-            <div class="progress-fill" style="width:${Math.min(h.weight,100)}%;background:${ASSET_COLORS[h.type]||'#818cf8'};"></div>
+          <div class="flex items-center justify-end gap-2">
+            <div class="progress-bar" style="width:60px;">
+              <div class="progress-fill" style="width:${Math.min(h.weight,100)}%;background:${ASSET_COLORS[h.type]||'#818cf8'};"></div>
+            </div>
+            <span class="text-xs neutral mono" style="min-width:36px;">${fmt(h.weight)}%</span>
           </div>
-          <div class="text-xs neutral text-right mt-0.5">${fmt(h.weight)}%</div>
         </div>
         <div class="text-right" onclick="event.stopPropagation()">
           <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
@@ -3664,19 +3752,50 @@ function toggleApiKeyVisibility() {
 
 async function clearAllData() {
   if (!confirm('Are you sure? This will delete ALL your portfolio data from this browser AND the cloud. This cannot be undone.')) return;
+
+  const errors = [];
   state.portfolio = [];
   state.agentResults = null;
-  // Clear localStorage
-  localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: [], settings: state.settings, agentResults: null }));
-  // Clear Supabase row for this user
+
+  try {
+    localStorage.setItem('investiq_v2', JSON.stringify({
+      portfolio: [], settings: state.settings, agentResults: null
+    }));
+  } catch(e) { errors.push('localStorage: ' + e.message); }
+
   if (_supabase && _supaUser) {
     try {
-      await _supabase.from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
-      console.log('✓ Supabase data cleared');
-    } catch(e) { console.warn('Supabase clear error:', e); }
+      const { error: e1 } = await _supabase
+        .from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
+      if (e1) errors.push('Supabase portfolio: ' + e1.message);
+
+      const { error: e2 } = await _supabase
+        .from('investiq_snapshots').delete().eq('user_id', _supaUser.id);
+      if (e2 && !e2.message.includes('does not exist')) {
+        errors.push('Supabase snapshots: ' + e2.message);
+      }
+
+      // Verify the deletion actually worked (catches RLS silent failures)
+      const { data: check } = await _supabase
+        .from('investiq_portfolios').select('user_id').eq('user_id', _supaUser.id).maybeSingle();
+      if (check) errors.push('CLOUD ROW STILL EXISTS after delete — RLS policy likely blocking. Run the RLS-fix SQL from docs.');
+    } catch(e) {
+      errors.push('Supabase: ' + e.message);
+    }
+  } else {
+    errors.push('Not signed in — only local data cleared');
   }
+
   renderAll();
   closeModal('settingsModal');
+
+  if (errors.length) {
+    alert('⚠ Clear completed with issues:\n\n• ' + errors.join('\n• '));
+    console.error('[clearAllData] errors:', errors);
+  } else {
+    alert('✓ All data cleared (local + cloud). Reloading…');
+    window.location.reload();
+  }
 }
 
 // ===== NAVIGATION =====
@@ -4359,6 +4478,12 @@ async function checkAdminStatus() {
   if (adminLink) adminLink.style.display = _isAdmin ? '' : 'none';
   const mobileAdminTab = document.getElementById('mobileAdminTab');
   if (mobileAdminTab) mobileAdminTab.style.display = _isAdmin ? 'flex' : 'none';
+  // Show the ADMIN badge in the header
+  const adminBadge = document.getElementById('adminBadge');
+  if (adminBadge) adminBadge.style.display = _isAdmin ? 'inline-flex' : 'none';
+  // If Settings modal is currently open, refresh so admin section shows/hides
+  const settingsModal = document.getElementById('settingsModal');
+  if (settingsModal?.classList.contains('open')) populateSettingsForm();
   updateAdminDiagnostics();
 }
 
@@ -4502,6 +4627,10 @@ function timeSince(date) {
 
 // ===== INIT =====
 async function init() {
+  // Default CSV import date picker to today
+  const dateEl = document.getElementById('csvImportDate');
+  if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
+
   loadState();
   updateAdminDiagnostics();
 
