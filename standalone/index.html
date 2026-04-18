@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-  <script src="https://cdn.tailwindcss.com" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
@@ -126,8 +126,8 @@
       nav .font-bold.text-lg { font-size: 15px; }
       #refreshBtn .mr-1 ~ * { display: none; }      /* Refresh: icon only */
 
-      /* Stack layout */
-      .flex[style*="min-height"] { flex-direction: column; }
+      /* Stack layout — use ID to avoid matching other flex containers */
+      #mainLayout { flex-direction: column; }
 
       /* Sidebar becomes a slim header strip */
       .sidebar {
@@ -361,7 +361,7 @@
 </nav>
 
 <!-- MAIN LAYOUT -->
-<div class="flex" style="min-height:calc(100vh - 68px);">
+<div id="mainLayout" class="flex" style="min-height:calc(100vh - 68px);">
 
   <!-- SIDEBAR -->
   <aside class="sidebar p-4" style="background:#080d1a;border-right:1px solid #1e2d4a;">
@@ -392,6 +392,20 @@
       </div>
     </div>
 
+    <!-- Signed-in user strip — hidden until logged in -->
+    <div id="sidebarUserStrip" style="display:none;align-items:center;gap:10px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;padding:10px 12px;margin-bottom:16px;">
+      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fas fa-user" style="font-size:12px;color:white;"></i>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div class="text-xs" style="color:#c8d6ef;font-weight:600;">Signed in</div>
+        <div id="sidebarUserEmail" class="text-xs" style="color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+      </div>
+      <button onclick="signOut()" title="Sign out" style="background:none;border:none;cursor:pointer;color:#4a6080;padding:2px;">
+        <i class="fas fa-sign-out-alt" style="font-size:13px;"></i>
+      </button>
+    </div>
+
     <!-- Nav -->
     <nav class="space-y-1 mb-6">
       <div class="nav-link active" onclick="showSection('overview',this)"><i class="fas fa-th-large"></i> Overview</div>
@@ -399,7 +413,9 @@
       <div class="nav-link" onclick="showSection('performance',this)"><i class="fas fa-chart-line"></i> Performance</div>
       <div class="nav-link" onclick="showSection('market',this)"><i class="fas fa-globe"></i> Market</div>
       <div class="nav-link" onclick="showSection('insights',this)"><i class="fas fa-brain"></i> AI Insights</div>
-      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
+      <!-- Account nav link — visible to all signed-in users -->
+      <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
+      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
     </nav>
 
     <!-- Quick stats -->
@@ -700,11 +716,28 @@
           <h2 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel
           </h2>
-          <div class="text-xs neutral mt-1">Master account — full user & platform management</div>
+          <div class="text-xs neutral mt-1">Manage users, roles, and platform access</div>
         </div>
         <button onclick="loadAdminData()" class="btn btn-sm btn-secondary">
           <i class="fas fa-sync-alt mr-1"></i> Refresh
         </button>
+      </div>
+
+      <!-- Role management callout -->
+      <div class="card mb-6" style="border:1px solid rgba(251,191,36,0.25);background:rgba(251,191,36,0.04);">
+        <div class="p-4">
+          <div class="flex items-start gap-3">
+            <i class="fas fa-user-shield mt-1" style="color:#fbbf24;font-size:16px;"></i>
+            <div>
+              <div class="font-semibold text-sm mb-2" style="color:#fbbf24;">Role Management</div>
+              <div class="text-xs" style="color:#94a3b8;line-height:1.7;">
+                <span style="color:#c8d6ef;font-weight:600;">Admin</span> users see this panel, can manage platform config (proxy URL, Supabase credentials), and promote/demote other users.<br>
+                <span style="color:#c8d6ef;font-weight:600;">Regular</span> users only manage their own portfolio — they never see platform credentials or settings.<br>
+                Use the <span style="background:rgba(251,191,36,0.12);color:#fbbf24;padding:1px 6px;border-radius:4px;font-weight:600;">Make Admin</span> button in the table below to grant access to another user.
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Stats row -->
@@ -950,6 +983,31 @@
           <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
         </select>
       </div>
+      <!-- ═══════════ ACCOUNT INFO — visible when signed in ═══════════ -->
+      <div id="accountInfoSection" style="display:none;">
+        <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-user-circle" style="color:#818cf8;"></i>
+            <span class="text-xs font-semibold" style="color:#818cf8;letter-spacing:0.5px;text-transform:uppercase;">My Account</span>
+          </div>
+          <div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;padding:12px;">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-xs" style="color:#64748b;">Signed in as</div>
+                <div id="settingsUserEmail" class="text-sm" style="color:#c8d6ef;margin-top:2px;"></div>
+              </div>
+              <button onclick="signOut()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;">
+                <i class="fas fa-sign-out-alt mr-1"></i>Sign Out
+              </button>
+            </div>
+            <div class="flex items-center gap-2 mt-3">
+              <div id="settingsProxyDot" style="width:7px;height:7px;border-radius:50%;background:#34d399;flex-shrink:0;"></div>
+              <div class="text-xs" style="color:#64748b;">Connected to <span style="color:#818cf8;">InvestIQ Cloud</span> &mdash; your portfolio syncs automatically</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══════════ ADMIN-ONLY PLATFORM SETTINGS ═══════════ -->
       <!-- Hidden for regular users. Admin sees + can override platform defaults. -->
       <div id="adminSettingsSection" style="display:none;">
@@ -1296,25 +1354,38 @@ function initSupabase() {
 }
 
 function updateAuthUI() {
-  const badge = document.getElementById('supaUserBadge');
+  const badge       = document.getElementById('supaUserBadge');
   const signInBadge = document.getElementById('supaSignInBadge');
-  const emailEl = document.getElementById('supaUserEmail');
-  const gate = document.getElementById('authGate');
+  const emailEl     = document.getElementById('supaUserEmail');
+  const gate        = document.getElementById('authGate');
+  const accountLink = document.getElementById('accountNavLink');
+  const userStrip   = document.getElementById('sidebarUserStrip');
+  const userStripEmail = document.getElementById('sidebarUserEmail');
   const hasSupaConfig = !!(state.settings.supabaseUrl?.trim() && state.settings.supabaseKey?.trim());
 
   if (_supaUser) {
-    if (badge) { badge.style.display = 'flex'; }
-    if (emailEl) emailEl.textContent = _supaUser.email;
+    // Logged in — show email badge, hide gate, show account nav link + sidebar strip
+    if (badge)      { badge.style.display = 'flex'; }
+    if (emailEl)    emailEl.textContent = _supaUser.email;
     if (signInBadge) signInBadge.style.display = 'none';
-    if (gate) gate.style.display = 'none'; // hide gate — logged in
+    if (gate)       gate.style.display = 'none';
+    if (accountLink) accountLink.style.display = '';
+    if (userStrip)  userStrip.style.display = 'flex';
+    if (userStripEmail) userStripEmail.textContent = _supaUser.email;
   } else if (hasSupaConfig) {
-    if (badge) badge.style.display = 'none';
+    // Supabase configured but not logged in — show gate
+    if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'block';
-    if (gate) gate.style.display = 'flex'; // show gate — configured but not logged in
+    if (gate)       gate.style.display = 'flex';
+    if (accountLink) accountLink.style.display = 'none';
+    if (userStrip)  userStrip.style.display = 'none';
   } else {
-    if (badge) badge.style.display = 'none';
+    // No Supabase config — local mode, no gate
+    if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'none';
-    if (gate) gate.style.display = 'none'; // no config — local mode, no gate
+    if (gate)       gate.style.display = 'none';
+    if (accountLink) accountLink.style.display = 'none';
+    if (userStrip)  userStrip.style.display = 'none';
   }
 }
 
@@ -3255,6 +3326,18 @@ function populateSettingsForm() {
   document.getElementById('settingName').value = state.settings.name || '';
   document.getElementById('settingCurrency').value = state.settings.currency || 'NZD';
 
+  // Account info section — visible to ALL signed-in users
+  const accountSection = document.getElementById('accountInfoSection');
+  const settingsEmail  = document.getElementById('settingsUserEmail');
+  const proxyDot       = document.getElementById('settingsProxyDot');
+  if (accountSection) accountSection.style.display = _supaUser ? 'block' : 'none';
+  if (settingsEmail && _supaUser) settingsEmail.textContent = _supaUser.email;
+  // Mirror the proxy status dot colour from the navbar dot
+  if (proxyDot) {
+    const navDot = document.getElementById('proxyStatusDot');
+    proxyDot.style.background = navDot ? navDot.style.background : '#34d399';
+  }
+
   // Admin-only platform config — hidden for regular users
   const adminSection = document.getElementById('adminSettingsSection');
   if (adminSection) adminSection.style.display = _isAdmin ? 'block' : 'none';
@@ -3954,6 +4037,32 @@ async function checkAdminStatus() {
       .eq('id', _supaUser.id)
       .single();
     _isAdmin = !!(data?.is_admin);
+
+    // ── Bootstrap: if NO admin exists yet, auto-promote the first signed-in user ──
+    // Fires once ever — as soon as one admin exists this block is permanently skipped.
+    if (!_isAdmin) {
+      try {
+        const { count } = await _supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_admin', true);
+        if (count === 0) {
+          // upsert so the row is created even if it doesn’t exist yet
+          const { error: upErr } = await _supabase
+            .from('profiles')
+            .upsert(
+              { id: _supaUser.id, email: _supaUser.email, is_admin: true, last_seen: new Date().toISOString() },
+              { onConflict: 'id' }
+            );
+          if (!upErr) {
+            _isAdmin = true;
+            console.log('✓ Bootstrap: first user auto-granted admin');
+          } else {
+            console.warn('Bootstrap upsert error:', upErr.message);
+          }
+        }
+      } catch(bsErr) { console.warn('Bootstrap check failed:', bsErr); }
+    }
   } catch(e) { _isAdmin = false; }
   const adminLink = document.getElementById('adminNavLink');
   if (adminLink) adminLink.style.display = _isAdmin ? '' : 'none';
@@ -4068,6 +4177,10 @@ function timeSince(date) {
 // ===== INIT =====
 async function init() {
   loadState();
+
+  // Show auth gate immediately if Supabase is configured — before any async work.
+  // This prevents the app from flashing in briefly before the gate appears.
+  updateAuthUI();
 
   // Remove any lingering sample/demo data (detected by known sample symbols+platforms)
   const samplePlatforms = new Set(['Interactive Brokers','Vanguard ISA','Coinbase','Halifax','Hargreaves Lansdown']);
