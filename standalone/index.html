@@ -180,62 +180,67 @@
       .table-row > *:nth-child(4),
       .table-row > *:nth-child(5) { display: none !important; }
 
-      /* Mobile holdings overview: convert the squeezed table into stacked cards */
-      #section-overview #holdingsTableWrap { overflow: visible; padding: 0 10px 12px; }
+      /* Mobile holdings overview: use dedicated card layout instead of table hacks */
+      #section-overview .card.mb-6 { overflow: hidden; }
+      #section-overview #holdingsTableWrap { overflow: visible; padding: 0 12px 12px; }
       #section-overview .table-header { display: none !important; }
-      #section-overview #holdingsRows { display: grid; gap: 10px; }
-      #section-overview #holdingsRows .table-row {
-        display: block !important;
-        padding: 14px !important;
+      #section-overview #holdingsRows { display: block; }
+      #section-overview .overview-mobile-list { display: grid; gap: 12px; }
+      #section-overview .overview-mobile-card {
+        padding: 14px;
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(10,17,32,0.98), rgba(15,23,41,0.98));
         border: 1px solid #1e2d4a;
-        border-radius: 12px;
-        background: #0a1120;
       }
-      #section-overview #holdingsRows .table-row > :nth-child(1) {
-        display: flex !important;
-        margin-bottom: 12px;
+      #section-overview .overview-mobile-top {
+        align-items: flex-start;
+        margin-bottom: 14px;
       }
-      #section-overview #holdingsRows .table-row > :nth-child(2),
-      #section-overview #holdingsRows .table-row > :nth-child(3),
-      #section-overview #holdingsRows .table-row > :nth-child(4),
-      #section-overview #holdingsRows .table-row > :nth-child(5) {
-        display: flex !important;
-        justify-content: space-between;
+      #section-overview .overview-mobile-symbol {
+        font-size: 15px;
+        line-height: 1.2;
+      }
+      #section-overview .overview-mobile-name {
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        margin-top: 8px;
-        text-align: left !important;
+        gap: 6px;
+        margin-top: 3px;
       }
-      #section-overview #holdingsRows .table-row > :nth-child(2)::before,
-      #section-overview #holdingsRows .table-row > :nth-child(3)::before,
-      #section-overview #holdingsRows .table-row > :nth-child(4)::before,
-      #section-overview #holdingsRows .table-row > :nth-child(5)::before {
-        color: #64748b;
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.4px;
-        text-transform: uppercase;
+      #section-overview .overview-mobile-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
       }
-      #section-overview #holdingsRows .table-row > :nth-child(2)::before { content: 'Price'; }
-      #section-overview #holdingsRows .table-row > :nth-child(3)::before { content: 'Value'; }
-      #section-overview #holdingsRows .table-row > :nth-child(4)::before { content: 'Return'; }
-      #section-overview #holdingsRows .table-row > :nth-child(5)::before { content: 'Weight'; }
-      #section-overview #holdingsRows .table-row > :nth-child(5) .progress-bar {
-        width: 96px !important;
-        margin-left: 12px !important;
+      #section-overview .overview-mobile-grid > div {
+        min-width: 0;
+        padding: 10px 11px;
+        border-radius: 10px;
+        background: rgba(15,23,41,0.9);
+        border: 1px solid rgba(30,45,74,0.9);
       }
-      #section-overview #holdingsRows .table-row > :nth-child(6) {
-        display: block !important;
-        margin-top: 12px;
-        text-align: left !important;
+      #section-overview .overview-mobile-stat-value {
+        display: block;
+        line-height: 1.3;
+        word-break: break-word;
       }
-      #section-overview #holdingsRows .table-row > :nth-child(6) .btn {
-        margin-right: 8px;
+      #section-overview .overview-mobile-actions {
+        gap: 10px;
+      }
+      #section-overview .overview-mobile-actions .btn {
+        flex: 1;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
       }
       #section-overview .card.mb-6 > .flex.items-center.justify-between {
         padding: 14px 14px 10px !important;
         align-items: flex-start;
         gap: 10px;
         flex-wrap: wrap;
+      }
+      #section-overview .card.mb-6 > .flex.items-center.justify-between .btn {
+        width: 100%;
+        justify-content: center;
       }
 
       /* Modals: full screen on mobile */
@@ -319,6 +324,17 @@
     .score-ring { position: relative; width: 80px; height: 80px; }
     .score-ring svg { transform: rotate(-90deg); }
     .score-ring .score-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+
+    .overview-mobile-list { display: grid; gap: 10px; }
+    .overview-mobile-card { background: #0a1120; border: 1px solid #1e2d4a; border-radius: 12px; padding: 14px; }
+    .overview-mobile-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .overview-mobile-meta { min-width: 0; flex: 1; }
+    .overview-mobile-symbol { font-size: 14px; font-weight: 700; color: #c8d6ef; }
+    .overview-mobile-name { font-size: 12px; color: #94a3b8; line-height: 1.4; }
+    .overview-mobile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin-bottom: 12px; }
+    .overview-mobile-stat-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+    .overview-mobile-stat-value { font-size: 13px; color: #c8d6ef; font-weight: 600; }
+    .overview-mobile-actions { display: flex; gap: 8px; }
 
     .table-row { display: grid; align-items: center; padding: 10px 16px; border-bottom: 1px solid #1a2540; transition: background 0.15s; cursor: pointer; }
     .table-row:hover { background: rgba(30,45,74,0.4); }
@@ -943,6 +959,10 @@
           <div class="text-xs neutral mb-1">Existing purchase lots</div>
           <div id="existingLotsList" style="background:#080d1a;border-radius:8px;padding:8px;font-size:12px;"></div>
           <div class="text-xs mt-1" id="avgCostDisplay" style="color:#818cf8;"></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:#94a3b8;">
+            <input type="checkbox" id="appendLotMode">
+            Append as a new purchase lot instead of replacing the current holding totals
+          </label>
         </div>
         <div>
           <label>Sector</label>
@@ -1573,12 +1593,7 @@ async function loadFromSupabase() {
     const remoteSettings = data.settings || {};
     state.settings = { ...state.settings, ...remoteSettings, ...localOnly };
 
-    state.portfolio = (data.portfolio || []).map(h => {
-      if (!h.lots || !h.lots.length) {
-        return { ...h, lots: [{ quantity: parseFloat(h.quantity)||0, price: parseFloat(h.purchasePrice)||0, date: h.purchaseDate||'' }] };
-      }
-      return h;
-    });
+    state.portfolio = consolidatePortfolio(data.portfolio || []);
     if (data.agent_results) state.agentResults = data.agent_results;
     localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: state.portfolio, settings: state.settings, agentResults: state.agentResults }));
     console.log('✓ Loaded from Supabase');
@@ -1787,6 +1802,63 @@ let charts = {};
 let editingId = null;
 let currentSection = 'overview';
 
+function holdingKey(h) {
+  return `${(h.symbol || '').trim().toUpperCase()}::${(h.platform || '').trim().toLowerCase()}`;
+}
+
+function normalizeHoldingLots(h) {
+  if (!h) return h;
+  if (!h.lots || !h.lots.length) {
+    return {
+      ...h,
+      lots: [{
+        quantity: parseFloat(h.quantity) || 0,
+        price: parseFloat(h.purchasePrice) || 0,
+        date: h.purchaseDate || ''
+      }]
+    };
+  }
+  return {
+    ...h,
+    lots: h.lots.map(l => ({
+      quantity: parseFloat(l.quantity) || 0,
+      price: parseFloat(l.price) || 0,
+      date: l.date || '',
+      note: l.note || ''
+    }))
+  };
+}
+
+function consolidatePortfolio(holdings) {
+  const merged = new Map();
+  (holdings || []).forEach(raw => {
+    const h = normalizeHoldingLots(raw);
+    const key = holdingKey(h);
+    if (!key || key === '::') return;
+    if (!merged.has(key)) {
+      merged.set(key, {
+        ...h,
+        id: h.id || uuid(),
+        lots: [...(h.lots || [])]
+      });
+      return;
+    }
+    const existing = merged.get(key);
+    existing.lots = [...(existing.lots || []), ...(h.lots || [])];
+    existing.name = existing.name || h.name;
+    existing.type = existing.type || h.type;
+    existing.platform = existing.platform || h.platform;
+    existing.currency = existing.currency || h.currency;
+    existing.sector = existing.sector || h.sector;
+    existing.country = existing.country || h.country;
+    existing.notes = [existing.notes, h.notes].filter(Boolean).join(' | ');
+    if (h.currentPrice != null) existing.currentPrice = h.currentPrice;
+    if (h.dayChange != null) existing.dayChange = h.dayChange;
+    if (h.dayChangePct != null) existing.dayChangePct = h.dayChangePct;
+  });
+  return [...merged.values()];
+}
+
 // ===== STORAGE =====
 function loadState() {
   try {
@@ -1794,13 +1866,7 @@ function loadState() {
     if (s) {
       const parsed = JSON.parse(s);
       // Migrate legacy holdings (no lots) to lots format
-      const portfolio = (parsed.portfolio || []).map(h => {
-        if (!h.lots || !h.lots.length) {
-          return { ...h, lots: [{ quantity: parseFloat(h.quantity)||0, price: parseFloat(h.purchasePrice)||0, date: h.purchaseDate||'' }] };
-        }
-        return h;
-      });
-      state.portfolio = portfolio;
+      state.portfolio = consolidatePortfolio(parsed.portfolio || []);
       state.settings = { ...state.settings, ...(parsed.settings||{}) };
       state.agentResults = parsed.agentResults || null;
     }
@@ -1815,7 +1881,7 @@ function saveState() {
   //   • akahuTokens are per-user and must persist so users don't re-enter them
   const safeSetting = { ...state.settings, claudeApiKey: '' };
   localStorage.setItem('investiq_v2', JSON.stringify({
-    portfolio: state.portfolio,
+    portfolio: consolidatePortfolio(state.portfolio),
     settings: safeSetting,
     agentResults: state.agentResults
   }));
@@ -1899,6 +1965,7 @@ function loadEtoroHoldings() {
     });
     added++;
   });
+  state.portfolio = consolidatePortfolio(state.portfolio);
   saveState();
   renderAll();
   alert(`✓ Loaded ${added} eToro holdings${skipped ? ` (${skipped} already existed)` : ''}.\n\nFetching live prices & NZD rates now...`);
@@ -2491,12 +2558,63 @@ function renderSummaryCards(metrics) {
 function renderHoldingsTable(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
   const cols = '2fr 1fr 1fr 1fr 1fr 80px';
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const header = document.querySelector('#section-overview .table-header');
 
   if (!metrics.holdings.length) {
     document.getElementById('holdingsRows').innerHTML = renderEmptyHoldings();
+    if (header) header.style.display = '';
     return;
   }
 
+  if (isMobile) {
+    if (header) header.style.display = 'none';
+    document.getElementById('holdingsRows').innerHTML = `<div class="overview-mobile-list">${metrics.holdings.map(h => {
+      const priceStr = h.currentPrice ? (sym + fmt(h.currentPrice)) : 'â€“';
+      const sign = h.gain >= 0 ? '+' : '';
+      const gainCls = h.gain >= 0 ? 'pos' : 'neg';
+      return `
+        <div class="overview-mobile-card" onclick="viewHolding('${h.id}')">
+          <div class="overview-mobile-top">
+            <div style="width:38px;height:38px;border-radius:10px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">
+              ${(h.symbol||'?').slice(0,3).toUpperCase()}
+            </div>
+            <div class="overview-mobile-meta">
+              <div class="overview-mobile-symbol">${h.symbol}</div>
+              <div class="overview-mobile-name">${h.name || h.platform} <span class="${getTagClass(h.type)}" style="margin-left:6px;">${h.type}</span></div>
+            </div>
+          </div>
+          <div class="overview-mobile-grid">
+            <div>
+              <div class="overview-mobile-stat-label">Price</div>
+              <div class="overview-mobile-stat-value mono">${priceStr}</div>
+            </div>
+            <div>
+              <div class="overview-mobile-stat-label">Value</div>
+              <div class="overview-mobile-stat-value mono">${sym}${fmt(h.currentValue)}</div>
+            </div>
+            <div>
+              <div class="overview-mobile-stat-label">Return</div>
+              <div class="overview-mobile-stat-value ${gainCls}">${sign}${fmt(h.gainPct)}%</div>
+            </div>
+            <div>
+              <div class="overview-mobile-stat-label">Weight</div>
+              <div class="overview-mobile-stat-value">${fmt(h.weight)}%</div>
+              <div class="progress-bar" style="margin-top:6px;">
+                <div class="progress-fill" style="width:${Math.min(h.weight,100)}%;background:${ASSET_COLORS[h.type]||'#818cf8'};"></div>
+              </div>
+            </div>
+          </div>
+          <div class="overview-mobile-actions" onclick="event.stopPropagation()">
+            <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary" title="Edit"><i class="fas fa-edit"></i></button>
+            <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>`;
+    }).join('')}</div>`;
+    return;
+  }
+
+  if (header) header.style.display = '';
   document.getElementById('holdingsRows').innerHTML = metrics.holdings.map(h => {
     const priceStr = h.currentPrice ? (sym + fmt(h.currentPrice)) : '–';
     const sign = h.gain >= 0 ? '+' : '';
@@ -3167,6 +3285,12 @@ function populateAddForm() {
   document.getElementById('addModalTitle').textContent = 'Add Holding';
   document.getElementById('saveHoldingLabel').textContent = 'Add Holding';
   document.getElementById('hDate').value = new Date().toISOString().split('T')[0];
+  const lotsSection = document.getElementById('existingLotsSection');
+  if (lotsSection) lotsSection.style.display = 'none';
+  const appendLot = document.getElementById('appendLotMode');
+  if (appendLot) appendLot.checked = false;
+  document.getElementById('hQty').placeholder = '10';
+  document.getElementById('hBuyPrice').placeholder = '150.00';
 }
 
 function editHolding(id) {
@@ -3184,15 +3308,16 @@ function editHolding(id) {
   document.getElementById('hCountry').value = h.country || '';
   document.getElementById('hNotes').value = h.notes || '';
   // Clear lot fields — user fills these to ADD a new lot
-  document.getElementById('hQty').value = '';
-  document.getElementById('hBuyPrice').value = '';
-  document.getElementById('hDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('hQty').value = basis.quantity || '';
+  document.getElementById('hBuyPrice').value = basis.avgBuyPrice || '';
+  document.getElementById('hDate').value = basis.lots[basis.lots.length - 1]?.date || new Date().toISOString().split('T')[0];
 
   // Show existing lots
   const lotsSection = document.getElementById('existingLotsSection');
   const sym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$';
   if (basis.lots.length > 0) {
     lotsSection.style.display = 'block';
+    document.getElementById('appendLotMode').checked = false;
     document.getElementById('existingLotsList').innerHTML = basis.lots.map((l,i) =>
       `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2d4a;">
         <span style="color:#94a3b8;">Lot ${i+1}${l.date ? ' · '+l.date : ''}</span>
@@ -3206,10 +3331,10 @@ function editHolding(id) {
     lotsSection.style.display = 'none';
   }
 
-  document.getElementById('addModalTitle').textContent = 'Edit / Add Purchase Lot';
-  document.getElementById('saveHoldingLabel').textContent = 'Save';
-  document.getElementById('hQty').placeholder = 'New lot qty (optional)';
-  document.getElementById('hBuyPrice').placeholder = 'New lot price (optional)';
+  document.getElementById('addModalTitle').textContent = 'Edit Holding';
+  document.getElementById('saveHoldingLabel').textContent = 'Save Changes';
+  document.getElementById('hQty').placeholder = 'Updated total quantity';
+  document.getElementById('hBuyPrice').placeholder = 'Updated average buy price';
   closeModal('viewModal');
   openModal('addModal');
 }
@@ -3231,6 +3356,7 @@ function saveHolding(e) {
   const id = document.getElementById('holdingId').value || uuid();
   const newQty   = parseFloat(document.getElementById('hQty').value) || 0;
   const newPrice = parseFloat(document.getElementById('hBuyPrice').value) || 0;
+  const appendLotMode = !!document.getElementById('appendLotMode')?.checked;
 
   // Validation — reject zero or negative values for new holdings
   const isNew = !document.getElementById('holdingId').value;
@@ -3258,6 +3384,7 @@ function saveHolding(e) {
     country:  document.getElementById('hCountry').value.trim(),
     notes:    document.getElementById('hNotes').value.trim(),
   };
+  const duplicateIdx = state.portfolio.findIndex(h => holdingKey(h) === holdingKey(meta) && h.id !== id);
 
   const idx = state.portfolio.findIndex(h => h.id === id);
   if (idx >= 0) {
@@ -3265,14 +3392,28 @@ function saveHolding(e) {
     const existing = state.portfolio[idx];
     const basis = getHoldingBasis(existing);
     const newLots = newQty > 0 && newPrice > 0
-      ? [...basis.lots, { quantity: newQty, price: newPrice, date: newDate }]
+      ? (appendLotMode
+          ? [...basis.lots, { quantity: newQty, price: newPrice, date: newDate }]
+          : [{ quantity: newQty, price: newPrice, date: newDate }])
       : basis.lots;
     state.portfolio[idx] = { ...existing, ...meta, id, lots: newLots, currentPrice: existing.currentPrice, dayChange: existing.dayChange, dayChangePct: existing.dayChangePct };
+  } else if (duplicateIdx >= 0) {
+    const existing = state.portfolio[duplicateIdx];
+    const basis = getHoldingBasis(existing);
+    state.portfolio[duplicateIdx] = {
+      ...existing,
+      ...meta,
+      lots: [...basis.lots, { quantity: newQty, price: newPrice, date: newDate }],
+      currentPrice: existing.currentPrice,
+      dayChange: existing.dayChange,
+      dayChangePct: existing.dayChangePct
+    };
   } else {
     // New holding — first lot
     state.portfolio.push({ ...meta, id, lots: [{ quantity: newQty, price: newPrice, date: newDate }], currentPrice: null, dayChange: null, dayChangePct: null });
   }
 
+  state.portfolio = consolidatePortfolio(state.portfolio);
   saveState();
   closeModal('addModal');
   renderAll();
