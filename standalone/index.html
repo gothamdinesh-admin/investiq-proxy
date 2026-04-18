@@ -400,12 +400,7 @@
   </div>
   <div class="flex items-center gap-3">
     <span id="lastUpdated" class="text-xs neutral">Not yet updated</span>
-    <div class="flex items-center gap-1" title="Proxy server status">
-      <div id="proxyStatusDot" style="width:7px;height:7px;border-radius:50%;background:#4a6080;transition:background 0.3s;"></div>
-      <span id="proxyStatusLabel" class="text-xs" style="color:#4a6080;">Proxy</span>
-    </div>
     <div id="supaUserBadge" style="display:none;align-items:center;gap:8px;">
-      <span id="supaUserEmail" class="text-xs" style="color:#818cf8;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
       <button onclick="signOut()" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;">
         <i class="fas fa-sign-out-alt mr-1"></i>Logout
       </button>
@@ -457,20 +452,6 @@
         <div id="scoreLabel" class="text-sm font-semibold" style="color:#818cf8;">Run agents</div>
         <div class="text-xs neutral mt-1" id="scoreHint">Click AI Agents above</div>
       </div>
-    </div>
-
-    <!-- Signed-in user strip — hidden until logged in -->
-    <div id="sidebarUserStrip" style="display:none;align-items:center;gap:10px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;padding:10px 12px;margin-bottom:16px;">
-      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <i class="fas fa-user" style="font-size:12px;color:white;"></i>
-      </div>
-      <div style="flex:1;min-width:0;">
-        <div class="text-xs" style="color:#c8d6ef;font-weight:600;">Signed in</div>
-        <div id="sidebarUserEmail" class="text-xs" style="color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-      </div>
-      <button onclick="signOut()" title="Sign out" style="background:none;border:none;cursor:pointer;color:#4a6080;padding:2px;">
-        <i class="fas fa-sign-out-alt" style="font-size:13px;"></i>
-      </button>
     </div>
 
     <!-- Nav -->
@@ -1397,6 +1378,7 @@ const PLATFORM_CONFIG = {
   supabaseUrl:  'https://szyclmouetbbigxexdrn.supabase.co',
   supabaseKey:  'sb_publishable_C1kpO9njxnSS1Y9GWNSnHQ_pt7yt482',
   proxyUrl:     'https://investiq-proxy.onrender.com',
+  adminEmails:  ['gothamdinesh@gmail.com'],
   // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
   // This prevents anyone else from using your proxy to burn your Claude credits.
   // Leave blank for local dev (proxy will warn but still allow requests).
@@ -1474,36 +1456,28 @@ function initSupabase() {
 function updateAuthUI() {
   const badge       = document.getElementById('supaUserBadge');
   const signInBadge = document.getElementById('supaSignInBadge');
-  const emailEl     = document.getElementById('supaUserEmail');
   const gate        = document.getElementById('authGate');
   const accountLink = document.getElementById('accountNavLink');
-  const userStrip   = document.getElementById('sidebarUserStrip');
-  const userStripEmail = document.getElementById('sidebarUserEmail');
   const hasSupaConfig = !!(state.settings.supabaseUrl?.trim() && state.settings.supabaseKey?.trim());
 
   if (_supaUser) {
     // Logged in — show email badge, hide gate, show account nav link + sidebar strip
     if (badge)      { badge.style.display = 'flex'; }
-    if (emailEl)    emailEl.textContent = _supaUser.email;
     if (signInBadge) signInBadge.style.display = 'none';
     if (gate)       gate.style.display = 'none';
     if (accountLink) accountLink.style.display = '';
-    if (userStrip)  userStrip.style.display = 'flex';
-    if (userStripEmail) userStripEmail.textContent = _supaUser.email;
   } else if (hasSupaConfig) {
     // Supabase configured but not logged in — show gate
     if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'block';
     if (gate)       gate.style.display = 'flex';
     if (accountLink) accountLink.style.display = 'none';
-    if (userStrip)  userStrip.style.display = 'none';
   } else {
     // No Supabase config — local mode, no gate
     if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'none';
     if (gate)       gate.style.display = 'none';
     if (accountLink) accountLink.style.display = 'none';
-    if (userStrip)  userStrip.style.display = 'none';
   }
 }
 
@@ -4160,10 +4134,18 @@ function populateConnectionsForm() {
 // ===== ADMIN =====
 let _isAdmin = false;
 let _adminUsers = [];
+let _adminSource = 'none';
+
+function isOwnerAdminEmail(email) {
+  const normalized = (email || '').trim().toLowerCase();
+  const allowlist = Array.isArray(PLATFORM_CONFIG.adminEmails) ? PLATFORM_CONFIG.adminEmails : [];
+  return !!normalized && allowlist.some(e => (e || '').trim().toLowerCase() === normalized);
+}
 
 async function checkAdminStatus() {
   if (!_supabase || !_supaUser) {
     _isAdmin = false;
+    _adminSource = 'none';
     const adminLink = document.getElementById('adminNavLink');
     if (adminLink) adminLink.style.display = 'none';
     const mobileAdminTab = document.getElementById('mobileAdminTab');
@@ -4188,6 +4170,19 @@ async function checkAdminStatus() {
       .maybeSingle();
     if (error) throw error;
     _isAdmin = !!(data?.is_admin);
+    _adminSource = _isAdmin ? 'database' : 'none';
+
+    if (!_isAdmin && isOwnerAdminEmail(_supaUser?.email)) {
+      _isAdmin = true;
+      _adminSource = 'email-fallback';
+      // Best effort: write the admin flag back so future checks line up with the database.
+      await _supabase
+        .from('profiles')
+        .upsert(
+          { id: _supaUser.id, email: _supaUser.email, is_admin: true, last_seen: new Date().toISOString() },
+          { onConflict: 'id' }
+        );
+    }
 
     // ── Bootstrap: if NO admin exists yet, auto-promote the first signed-in user ──
     // Fires once ever — as soon as one admin exists this block is permanently skipped.
@@ -4207,6 +4202,7 @@ async function checkAdminStatus() {
             );
           if (!upErr) {
             _isAdmin = true;
+            _adminSource = 'bootstrap';
             console.log('✓ Bootstrap: first user auto-granted admin');
           } else {
             console.warn('Bootstrap upsert error:', upErr.message);
@@ -4214,7 +4210,10 @@ async function checkAdminStatus() {
         }
       } catch(bsErr) { console.warn('Bootstrap check failed:', bsErr); }
     }
-  } catch(e) { _isAdmin = false; }
+  } catch(e) {
+    _isAdmin = isOwnerAdminEmail(_supaUser?.email);
+    _adminSource = _isAdmin ? 'email-fallback' : 'none';
+  }
   const adminLink = document.getElementById('adminNavLink');
   if (adminLink) adminLink.style.display = _isAdmin ? '' : 'none';
   const mobileAdminTab = document.getElementById('mobileAdminTab');
@@ -4245,7 +4244,9 @@ function updateAdminDiagnostics() {
   if (supaUrlEl) supaUrlEl.textContent = supabaseUrl || 'Not set';
   if (supaKeyEl) supaKeyEl.textContent = supabaseKey ? maskSupabaseKey(supabaseKey) : 'Not set';
   if (signedInEl) signedInEl.textContent = _supaUser?.email || 'Not signed in';
-  if (roleEl) roleEl.textContent = _isAdmin ? 'Admin' : 'Regular user';
+  if (roleEl) roleEl.textContent = _isAdmin
+    ? (_adminSource === 'email-fallback' ? 'Admin (owner fallback)' : 'Admin')
+    : 'Regular user';
 
   const supaReady = !!(_supabase && supabaseUrl && supabaseKey);
   if (supaDot) supaDot.style.background = supaReady ? '#34d399' : '#f87171';
