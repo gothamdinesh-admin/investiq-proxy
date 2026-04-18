@@ -4,10 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>InvestIQ — Personal Portfolio Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <meta name="description" content="InvestIQ is a personal investment portfolio tracker for NZ investors. Track stocks, ETFs, crypto and more across eToro, Sharesies, and other platforms.">
+  <meta property="og:title" content="InvestIQ — Personal Portfolio Dashboard">
+  <meta property="og:description" content="Track your investments across platforms with live prices, AI insights, and multi-currency support.">
+  <meta name="theme-color" content="#080d1a">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080d1a'/><text y='.9em' font-size='72' x='12'>📈</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <script src="https://cdn.tailwindcss.com" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -100,7 +108,119 @@
     .metric-card.yellow::before { background: linear-gradient(90deg, #fbbf24, transparent); }
 
     .sidebar { width: 260px; min-width: 260px; }
-    @media (max-width: 1024px) { .sidebar { width: 100%; min-width: 0; } }
+
+    /* =====================================================
+       MOBILE RESPONSIVE — full overhaul
+       ===================================================== */
+
+    /* Hide verbose navbar elements on small screens */
+    @media (max-width: 768px) {
+      /* Navbar */
+      nav .text-xs.neutral:first-of-type,           /* "Not yet updated" timestamp */
+      #lastUpdated,
+      nav span[style*="background:#141e33"],         /* "Personal Portfolio Dashboard" badge */
+      #proxyStatusDot, #proxyStatusLabel            /* Proxy status indicator */
+      { display: none !important; }
+
+      nav { padding: 10px 16px; }
+      nav .font-bold.text-lg { font-size: 15px; }
+      #refreshBtn .mr-1 ~ * { display: none; }      /* Refresh: icon only */
+
+      /* Stack layout */
+      .flex[style*="min-height"] { flex-direction: column; }
+
+      /* Sidebar becomes a slim header strip */
+      .sidebar {
+        width: 100% !important;
+        min-width: 0 !important;
+        border-right: none !important;
+        border-bottom: 1px solid #1e2d4a;
+        padding: 12px 16px !important;
+      }
+      /* Hide sidebar nav + quick stats + action buttons on mobile (replaced by bottom tab bar) */
+      .sidebar nav,
+      .sidebar .space-y-3,
+      .sidebar .text-xs.neutral.uppercase,
+      .sidebar .mt-6.pt-4 { display: none !important; }
+      /* Keep the portfolio value summary and score ring visible */
+      .sidebar > .mb-6 { margin-bottom: 0 !important; }
+      .sidebar .card2 { margin-bottom: 0 !important; padding: 8px 12px !important; }
+      .sidebar .card2 .score-ring { width: 48px; height: 48px; }
+      .sidebar .card2 .score-ring svg { width: 48px; height: 48px; }
+      #scoreNum { font-size: 13px !important; }
+      #sidebarTotal { font-size: 18px !important; }
+
+      /* Sidebar row: value left, score ring right */
+      .sidebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .sidebar > .mb-6 { flex: 1; }
+
+      /* Main content: full width, reduce padding, add bottom padding for tab bar */
+      main { padding: 12px 12px 80px 12px !important; }
+
+      /* Metric cards: 2-col grid */
+      .grid.grid-cols-2.lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
+      .metric-card { padding: 14px !important; }
+      .metric-card .text-2xl { font-size: 18px !important; }
+
+      /* Charts: single column */
+      .grid.grid-cols-1.lg\:grid-cols-3,
+      .grid.grid-cols-1.lg\:grid-cols-2 { grid-template-columns: 1fr !important; }
+
+      /* Holdings table — show only essential columns, scroll horizontally */
+      #holdingsTableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .table-header[style*="grid-template-columns"],
+      .table-row[style*="grid-template-columns"] {
+        grid-template-columns: 2fr 1fr 1fr 80px !important;
+      }
+      /* Hide non-essential columns (3rd, 4th, 5th of 8) using nth-child */
+      .table-header > *:nth-child(3),
+      .table-header > *:nth-child(4),
+      .table-header > *:nth-child(5),
+      .table-row > *:nth-child(3),
+      .table-row > *:nth-child(4),
+      .table-row > *:nth-child(5) { display: none !important; }
+
+      /* Modals: full screen on mobile */
+      .modal {
+        max-width: 100% !important;
+        width: 100% !important;
+        max-height: 92vh !important;
+        border-radius: 16px 16px 0 0 !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        margin: 0 !important;
+        padding: 20px 16px !important;
+      }
+      .modal-overlay { align-items: flex-end !important; }
+
+      /* Bottom tab bar — shown only on mobile */
+      #mobileTabBar { display: flex !important; }
+    }
+
+    /* Bottom tab bar — hidden by default, shown on mobile */
+    #mobileTabBar {
+      display: none;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: 64px;
+      background: #0f1729;
+      border-top: 1px solid #1e2d4a;
+      z-index: 90;
+      align-items: center;
+      justify-content: space-around;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .mob-tab {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 3px; font-size: 10px; color: #4a6080;
+      cursor: pointer; padding: 6px 10px; border-radius: 8px;
+      transition: color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .mob-tab i { font-size: 18px; }
+    .mob-tab.active { color: #818cf8; }
+    .mob-tab:active { background: rgba(99,102,241,0.1); }
 
     .nav-link { padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #7a9cc0; transition: all 0.15s; }
     .nav-link:hover, .nav-link.active { background: rgba(99,102,241,0.12); color: #818cf8; }
@@ -274,12 +394,12 @@
 
     <!-- Nav -->
     <nav class="space-y-1 mb-6">
-      <div class="nav-link active" onclick="showSection('overview')"><i class="fas fa-th-large"></i> Overview</div>
-      <div class="nav-link" onclick="showSection('holdings')"><i class="fas fa-briefcase"></i> Holdings</div>
-      <div class="nav-link" onclick="showSection('performance')"><i class="fas fa-chart-line"></i> Performance</div>
-      <div class="nav-link" onclick="showSection('market')"><i class="fas fa-globe"></i> Market</div>
-      <div class="nav-link" onclick="showSection('insights')"><i class="fas fa-brain"></i> AI Insights</div>
-      <div class="nav-link" id="adminNavLink" onclick="showSection('admin')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
+      <div class="nav-link active" onclick="showSection('overview',this)"><i class="fas fa-th-large"></i> Overview</div>
+      <div class="nav-link" onclick="showSection('holdings',this)"><i class="fas fa-briefcase"></i> Holdings</div>
+      <div class="nav-link" onclick="showSection('performance',this)"><i class="fas fa-chart-line"></i> Performance</div>
+      <div class="nav-link" onclick="showSection('market',this)"><i class="fas fa-globe"></i> Market</div>
+      <div class="nav-link" onclick="showSection('insights',this)"><i class="fas fa-brain"></i> AI Insights</div>
+      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
     </nav>
 
     <!-- Quick stats -->
@@ -303,7 +423,7 @@
       </div>
       <div class="flex justify-between text-sm">
         <span class="neutral">Worst Performer</span>
-        <span id="statWorst" class="font-semibold neg text-xs">–</span>
+        <span id="statWorst" class="font-semibold neutral text-xs">–</span>
       </div>
     </div>
 
@@ -1103,10 +1223,22 @@
 // The Supabase anon key is designed to be public; RLS enforces security.
 // ═══════════════════════════════════════════════════════════════════════
 const PLATFORM_CONFIG = {
-  supabaseUrl: 'https://szyclmouetbbigxexdrn.supabase.co',
-  supabaseKey: 'sb_publishable_C1kpO9njxnSS1Y9GWNSnHQ_pt7yt482',
-  proxyUrl:    'https://investiq-proxy.onrender.com'
+  supabaseUrl:  'https://szyclmouetbbigxexdrn.supabase.co',
+  supabaseKey:  'sb_publishable_C1kpO9njxnSS1Y9GWNSnHQ_pt7yt482',
+  proxyUrl:     'https://investiq-proxy.onrender.com',
+  // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
+  // This prevents anyone else from using your proxy to burn your Claude credits.
+  // Leave blank for local dev (proxy will warn but still allow requests).
+  proxySecret:  ''
 };
+
+// Helper — returns headers object with X-Proxy-Secret injected when configured
+function proxyHeaders(extra = {}) {
+  const secret = state.settings.proxySecret || PLATFORM_CONFIG.proxySecret || '';
+  const h = { 'Content-Type': 'application/json', ...extra };
+  if (secret) h['X-Proxy-Secret'] = secret;
+  return h;
+}
 
 // ===== CONFIG =====
 const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', AED:'د.إ', SGD:'S$', AUD:'A$' };
@@ -1392,7 +1524,15 @@ async function signIn(email, password) {
 
 async function signUp(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
-  const { data, error } = await _supabase.auth.signUp({ email, password });
+  // emailRedirectTo tells Supabase where to send the user after they click
+  // the confirmation link in their email. Must match an allowed redirect URL
+  // in Supabase Dashboard → Auth → URL Configuration → Redirect URLs.
+  const redirectTo = window.location.origin + window.location.pathname;
+  const { data, error } = await _supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: redirectTo }
+  });
   if (error) return { error: error.message };
   _supaUser = data.user;
   updateAuthUI();
@@ -1506,9 +1646,14 @@ function loadState() {
 }
 
 function saveState() {
+  // claudeApiKey is never needed in the browser — the Render proxy holds it server-side.
+  // All other settings (proxyUrl, supabaseUrl/Key, akahuTokens) are safe to persist:
+  //   • proxyUrl / supabaseUrl / supabaseKey are platform-level, non-secret config
+  //   • akahuTokens are per-user and must persist so users don't re-enter them
+  const safeSetting = { ...state.settings, claudeApiKey: '' };
   localStorage.setItem('investiq_v2', JSON.stringify({
     portfolio: state.portfolio,
-    settings: state.settings,
+    settings: safeSetting,
     agentResults: state.agentResults
   }));
   scheduleSupa(); // sync to cloud if signed in
@@ -1948,7 +2093,7 @@ async function fetchYahooQuotes(symbols) {
   // Try local proxy first (most reliable, no CORS issues)
   const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
   try {
-    const res = await fetch(`${localProxy}/api/market?symbols=${encodeURIComponent(symbols.join(','))}`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`${localProxy}/api/market?symbols=${encodeURIComponent(symbols.join(','))}`, { headers: proxyHeaders(), signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const data = await res.json();
       // Proxy returns {sym: {price, change, changePct, name}}
@@ -1983,7 +2128,7 @@ async function fetchYahooQuotes(symbols) {
 async function refreshMarketData() {
   const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
   try {
-    const res = await fetch(`${localProxy}/api/market`, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(`${localProxy}/api/market`, { headers: proxyHeaders(), signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const data = await res.json();
       if (data.indices) {
@@ -2093,7 +2238,7 @@ function renderPlatformBreakdown(metrics) {
     const sign    = gain >= 0 ? '+' : '';
     return `
       <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #1e2d4a;cursor:pointer;"
-           onclick="document.getElementById('holdingsPlatformFilter').value='${name}';showSection('holdings');filterHoldings();">
+           onclick="document.getElementById('holdingsPlatformFilter').value='${name}';showSection('holdings',document.querySelector('.nav-link[onclick*=\'holdings\']'));filterHoldings();">
         <div style="width:36px;height:36px;border-radius:8px;background:#818cf822;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#818cf8;flex-shrink:0;">
           ${name.slice(0,3).toUpperCase()}
         </div>
@@ -2142,7 +2287,10 @@ function renderSidebar(metrics) {
     const best = sorted[0];
     const worst = sorted[sorted.length-1];
     document.getElementById('statBest').textContent = `${best.symbol} (+${fmt(best.gainPct)}%)`;
-    document.getElementById('statWorst').innerHTML = `<span class="neg">${worst.symbol} (${worst.gainPct >= 0 ? '+' : ''}${fmt(worst.gainPct)}%)</span>`;
+    // Only use red styling if the worst performer is actually negative
+    const worstCls = worst.gainPct < 0 ? 'neg' : 'neutral';
+    const worstSign = worst.gainPct >= 0 ? '+' : '';
+    document.getElementById('statWorst').innerHTML = `<span class="${worstCls}">${worst.symbol} (${worstSign}${fmt(worst.gainPct)}%)</span>`;
   }
 }
 
@@ -2255,7 +2403,7 @@ function renderAllocChart(metrics) {
       options: {
         cutout: '68%', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: (c) => ` ${c.label}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)` }
+          callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); return ` ${lbl}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)`; } }
         }}
       }
     });
@@ -2266,7 +2414,7 @@ function renderAllocChart(metrics) {
     <div class="flex items-center justify-between text-xs">
       <div class="flex items-center gap-2">
         <div style="width:8px;height:8px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></div>
-        <span style="text-transform:capitalize;">${l}</span>
+        <span>${l.toUpperCase() === 'ETF' ? 'ETF' : l.charAt(0).toUpperCase() + l.slice(1)}</span>
       </div>
       <span class="neutral">${sym}${fmt(values[i])} (${(values[i]/metrics.totalValue*100).toFixed(1)}%)</span>
     </div>`).join('');
@@ -2700,11 +2848,10 @@ async function callClaude(agentKey, userMessage) {
     messages: [{ role: 'user', content: userMessage }]
   });
 
-  const headers = {
-    'Content-Type': 'application/json',
+  const headers = proxyHeaders({
     'anthropic-version': '2023-06-01'
-  };
-  if (apiKey) headers['x-api-key'] = apiKey; // only send if admin supplied one
+  });
+  if (apiKey) headers['x-api-key'] = apiKey; // only send if admin supplied a personal key
 
   const webappBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/, '');
   const endpoints = [];
@@ -2921,6 +3068,21 @@ function saveHolding(e) {
   const id = document.getElementById('holdingId').value || uuid();
   const newQty   = parseFloat(document.getElementById('hQty').value) || 0;
   const newPrice = parseFloat(document.getElementById('hBuyPrice').value) || 0;
+
+  // Validation — reject zero or negative values for new holdings
+  const isNew = !document.getElementById('holdingId').value;
+  if (isNew && newQty <= 0) {
+    document.getElementById('hQty').style.borderColor = '#f87171';
+    document.getElementById('hQty').focus();
+    return;
+  }
+  if (isNew && newPrice <= 0) {
+    document.getElementById('hBuyPrice').style.borderColor = '#f87171';
+    document.getElementById('hBuyPrice').focus();
+    return;
+  }
+  document.getElementById('hQty').style.borderColor = '';
+  document.getElementById('hBuyPrice').style.borderColor = '';
   const newDate  = document.getElementById('hDate').value;
 
   const meta = {
@@ -3088,46 +3250,6 @@ function exportCSV() {
   a.click();
 }
 
-function importCSV(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    const lines = ev.target.result.split('\n').filter(l => l.trim());
-    const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
-    let added = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(',').map(v => v.replace(/^"|"$/g,'').trim());
-      const h = {};
-      headers.forEach((k,j) => h[k] = vals[j] || '');
-      if (h.symbol && h.quantity && h.purchasePrice) {
-        state.portfolio.push({
-          id: uuid(),
-          symbol: (h.symbol||'').toUpperCase(),
-          name: h.name || '',
-          type: (h.type||'stock').toLowerCase(),
-          platform: h.platform || 'Imported',
-          quantity: parseFloat(h.quantity),
-          currency: h.currency || state.settings.currency,
-          purchasePrice: parseFloat(h.purchasePrice),
-          purchaseDate: h.purchaseDate || '',
-          sector: h.sector || '',
-          country: h.country || '',
-          notes: h.notes || '',
-          currentPrice: null
-        });
-        added++;
-      }
-    }
-    saveState();
-    renderAll();
-    refreshPortfolioPrices().then(renderAll);
-    alert(`Imported ${added} holdings.`);
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-}
-
 // ===== SETTINGS =====
 function populateSettingsForm() {
   document.getElementById('settingName').value = state.settings.name || '';
@@ -3227,13 +3349,15 @@ async function clearAllData() {
 }
 
 // ===== NAVIGATION =====
-function showSection(name) {
+function _showSectionCore(name, el) {
   ['overview','holdings','performance','market','insights','admin'].forEach(s => {
-    const el = document.getElementById('section-' + s);
-    if (el) el.style.display = s === name ? '' : 'none';
+    const sec = document.getElementById('section-' + s);
+    if (sec) sec.style.display = s === name ? '' : 'none';
   });
-  document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-  event.currentTarget?.classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+  // el is passed explicitly from onclick; fall back to finding by data attribute
+  const active = el || document.querySelector(`.nav-link[onclick*="'${name}'"]`);
+  if (active) active.classList.add('active');
   currentSection = name;
   if (name === 'market') renderMarketSection();
   if (name === 'admin') loadAdminData();
@@ -3767,7 +3891,7 @@ async function syncAkahu() {
   try {
     const res = await fetch(`${proxyBase}/api/akahu`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: proxyHeaders(),
       body: JSON.stringify({ appToken, userToken }),
       signal: AbortSignal.timeout(20000)
     });
@@ -3957,6 +4081,15 @@ async function init() {
   // Init Supabase and restore session if credentials saved
   if (initSupabase()) {
     try {
+      // Handle email confirmation redirect — Supabase appends #access_token=... to the URL.
+      // getSession() on supabase-js v2 automatically exchanges the hash for a session,
+      // but we clean up the URL so the token isn't visible in the address bar.
+      if (window.location.hash.includes('access_token') || window.location.hash.includes('type=signup')) {
+        // Let supabase-js process the hash, then strip it from the address bar
+        await _supabase.auth.getSession();
+        history.replaceState(null, '', window.location.pathname);
+      }
+
       const { data: { session } } = await _supabase.auth.getSession();
       if (session?.user) {
         _supaUser = session.user;
@@ -4002,6 +4135,44 @@ async function init() {
 }
 
 init();
+
+// Public showSection — wraps core + syncs mobile tab bar
+function showSection(name, el) {
+  _showSectionCore(name, el);
+  document.querySelectorAll('.mob-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.section === name);
+  });
+}
+
 </script>
+
+<!-- MOBILE BOTTOM TAB BAR -->
+<div id="mobileTabBar">
+  <div class="mob-tab active" data-section="overview" onclick="showSection('overview',document.querySelector('.nav-link[onclick*=\'overview\']'))">
+    <i class="fas fa-th-large"></i>
+    <span>Overview</span>
+  </div>
+  <div class="mob-tab" data-section="holdings" onclick="showSection('holdings',document.querySelector('.nav-link[onclick*=\'holdings\']'))">
+    <i class="fas fa-briefcase"></i>
+    <span>Holdings</span>
+  </div>
+  <div class="mob-tab" data-section="performance" onclick="showSection('performance',document.querySelector('.nav-link[onclick*=\'performance\']'))">
+    <i class="fas fa-chart-line"></i>
+    <span>Performance</span>
+  </div>
+  <div class="mob-tab" data-section="market" onclick="showSection('market',document.querySelector('.nav-link[onclick*=\'market\']'))">
+    <i class="fas fa-globe"></i>
+    <span>Market</span>
+  </div>
+  <div class="mob-tab" data-section="insights" onclick="showSection('insights',document.querySelector('.nav-link[onclick*=\'insights\']'))">
+    <i class="fas fa-brain"></i>
+    <span>AI</span>
+  </div>
+  <div class="mob-tab" onclick="openModal('addModal')" style="color:#6366f1;">
+    <i class="fas fa-plus-circle"></i>
+    <span>Add</span>
+  </div>
+</div>
+
 </body>
 </html>
