@@ -1,0 +1,3907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>InvestIQ — Personal Portfolio Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'brand': '#818cf8',
+            'brand-dark': '#6366f1',
+            'surface': '#080d1a',
+            'card': '#0f1729',
+            'card2': '#141e33',
+            'border': '#1e2d4a',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: #080d1a; color: #c8d6ef; margin: 0; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f1729; }
+    ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 3px; }
+
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .glass { background: rgba(15,23,41,0.85); backdrop-filter: blur(12px); border: 1px solid #1e2d4a; }
+    .card { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 12px; }
+    .card2 { background: #141e33; border: 1px solid #1e2d4a; border-radius: 8px; }
+
+    .pos { color: #34d399; }
+    .neg { color: #f87171; }
+    .neutral { color: #94a3b8; }
+
+    .badge-pos { background: rgba(52,211,153,0.12); color: #34d399; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+    .badge-neg { background: rgba(248,113,113,0.12); color: #f87171; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+    .badge-neutral { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+
+    .btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+    .btn-primary { background: #6366f1; color: white; }
+    .btn-primary:hover { background: #5254cc; transform: translateY(-1px); }
+    .btn-secondary { background: #1e2d4a; color: #c8d6ef; border: 1px solid #2a3f60; }
+    .btn-secondary:hover { background: #253554; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-danger { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+    .btn-danger:hover { background: rgba(248,113,113,0.25); }
+    .btn-success { background: rgba(52,211,153,0.15); color: #34d399; border: 1px solid rgba(52,211,153,0.3); }
+    .btn-success:hover { background: rgba(52,211,153,0.25); }
+
+    .input { background: #141e33; border: 1px solid #1e2d4a; border-radius: 8px; color: #c8d6ef; padding: 8px 12px; font-size: 14px; width: 100%; outline: none; transition: border 0.2s; }
+    .input:focus { border-color: #6366f1; }
+    .input::placeholder { color: #4a6080; }
+    select.input option { background: #141e33; }
+    label { font-size: 13px; color: #7a9cc0; margin-bottom: 4px; display: block; font-weight: 500; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 16px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; position: relative; }
+
+    .tag { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tag-stock { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .tag-etf { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .tag-crypto { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .tag-bond { background: rgba(52,211,153,0.15); color: #34d399; }
+    .tag-cash { background: rgba(148,163,184,0.15); color: #94a3b8; }
+    .tag-mutualfund { background: rgba(167,139,250,0.15); color: #c4b5fd; }
+    .tag-realestate { background: rgba(251,146,60,0.15); color: #fb923c; }
+    .tag-other { background: rgba(100,116,139,0.15); color: #64748b; }
+
+    .agent-card { border-left: 3px solid; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 8px 0; }
+    .agent-idle { border-color: #1e2d4a; background: rgba(30,45,74,0.3); }
+    .agent-running { border-color: #6366f1; background: rgba(99,102,241,0.08); animation: pulse-border 1.5s infinite; }
+    .agent-done { border-color: #34d399; background: rgba(52,211,153,0.05); }
+    .agent-error { border-color: #f87171; background: rgba(248,113,113,0.05); }
+
+    @keyframes pulse-border { 0%,100% { opacity:1; } 50% { opacity:0.6; } }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .fadeIn { animation: fadeIn 0.3s ease; }
+
+    .spinner { width: 14px; height: 14px; border: 2px solid rgba(99,102,241,0.3); border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .metric-card { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
+    .metric-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+    .metric-card.blue::before { background: linear-gradient(90deg, #6366f1, transparent); }
+    .metric-card.green::before { background: linear-gradient(90deg, #34d399, transparent); }
+    .metric-card.red::before { background: linear-gradient(90deg, #f87171, transparent); }
+    .metric-card.purple::before { background: linear-gradient(90deg, #a78bfa, transparent); }
+    .metric-card.yellow::before { background: linear-gradient(90deg, #fbbf24, transparent); }
+
+    .sidebar { width: 260px; min-width: 260px; }
+    @media (max-width: 1024px) { .sidebar { width: 100%; min-width: 0; } }
+
+    .nav-link { padding: 8px 12px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 14px; color: #7a9cc0; transition: all 0.15s; }
+    .nav-link:hover, .nav-link.active { background: rgba(99,102,241,0.12); color: #818cf8; }
+    .nav-link i { width: 16px; text-align: center; }
+
+    .price-up { animation: flashGreen 1s ease; }
+    .price-down { animation: flashRed 1s ease; }
+    @keyframes flashGreen { 0%,100% { background:transparent; } 50% { background: rgba(52,211,153,0.15); } }
+    @keyframes flashRed { 0%,100% { background:transparent; } 50% { background: rgba(248,113,113,0.15); } }
+
+    .progress-bar { height: 4px; background: #1e2d4a; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+    .tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: #4a6080; transition: all 0.15s; }
+    .tab:hover { color: #94a3b8; }
+    .tab.active { background: #1e2d4a; color: #c8d6ef; }
+
+    .insight-box { background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.2); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    .insight-box h4 { color: #818cf8; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+    .insight-box p, .insight-box ul { color: #94a3b8; font-size: 13px; margin: 0; line-height: 1.6; }
+    .insight-box ul { padding-left: 16px; }
+
+    .ticker-line { display: inline-flex; gap: 48px; animation: ticker 120s linear infinite; white-space: nowrap; }
+    .ticker-line:hover { animation-play-state: paused; cursor: default; }
+    @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    .ticker-wrap { overflow: hidden; padding: 8px 0; border-top: 1px solid #1e2d4a; border-bottom: 1px solid #1e2d4a; }
+
+    .tooltip { position: relative; }
+    .tooltip:hover::after { content: attr(data-tip); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: #1e2d4a; color: #c8d6ef; padding: 4px 10px; border-radius: 6px; font-size: 12px; white-space: nowrap; z-index: 50; margin-bottom: 4px; }
+
+    .score-ring { position: relative; width: 80px; height: 80px; }
+    .score-ring svg { transform: rotate(-90deg); }
+    .score-ring .score-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+
+    .table-row { display: grid; align-items: center; padding: 10px 16px; border-bottom: 1px solid #1a2540; transition: background 0.15s; cursor: pointer; }
+    .table-row:hover { background: rgba(30,45,74,0.4); }
+    .table-row:last-child { border-bottom: none; }
+    .table-header { color: #4a6080; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 16px 8px; }
+
+    .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
+
+    .gradient-text { background: linear-gradient(135deg, #818cf8, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  </style>
+</head>
+<body class="dark">
+
+<!-- AUTH GATE — shown when Supabase is configured but user is not signed in -->
+<div id="authGate" style="display:none;position:fixed;inset:0;z-index:9999;background:#080d1a;flex-direction:column;align-items:center;justify-content:center;">
+  <div style="width:100%;max-width:400px;padding:32px;">
+    <!-- Logo -->
+    <div class="flex items-center justify-center gap-3 mb-8">
+      <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;">
+        <i class="fas fa-chart-line text-white"></i>
+      </div>
+      <span class="font-bold text-2xl gradient-text">InvestIQ</span>
+    </div>
+    <div class="text-center mb-8">
+      <div class="text-lg font-semibold mb-1">Welcome back</div>
+      <div class="text-sm neutral">Sign in to access your portfolio</div>
+    </div>
+
+    <!-- Tab toggle -->
+    <div class="flex mb-5" style="background:#0a1120;border-radius:8px;padding:4px;border:1px solid #1e2d4a;">
+      <button id="gateTabSignIn" onclick="switchGateTab('signin')" class="flex-1 text-sm py-2 rounded-md font-medium" style="background:#6366f1;color:white;">Sign In</button>
+      <button id="gateTabSignUp" onclick="switchGateTab('signup')" class="flex-1 text-sm py-2 rounded-md font-medium" style="color:#4a6080;background:none;border:none;cursor:pointer;">Create Account</button>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label>Email</label>
+        <input type="email" id="gateEmail" class="input" placeholder="you@email.com" onkeydown="if(event.key==='Enter')submitGateAuth()">
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" id="gatePassword" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+      </div>
+      <div id="gateSignUpFields" style="display:none;">
+        <label>Confirm Password</label>
+        <input type="password" id="gatePassword2" class="input" placeholder="••••••••">
+      </div>
+    </div>
+
+    <div id="gateError" class="text-xs mt-3" style="display:none;color:#f87171;"></div>
+    <div id="gateSuccess" class="text-xs mt-3" style="display:none;color:#34d399;"></div>
+
+    <button onclick="submitGateAuth()" id="gateSubmitBtn" class="btn btn-primary w-full mt-5" style="padding:12px;">
+      <i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">Sign In</span>
+    </button>
+
+    <div class="text-xs neutral mt-6 text-center" style="line-height:1.6;">
+      Your data is encrypted in your own Supabase project.<br>
+      <span style="color:#4a6080;">InvestIQ never stores your credentials.</span>
+    </div>
+  </div>
+</div>
+
+<!-- TICKER BAR (top) -->
+<div id="tickerBar" class="ticker-wrap bg-surface" style="height:34px;overflow:hidden;">
+  <div id="tickerContent" class="ticker-line text-xs px-4" style="line-height:34px;">
+    Loading market data...
+  </div>
+</div>
+
+<!-- NAVBAR -->
+<nav class="glass sticky top-0 z-50 flex items-center justify-between px-6 py-3" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
+  <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
+      <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#34d399);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+        <i class="fas fa-chart-line text-white" style="font-size:14px;"></i>
+      </div>
+      <span class="font-bold text-lg gradient-text">InvestIQ</span>
+    </div>
+    <span class="text-xs neutral px-2 py-1 rounded" style="background:#141e33;">Personal Portfolio Dashboard</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="lastUpdated" class="text-xs neutral">Not yet updated</span>
+    <div class="flex items-center gap-1" title="Proxy server status">
+      <div id="proxyStatusDot" style="width:7px;height:7px;border-radius:50%;background:#4a6080;transition:background 0.3s;"></div>
+      <span id="proxyStatusLabel" class="text-xs" style="color:#4a6080;">Proxy</span>
+    </div>
+    <div id="supaUserBadge" style="display:none;align-items:center;gap:8px;">
+      <span id="supaUserEmail" class="text-xs" style="color:#818cf8;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+      <button onclick="signOut()" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;">
+        <i class="fas fa-sign-out-alt mr-1"></i>Logout
+      </button>
+    </div>
+    <div id="supaSignInBadge" style="display:none;">
+      <button onclick="openModal('authModal')" class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);font-size:11px;padding:4px 10px;">
+        <i class="fas fa-cloud mr-1"></i>Sign In / Sync
+      </button>
+    </div>
+    <button onclick="refreshAll()" class="btn btn-sm btn-secondary" id="refreshBtn">
+      <i class="fas fa-sync-alt mr-1"></i> Refresh
+    </button>
+    <button onclick="openModal('agentsModal')" class="btn btn-sm" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);">
+      <i class="fas fa-robot mr-1"></i> AI Agents
+    </button>
+    <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary">
+      <i class="fas fa-cog"></i>
+    </button>
+  </div>
+</nav>
+
+<!-- MAIN LAYOUT -->
+<div class="flex" style="min-height:calc(100vh - 68px);">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar p-4" style="background:#080d1a;border-right:1px solid #1e2d4a;">
+    <div class="mb-6">
+      <div id="portfolioName" class="font-semibold text-sm mb-1" style="color:#c8d6ef;">My Portfolio</div>
+      <div class="text-2xl font-bold mono" id="sidebarTotal">NZ$0.00</div>
+      <div class="text-sm mt-1" id="sidebarReturn">+NZ$0.00 (0.00%)</div>
+      <div class="text-xs mt-1" id="sidebarFxRate" style="color:#4a6080;"></div>
+    </div>
+
+    <!-- Score ring -->
+    <div class="card2 p-4 mb-4 flex items-center gap-4">
+      <div class="score-ring">
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          <circle cx="40" cy="40" r="32" fill="none" stroke="#1e2d4a" stroke-width="8"/>
+          <circle id="scoreCircle" cx="40" cy="40" r="32" fill="none" stroke="#6366f1" stroke-width="8"
+            stroke-dasharray="201" stroke-dashoffset="100" stroke-linecap="round"/>
+        </svg>
+        <div class="score-text">
+          <span id="scoreNum" class="text-lg font-bold" style="color:#818cf8;">–</span>
+          <span class="text-xs neutral">/100</span>
+        </div>
+      </div>
+      <div>
+        <div class="text-xs neutral mb-1">Portfolio Score</div>
+        <div id="scoreLabel" class="text-sm font-semibold" style="color:#818cf8;">Run agents</div>
+        <div class="text-xs neutral mt-1" id="scoreHint">Click AI Agents above</div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="space-y-1 mb-6">
+      <div class="nav-link active" onclick="showSection('overview')"><i class="fas fa-th-large"></i> Overview</div>
+      <div class="nav-link" onclick="showSection('holdings')"><i class="fas fa-briefcase"></i> Holdings</div>
+      <div class="nav-link" onclick="showSection('performance')"><i class="fas fa-chart-line"></i> Performance</div>
+      <div class="nav-link" onclick="showSection('market')"><i class="fas fa-globe"></i> Market</div>
+      <div class="nav-link" onclick="showSection('insights')"><i class="fas fa-brain"></i> AI Insights</div>
+      <div class="nav-link" id="adminNavLink" onclick="showSection('admin')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
+    </nav>
+
+    <!-- Quick stats -->
+    <div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">Quick Stats</div>
+    <div class="space-y-3">
+      <div class="flex justify-between text-sm">
+        <span class="neutral">Holdings</span>
+        <span id="statHoldings" class="font-semibold">0</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span class="neutral">Platforms</span>
+        <span id="statPlatforms" class="font-semibold">0</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span class="neutral">Asset Types</span>
+        <span id="statTypes" class="font-semibold">0</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span class="neutral">Best Performer</span>
+        <span id="statBest" class="font-semibold pos text-xs">–</span>
+      </div>
+      <div class="flex justify-between text-sm">
+        <span class="neutral">Worst Performer</span>
+        <span id="statWorst" class="font-semibold neg text-xs">–</span>
+      </div>
+    </div>
+
+    <div class="mt-6 pt-4" style="border-top:1px solid #1e2d4a;">
+      <button onclick="openModal('addModal')" class="btn btn-primary w-full" style="width:100%;">
+        <i class="fas fa-plus mr-2"></i>Add Holding
+      </button>
+      <button onclick="openModal('connectionsModal')" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;border-color:rgba(99,102,241,0.4);color:#818cf8;">
+        <i class="fas fa-plug mr-1"></i>Connect Platforms
+      </button>
+      <button onclick="exportCSV()" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;">
+        <i class="fas fa-download mr-1"></i>Export CSV
+      </button>
+      <button onclick="exportBackup()" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;border-color:rgba(52,211,153,0.4);color:#34d399;" title="Full backup — use this to move data between browsers">
+        <i class="fas fa-database mr-1"></i>Backup (JSON)
+      </button>
+      <label class="btn btn-secondary mt-2 cursor-pointer" style="width:100%;font-size:12px;border-color:rgba(52,211,153,0.4);color:#34d399;display:block;text-align:center;" title="Restore a backup from another browser or device">
+        <i class="fas fa-upload mr-1"></i>Restore Backup
+        <input type="file" accept=".json" style="display:none;" onchange="importBackup(event)">
+      </label>
+      <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+      <input type="file" id="etoroInput" accept=".csv" style="display:none" onchange="importEtoro(event)">
+      <input type="file" id="sharesiesInput" accept=".csv" style="display:none" onchange="importSharesies(event)">
+      <input type="file" id="harbourInput" accept=".csv" style="display:none" onchange="importHarbour(event)">
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-6 overflow-auto">
+
+    <!-- OVERVIEW SECTION -->
+    <div id="section-overview">
+
+      <!-- Summary metrics row -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="metric-card blue fadeIn">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Total Value</div>
+          <div class="text-2xl font-bold mono" id="totalValue">£0.00</div>
+          <div class="text-xs mt-2" id="totalCost" style="color:#4a6080;">Cost: £0.00</div>
+        </div>
+        <div class="metric-card green fadeIn">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Total Return</div>
+          <div class="text-2xl font-bold mono" id="totalReturn">+£0.00</div>
+          <div class="text-xs mt-2" id="totalReturnPct" style="color:#34d399;">+0.00%</div>
+        </div>
+        <div class="metric-card purple fadeIn">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Day Change</div>
+          <div class="text-2xl font-bold mono" id="dayChange">–</div>
+          <div class="text-xs mt-2 neutral">Live market data</div>
+        </div>
+        <div class="metric-card yellow fadeIn">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Diversification</div>
+          <div class="text-2xl font-bold mono" id="divScore">–</div>
+          <div class="text-xs mt-2 neutral" id="divHint">Add holdings to calculate</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <!-- Allocation chart -->
+        <div class="card p-5">
+          <div class="section-title mb-4">
+            <i class="fas fa-chart-pie" style="color:#818cf8;"></i>
+            Allocation
+            <div class="flex gap-2 ml-auto">
+              <span class="tab active text-xs" onclick="switchAllocTab(this,'type')">Type</span>
+              <span class="tab text-xs" onclick="switchAllocTab(this,'platform')">Platform</span>
+              <span class="tab text-xs" onclick="switchAllocTab(this,'sector')">Sector</span>
+            </div>
+          </div>
+          <div style="height:200px;position:relative;">
+            <canvas id="allocChart"></canvas>
+            <div id="allocEmpty" class="flex items-center justify-center h-full text-sm neutral" style="position:absolute;inset:0;">No holdings yet</div>
+          </div>
+          <div id="allocLegend" class="mt-3 space-y-1.5"></div>
+        </div>
+
+        <!-- Performance chart -->
+        <div class="card p-5 lg:col-span-2">
+          <div class="section-title mb-4">
+            <i class="fas fa-chart-area" style="color:#34d399;"></i>
+            Performance
+            <div class="flex gap-2 ml-auto">
+              <span class="tab active text-xs" onclick="switchPerfTab(this,'value')">Value</span>
+              <span class="tab text-xs" onclick="switchPerfTab(this,'return')">Return %</span>
+            </div>
+          </div>
+          <div style="height:200px;">
+            <canvas id="perfChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Holdings table (overview) -->
+      <div class="card mb-6">
+        <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid #1e2d4a;">
+          <div class="section-title">
+            <i class="fas fa-briefcase" style="color:#fbbf24;"></i>
+            Holdings
+          </div>
+          <button onclick="openModal('addModal')" class="btn btn-sm btn-primary">
+            <i class="fas fa-plus mr-1"></i>Add
+          </button>
+        </div>
+        <div id="holdingsTableWrap">
+          <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 80px;">
+            <span>Asset</span><span class="text-right">Price</span><span class="text-right">Value</span><span class="text-right">Return</span><span class="text-right">Weight</span><span class="text-right">Actions</span>
+          </div>
+          <div id="holdingsRows"></div>
+        </div>
+      </div>
+
+      <!-- Risk Analysis row -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="card p-5">
+          <div class="section-title mb-4">
+            <i class="fas fa-shield-alt" style="color:#f87171;"></i>
+            Risk Analysis
+          </div>
+          <div id="riskAnalysis" class="space-y-3">
+            <div class="neutral text-sm">Add holdings to see risk analysis.</div>
+          </div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title mb-4">
+            <i class="fas fa-lightbulb" style="color:#fbbf24;"></i>
+            Quick Insights
+          </div>
+          <div id="quickInsights" class="space-y-2">
+            <div class="neutral text-sm">Add holdings and run AI Agents for insights.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Platform Breakdown -->
+      <div class="card p-5 mb-6" id="platformBreakdownCard" style="display:none;">
+        <div class="section-title mb-4"><i class="fas fa-building" style="color:#818cf8;"></i> By Platform</div>
+        <div id="platformBreakdown"></div>
+      </div>
+    </div>
+
+    <!-- HOLDINGS SECTION (detailed) -->
+    <div id="section-holdings" style="display:none;">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h2 class="text-xl font-bold">All Holdings</h2>
+        <div class="flex gap-2 flex-wrap">
+          <input type="text" id="holdingsSearch" class="input" style="width:170px;" placeholder="Search..." oninput="filterHoldings()">
+          <select id="holdingsTypeFilter" class="input" style="width:120px;" onchange="filterHoldings()">
+            <option value="">All Types</option>
+            <option value="stock">Stock</option><option value="etf">ETF</option><option value="crypto">Crypto</option>
+            <option value="bond">Bond</option><option value="mutualfund">Mutual Fund</option><option value="cash">Cash</option><option value="other">Other</option>
+          </select>
+          <select id="holdingsPlatformFilter" class="input" style="width:140px;" onchange="filterHoldings()">
+            <option value="">All Platforms</option>
+          </select>
+          <button id="groupByPlatformBtn" onclick="toggleGroupByPlatform()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Group holdings by platform">
+            <i class="fas fa-layer-group mr-1"></i>Group
+          </button>
+          <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Download blank CSV template">
+            <i class="fas fa-download mr-1"></i>Template
+          </button>
+          <div class="flex" style="border:1px solid #334155;border-radius:6px;overflow:hidden;">
+            <label class="btn" style="background:#1e293b;border:none;border-radius:0;cursor:pointer;" title="Import / sync holdings from CSV">
+              <i class="fas fa-file-import mr-1"></i>Import CSV
+              <input type="file" accept=".csv" id="csvImportInput" style="display:none;" onchange="importCSV(event)">
+            </label>
+            <select id="csvImportMode" class="input" style="border:none;border-left:1px solid #334155;border-radius:0;background:#1e293b;padding:0 8px;width:auto;font-size:11px;" title="Import mode">
+              <option value="add">Add lots (append new purchases)</option>
+              <option value="sync">Sync (adjust quantities)</option>
+              <option value="replace">Replace platform (overwrite all)</option>
+            </select>
+          </div>
+          <button onclick="openModal('addModal')" class="btn btn-primary">
+            <i class="fas fa-plus mr-1"></i>Add Holding
+          </button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;">
+          <span>Asset</span><span class="text-right">Units</span><span class="text-right">Avg Cost</span><span class="text-right">Invested</span><span class="text-right">Current Price</span><span class="text-right">Mkt Value</span><span class="text-right">P&L</span><span class="text-right">Actions</span>
+        </div>
+        <div id="holdingsDetailed"></div>
+      </div>
+    </div>
+
+    <!-- PERFORMANCE SECTION -->
+    <div id="section-performance" style="display:none;">
+      <h2 class="text-xl font-bold mb-6">Performance Analysis</h2>
+
+      <!-- Historical snapshot chart -->
+      <div class="card p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="section-title"><i class="fas fa-history" style="color:#34d399;"></i> Portfolio Value Over Time</div>
+          <div class="flex gap-1">
+            <button onclick="loadSnapshotChart(30)" class="btn btn-sm btn-secondary">30d</button>
+            <button onclick="loadSnapshotChart(90)" class="btn btn-sm btn-secondary">90d</button>
+            <button onclick="loadSnapshotChart(365)" class="btn btn-sm btn-secondary">1y</button>
+            <button onclick="loadSnapshotChart(3650)" class="btn btn-sm btn-secondary">All</button>
+          </div>
+        </div>
+        <div id="snapshotChartEmpty" class="text-center py-8" style="color:#4a6080;">
+          <i class="fas fa-chart-line text-3xl mb-2 block" style="opacity:0.3;"></i>
+          <div class="text-sm">Your performance chart will grow here. A snapshot is saved automatically each day you open the app.</div>
+        </div>
+        <div style="height:280px;display:none;" id="snapshotChartWrap"><canvas id="snapshotChart"></canvas></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div class="card p-5">
+          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:#818cf8;"></i> By Asset Type</div>
+          <div style="height:260px;"><canvas id="typeBarChart"></canvas></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:#34d399;"></i> By Platform</div>
+          <div style="height:260px;"><canvas id="platformBarChart"></canvas></div>
+        </div>
+      </div>
+      <div class="card p-5">
+        <div class="section-title mb-4"><i class="fas fa-trophy" style="color:#fbbf24;"></i> Top & Bottom Performers</div>
+        <div id="performersTable" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
+      </div>
+    </div>
+
+    <!-- MARKET SECTION -->
+    <div id="section-market" style="display:none;">
+      <h2 class="text-xl font-bold mb-6">Global Market Overview</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="indicesGrid">
+        <div class="card2 p-4 text-center"><div class="neutral text-xs">Loading indices...</div></div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5">
+          <div class="section-title mb-3"><i class="fas fa-coins" style="color:#fbbf24;"></i> Commodities</div>
+          <div id="commoditiesGrid" class="space-y-3"></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title mb-3"><i class="fas fa-money-bill-wave" style="color:#34d399;"></i> Currencies</div>
+          <div id="fxGrid" class="space-y-3"></div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title mb-3"><i class="fab fa-bitcoin" style="color:#fbbf24;"></i> Crypto</div>
+          <div id="cryptoGrid" class="space-y-3"></div>
+        </div>
+      </div>
+      <div class="card p-5">
+        <div class="section-title mb-4"><i class="fas fa-newspaper" style="color:#818cf8;"></i> Portfolio Impact Analysis</div>
+        <div id="marketImpact" class="neutral text-sm">Run AI Agents to see how current market conditions affect your portfolio.</div>
+      </div>
+    </div>
+
+    <!-- INSIGHTS SECTION -->
+    <div id="section-insights" style="display:none;">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-xl font-bold">AI Insights & Recommendations</h2>
+        <button onclick="openModal('agentsModal')" class="btn btn-primary">
+          <i class="fas fa-robot mr-2"></i>Run AI Analysis
+        </button>
+      </div>
+      <div id="insightsContent">
+        <div class="card p-8 text-center">
+          <i class="fas fa-robot text-5xl mb-4 block" style="color:#6366f1;opacity:0.4;"></i>
+          <div class="text-lg font-semibold mb-2">Multi-Agent AI Analysis</div>
+          <div class="neutral text-sm mb-4">Configure your Claude API key in Settings, then click "Run AI Analysis" above to get personalized insights from 4 specialized AI agents.</div>
+          <button onclick="openModal('settingsModal')" class="btn btn-secondary mr-2">
+            <i class="fas fa-key mr-1"></i>Set API Key
+          </button>
+          <button onclick="openModal('agentsModal')" class="btn btn-primary">
+            <i class="fas fa-play mr-1"></i>Run Now
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN SECTION -->
+    <div id="section-admin" style="display:none;">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel
+          </h2>
+          <div class="text-xs neutral mt-1">Master account — full user & platform management</div>
+        </div>
+        <button onclick="loadAdminData()" class="btn btn-sm btn-secondary">
+          <i class="fas fa-sync-alt mr-1"></i> Refresh
+        </button>
+      </div>
+
+      <!-- Stats row -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="metric-card text-center">
+          <div class="text-2xl font-bold mono" id="adminStatUsers">—</div>
+          <div class="text-xs neutral mt-1">Total Users</div>
+        </div>
+        <div class="metric-card text-center">
+          <div class="text-2xl font-bold mono" id="adminStatActive">—</div>
+          <div class="text-xs neutral mt-1">Active (7d)</div>
+        </div>
+        <div class="metric-card text-center">
+          <div class="text-2xl font-bold mono" id="adminStatPortfolios">—</div>
+          <div class="text-xs neutral mt-1">With Holdings</div>
+        </div>
+        <div class="metric-card text-center">
+          <div class="text-2xl font-bold mono" id="adminStatNew">—</div>
+          <div class="text-xs neutral mt-1">New (30d)</div>
+        </div>
+      </div>
+
+      <!-- User table -->
+      <div class="card" style="overflow:hidden;">
+        <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
+          <input type="text" id="adminUserSearch" class="input" placeholder="Search by email..." oninput="filterAdminUsers()" style="max-width:300px;">
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="border-bottom:1px solid #1e2d4a;">
+                <th class="text-left p-3 neutral font-medium">Email</th>
+                <th class="text-left p-3 neutral font-medium">Joined</th>
+                <th class="text-left p-3 neutral font-medium">Last Seen</th>
+                <th class="text-left p-3 neutral font-medium">Holdings</th>
+                <th class="text-left p-3 neutral font-medium">Role</th>
+                <th class="text-left p-3 neutral font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="adminUserTable">
+              <tr><td colspan="6" class="text-center p-6 neutral">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ============================================================ -->
+<!-- MODALS -->
+<!-- ============================================================ -->
+
+<!-- ADD / EDIT HOLDING MODAL -->
+<div class="modal-overlay" id="addModal" onclick="closeModalBg(event,'addModal')">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-bold" id="addModalTitle">Add Holding</h2>
+      <button onclick="closeModal('addModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+    <form id="holdingForm" onsubmit="saveHolding(event)">
+      <input type="hidden" id="holdingId">
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2">
+          <label>Ticker Symbol / Name *</label>
+          <input type="text" id="hSymbol" class="input" placeholder="e.g. AAPL, BTC-USD, VWRL.L" required>
+          <div class="text-xs mt-1" style="color:#4a6080;">Use Yahoo Finance symbol. For UK stocks add .L (e.g. TSCO.L)</div>
+        </div>
+        <div class="col-span-2">
+          <label>Display Name</label>
+          <input type="text" id="hName" class="input" placeholder="e.g. Apple Inc., Bitcoin">
+        </div>
+        <div>
+          <label>Asset Type *</label>
+          <select id="hType" class="input" required>
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+            <option value="crypto">Crypto</option>
+            <option value="bond">Bond</option>
+            <option value="mutualfund">Mutual Fund</option>
+            <option value="realestate">Real Estate</option>
+            <option value="cash">Cash</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Platform / Bank *</label>
+          <input type="text" id="hPlatform" class="input" placeholder="e.g. Vanguard, HSBC, Coinbase" required>
+        </div>
+        <div>
+          <label>Quantity / Units *</label>
+          <input type="number" id="hQty" class="input" placeholder="10" step="any" min="0" required>
+        </div>
+        <div>
+          <label>Price Paid Per Unit * <span class="text-xs neutral">(this lot)</span></label>
+          <div class="flex gap-2">
+            <select id="hCurrency" class="input" style="width:80px;">
+              <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
+            </select>
+            <input type="number" id="hBuyPrice" class="input" placeholder="150.00" step="any" min="0" required>
+          </div>
+        </div>
+        <div>
+          <label>Purchase Date <span class="text-xs neutral">(this lot)</span></label>
+          <input type="date" id="hDate" class="input">
+        </div>
+        <div class="col-span-2" id="existingLotsSection" style="display:none;">
+          <div class="text-xs neutral mb-1">Existing purchase lots</div>
+          <div id="existingLotsList" style="background:#080d1a;border-radius:8px;padding:8px;font-size:12px;"></div>
+          <div class="text-xs mt-1" id="avgCostDisplay" style="color:#818cf8;"></div>
+        </div>
+        <div>
+          <label>Sector</label>
+          <select id="hSector" class="input">
+            <option value="">— Select —</option>
+            <option>Technology</option><option>Healthcare</option><option>Finance</option>
+            <option>Consumer</option><option>Energy</option><option>Utilities</option>
+            <option>Real Estate</option><option>Materials</option><option>Industrials</option>
+            <option>Telecoms</option><option>Crypto</option><option>Fixed Income</option><option>Other</option>
+          </select>
+        </div>
+        <div>
+          <label>Country / Region</label>
+          <input type="text" id="hCountry" class="input" placeholder="e.g. US, UK, Global">
+        </div>
+        <div class="col-span-2">
+          <label>Notes</label>
+          <textarea id="hNotes" class="input" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button type="submit" class="btn btn-primary flex-1">
+          <i class="fas fa-save mr-2"></i><span id="saveHoldingLabel">Add Holding</span>
+        </button>
+        <button type="button" onclick="closeModal('addModal')" class="btn btn-secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- AI AGENTS MODAL -->
+<div class="modal-overlay" id="agentsModal" onclick="closeModalBg(event,'agentsModal')">
+  <div class="modal" style="max-width:680px;">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-lg font-bold">Multi-Agent AI Analysis</h2>
+        <div class="text-xs neutral mt-1">4 specialized agents working in parallel on your portfolio</div>
+      </div>
+      <button onclick="closeModal('agentsModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+
+    <!-- Market context input -->
+    <div class="card2 p-4 mb-4">
+      <label>Market Context (optional — paste any recent news or market notes)</label>
+      <textarea id="marketContext" class="input" rows="2" placeholder="e.g. Fed kept rates on hold, tech earnings mixed, UK inflation at 3.2%..."></textarea>
+    </div>
+
+    <!-- Agent cards -->
+    <div class="text-xs mb-3 p-2 rounded flex items-center gap-2" style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);color:#818cf8;">
+      <i class="fas fa-bolt"></i>
+      <span>Agents 1–3 run <b>in parallel</b> simultaneously. Agent 4 synthesises their outputs.</span>
+    </div>
+    <div id="agentsList">
+      <div class="agent-card agent-idle" id="agent-portfolio">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>📊</span>
+            <span class="font-semibold text-sm">Portfolio Health Agent</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
+          </div>
+          <div id="agent-portfolio-status" class="text-xs neutral">Idle</div>
+        </div>
+        <div class="text-xs neutral">Scores diversification, concentration risk, and overall portfolio health.</div>
+        <div id="agent-portfolio-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
+      </div>
+      <div class="agent-card agent-idle" id="agent-market">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>🌍</span><span class="font-semibold text-sm">Market Impact Agent</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(129,140,248,0.12);color:#818cf8;border:1px solid rgba(129,140,248,0.2);">Sonnet · Balanced</span>
+          </div>
+          <div id="agent-market-status" class="text-xs neutral">Idle</div>
+        </div>
+        <div class="text-xs neutral">Analyses global market trends and their effect on your specific holdings.</div>
+        <div id="agent-market-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
+      </div>
+      <div class="agent-card agent-idle" id="agent-opportunity">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>🔭</span><span class="font-semibold text-sm">Opportunity Scout Agent</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(129,140,248,0.12);color:#818cf8;border:1px solid rgba(129,140,248,0.2);">Sonnet · Balanced</span>
+          </div>
+          <div id="agent-opportunity-status" class="text-xs neutral">Idle</div>
+        </div>
+        <div class="text-xs neutral">Finds gaps, underweight sectors, and actionable investment opportunities.</div>
+        <div id="agent-opportunity-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
+      </div>
+      <div class="agent-card agent-idle" id="agent-advisor">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>💼</span><span class="font-semibold text-sm">Senior Advisor · Orchestrator</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);">Opus · Most Powerful</span>
+          </div>
+          <div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1–3…</div>
+        </div>
+        <div class="text-xs neutral">Synthesises all agent outputs into a prioritised 5-point action plan.</div>
+        <div id="agent-advisor-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:160px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <div id="agentError" class="text-xs mt-3" style="display:none;color:#f87171;"></div>
+
+    <div class="flex gap-3 mt-5">
+      <button id="runAgentsBtn" onclick="runAgents()" class="btn btn-primary flex-1">
+        <i class="fas fa-play mr-2"></i>Run All Agents
+      </button>
+      <button onclick="closeModal('agentsModal')" class="btn btn-secondary">Close</button>
+    </div>
+
+    <div class="text-xs neutral mt-3 text-center">
+      Requires Claude API key in Settings. Uses Haiku + Sonnet + Opus — ~4,000 tokens total per run.
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsModal" onclick="closeModalBg(event,'settingsModal')">
+  <div class="modal">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-bold">Settings</h2>
+      <button onclick="closeModal('settingsModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+
+    <div class="space-y-5">
+      <div>
+        <label>Portfolio Name</label>
+        <input type="text" id="settingName" class="input" placeholder="My Portfolio">
+      </div>
+      <div>
+        <label>Base Currency</label>
+        <select id="settingCurrency" class="input">
+          <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
+        </select>
+      </div>
+      <div style="border-top:1px solid #1e2d4a;padding-top:16px;">
+        <label>Claude API Key <span class="text-xs" style="color:#6366f1;font-weight:normal;">(for AI agents)</span></label>
+        <div class="flex gap-2">
+          <input type="password" id="settingApiKey" class="input" placeholder="sk-ant-api03-...">
+          <button onclick="toggleApiKeyVisibility()" class="btn btn-secondary btn-sm" id="apiKeyToggle" type="button">
+            <i class="fas fa-eye"></i>
+          </button>
+        </div>
+        <div class="text-xs mt-2" style="color:#4a6080;">
+          Your key is stored locally in your browser only. Get a key at console.anthropic.com.
+          <br>Note: Direct browser API calls may be restricted — use the Node.js webapp for reliable access.
+        </div>
+      </div>
+      <div>
+        <label>Proxy URL (optional — for CORS-free Claude API access)</label>
+        <input type="text" id="settingProxy" class="input" placeholder="http://localhost:8080">
+        <div class="text-xs mt-1" style="color:#4a6080;">Run <code style="background:#141e33;padding:2px 6px;border-radius:4px;">python ../proxy/claude_proxy.py</code> locally, or leave blank.</div>
+      </div>
+      <div style="border-top:1px solid #1e2d4a;padding-top:16px;">
+        <div class="flex items-center justify-between mb-3">
+          <label style="margin:0;">☁️ Supabase Cloud Sync <span class="text-xs" style="color:#34d399;font-weight:normal;">(cross-browser sync)</span></label>
+          <button onclick="openModal('authModal')" class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);font-size:11px;padding:3px 10px;">Sign In / Up</button>
+        </div>
+        <input type="text" id="settingSupabaseUrl" class="input mb-2" placeholder="https://xxxx.supabase.co">
+        <input type="password" id="settingSupabaseKey" class="input" placeholder="anon public key (eyJ...)">
+        <div class="text-xs mt-2" style="color:#4a6080;">
+          Get these from your <b style="color:#818cf8;">Supabase → Settings → API</b> page. Your data is stored in your own Supabase project.
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3 mt-6">
+      <button onclick="saveSettings()" class="btn btn-primary flex-1">Save Settings</button>
+      <button onclick="closeModal('settingsModal')" class="btn btn-secondary">Cancel</button>
+    </div>
+
+    <div style="border-top:1px solid #1e2d4a;margin-top:20px;padding-top:16px;">
+      <div class="text-xs neutral mb-3">Danger Zone</div>
+      <button onclick="clearAllData()" class="btn btn-danger btn-sm">
+        <i class="fas fa-trash mr-1"></i>Clear All Data
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="authModal" onclick="closeModalBg(event,'authModal')">
+  <div class="modal" style="max-width:400px;">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-lg font-bold">☁️ Cloud Sync</h2>
+        <div class="text-xs neutral mt-1">Sign in to sync your portfolio across devices</div>
+      </div>
+      <button onclick="closeModal('authModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+
+    <div id="authNotConfigured" style="display:none;" class="text-xs p-3 rounded mb-4" style="background:#0a1120;border:1px solid #1e2d4a;color:#f87171;">
+      ⚠️ Add your Supabase URL and anon key in Settings first.
+    </div>
+
+    <!-- Tab toggle -->
+    <div class="flex mb-5" style="background:#0a1120;border-radius:8px;padding:4px;border:1px solid #1e2d4a;">
+      <button id="authTabSignIn" onclick="switchAuthTab('signin')" class="flex-1 text-sm py-2 rounded-md font-medium" style="background:#6366f1;color:white;">Sign In</button>
+      <button id="authTabSignUp" onclick="switchAuthTab('signup')" class="flex-1 text-sm py-2 rounded-md font-medium" style="color:#4a6080;background:none;border:none;cursor:pointer;">Create Account</button>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label>Email</label>
+        <input type="email" id="authEmail" class="input" placeholder="you@email.com" onkeydown="if(event.key==='Enter')submitAuth()">
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" id="authPassword" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()">
+      </div>
+      <div id="authSignUpFields" style="display:none;">
+        <label>Confirm Password</label>
+        <input type="password" id="authPassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()">
+      </div>
+    </div>
+
+    <div id="authError" class="text-xs mt-3" style="display:none;color:#f87171;"></div>
+    <div id="authSuccess" class="text-xs mt-3" style="display:none;color:#34d399;"></div>
+
+    <button onclick="submitAuth()" id="authSubmitBtn" class="btn btn-primary w-full mt-5">
+      <i class="fas fa-sign-in-alt mr-2"></i><span id="authSubmitLabel">Sign In</span>
+    </button>
+
+    <div class="text-xs neutral mt-4 text-center" style="line-height:1.6;">
+      Your data is stored in <b style="color:#818cf8;">your own</b> Supabase project.<br>
+      We never see your credentials or portfolio data.
+    </div>
+  </div>
+</div>
+
+<!-- PLATFORM CONNECTIONS MODAL -->
+<div class="modal-overlay" id="connectionsModal" onclick="closeModalBg(event,'connectionsModal')">
+  <div class="modal" style="max-width:600px;">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-lg font-bold">Platform Connections</h2>
+        <div class="text-xs neutral mt-1">Connect your banks and investment platforms</div>
+      </div>
+      <button onclick="closeModal('connectionsModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+
+    <!-- NZ Open Banking via Akahu -->
+    <div class="card2 p-4 mb-3">
+      <div class="flex items-center gap-3 mb-3">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(52,211,153,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">🏦</div>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">ANZ &amp; BNZ — via Akahu Open Banking</div>
+          <div class="text-xs neutral">Connects live to NZ banks. Free tier available.</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded" style="background:rgba(52,211,153,0.12);color:#34d399;">Recommended</span>
+      </div>
+      <div class="text-xs mb-3" style="color:#94a3b8;line-height:1.6;">
+        Akahu is NZ's open banking API — connects to ANZ, BNZ, ASB, Kiwibank, Westpac, and Sharesies.
+        You authenticate directly with your bank (Akahu never sees your password).
+      </div>
+      <div class="text-xs mb-3 p-3 rounded" style="background:#0a1120;border:1px solid #1e2d4a;">
+        <div class="font-semibold mb-2" style="color:#818cf8;">Setup (5 minutes):</div>
+        <div style="color:#94a3b8;line-height:1.8;">
+          1. Register a free app at <b style="color:#818cf8;">akahu.nz/developers</b><br>
+          2. Get your <b>App Token</b> and <b>User Token</b><br>
+          3. Enter them below — your holdings sync automatically
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label>Akahu App Token</label>
+          <input type="password" id="akahu_app_token" class="input" placeholder="app_token_..." oninput="saveAkahuTokens()">
+        </div>
+        <div>
+          <label>Akahu User Token</label>
+          <input type="password" id="akahu_user_token" class="input" placeholder="user_token_..." oninput="saveAkahuTokens()">
+        </div>
+      </div>
+      <button onclick="syncAkahu()" class="btn btn-success btn-sm" id="akahuSyncBtn">
+        <i class="fas fa-sync-alt mr-1"></i>Sync ANZ, BNZ &amp; Sharesies
+      </button>
+      <span id="akahuStatus" class="text-xs ml-2 neutral"></span>
+      <div id="akahuProxyHint" style="display:none;margin-top:10px;" class="text-xs p-3 rounded" style="background:#0a1120;border:1px solid rgba(248,113,113,0.3);">
+        <div class="font-semibold mb-1" style="color:#fbbf24;">⚡ One-time setup required:</div>
+        <div style="color:#94a3b8;line-height:1.8;">
+          1. Open a terminal / Command Prompt in <b style="color:#c8d6ef;">Personal Investments\webapp</b><br>
+          2. Run: <code style="background:#1e2d4a;padding:2px 6px;border-radius:4px;color:#818cf8;">npm install</code><br>
+          3. Copy <code style="background:#1e2d4a;padding:2px 6px;border-radius:4px;color:#818cf8;">.env.local.example</code> → <code style="background:#1e2d4a;padding:2px 6px;border-radius:4px;color:#818cf8;">.env.local</code> and add your Claude API key<br>
+          4. Run: <code style="background:#1e2d4a;padding:2px 6px;border-radius:4px;color:#818cf8;">npm run dev</code><br>
+          5. Come back here and click Sync again ✓
+        </div>
+      </div>
+    </div>
+
+    <!-- eToro -->
+    <div class="card2 p-4 mb-3">
+      <div class="flex items-center gap-3 mb-3">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">📊</div>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">eToro</div>
+          <div class="text-xs neutral">No public API — import your portfolio CSV</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded" style="background:rgba(148,163,184,0.1);color:#94a3b8;">CSV Import</span>
+      </div>
+      <div class="text-xs mb-3 p-3 rounded" style="background:#0a1120;border:1px solid #1e2d4a;color:#94a3b8;line-height:1.6;">
+        In eToro: <b style="color:#c8d6ef;">Portfolio → ⋮ menu → Download Statement</b><br>
+        Select <b style="color:#c8d6ef;">"Account Statement"</b> → any date range → Download CSV
+      </div>
+      <button onclick="document.getElementById('etoroInput').click()" class="btn btn-secondary btn-sm">
+        <i class="fas fa-upload mr-1"></i>Import eToro CSV
+      </button>
+      <span id="etoroStatus" class="text-xs ml-2 neutral"></span>
+    </div>
+
+    <!-- Sharesies -->
+    <div class="card2 p-4 mb-3">
+      <div class="flex items-center gap-3 mb-3">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(251,191,36,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">🥝</div>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">Sharesies</div>
+          <div class="text-xs neutral">CSV import or live sync via Akahu</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded" style="background:rgba(251,191,36,0.12);color:#fbbf24;">CSV or Akahu</span>
+      </div>
+      <div class="text-xs mb-3 p-3 rounded" style="background:#0a1120;border:1px solid #1e2d4a;color:#94a3b8;line-height:1.6;">
+        In Sharesies: <b style="color:#c8d6ef;">Account → Reports → Portfolio → Export CSV</b><br>
+        Or connect Akahu above — it includes Sharesies automatically.
+      </div>
+      <button onclick="document.getElementById('sharesiesInput').click()" class="btn btn-secondary btn-sm">
+        <i class="fas fa-upload mr-1"></i>Import Sharesies CSV
+      </button>
+      <span id="sharesiesStatus" class="text-xs ml-2 neutral"></span>
+    </div>
+
+    <!-- Harbour -->
+    <div class="card2 p-4 mb-3">
+      <div class="flex items-center gap-3 mb-3">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(251,146,60,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">⚓</div>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">Harbour Investment Portal</div>
+          <div class="text-xs neutral">No API — import their statement CSV</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded" style="background:rgba(148,163,184,0.1);color:#94a3b8;">CSV Import</span>
+      </div>
+      <div class="text-xs mb-3 p-3 rounded" style="background:#0a1120;border:1px solid #1e2d4a;color:#94a3b8;line-height:1.6;">
+        Log into Harbour portal → <b style="color:#c8d6ef;">Statements → Download CSV</b><br>
+        Or use <b style="color:#c8d6ef;">Add Holding</b> to enter your fund positions manually.
+      </div>
+      <div class="flex gap-2">
+        <button onclick="document.getElementById('harbourInput').click()" class="btn btn-secondary btn-sm">
+          <i class="fas fa-upload mr-1"></i>Import Harbour CSV
+        </button>
+        <button onclick="closeModal('connectionsModal');openModal('addModal')" class="btn btn-secondary btn-sm">
+          <i class="fas fa-plus mr-1"></i>Add Manually
+        </button>
+      </div>
+      <span id="harbourStatus" class="text-xs ml-2 neutral"></span>
+    </div>
+
+    <!-- Indus -->
+    <div class="card2 p-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div style="width:36px;height:36px;border-radius:8px;background:rgba(167,139,250,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;">💎</div>
+        <div class="flex-1">
+          <div class="font-semibold text-sm">Indus</div>
+          <div class="text-xs neutral">Add holdings manually</div>
+        </div>
+        <span class="text-xs px-2 py-1 rounded" style="background:rgba(148,163,184,0.1);color:#94a3b8;">Manual</span>
+      </div>
+      <button onclick="closeModal('connectionsModal');openModal('addModal')" class="btn btn-secondary btn-sm">
+        <i class="fas fa-plus mr-1"></i>Add Indus Holdings Manually
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- VIEW HOLDING MODAL -->
+<div class="modal-overlay" id="viewModal" onclick="closeModalBg(event,'viewModal')">
+  <div class="modal" style="max-width:460px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold" id="viewModalTitle">Holding Details</h2>
+      <button onclick="closeModal('viewModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+    <div id="viewModalContent"></div>
+    <div class="flex gap-3 mt-5">
+      <button id="viewEditBtn" class="btn btn-primary flex-1">Edit</button>
+      <button id="viewDeleteBtn" class="btn btn-danger">Delete</button>
+      <button onclick="closeModal('viewModal')" class="btn btn-secondary">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- JAVASCRIPT -->
+<!-- ============================================================ -->
+<script>
+
+// ===== CONFIG =====
+const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', AED:'د.إ', SGD:'S$', AUD:'A$' };
+const ASSET_COLORS = {
+  stock:'#818cf8', etf:'#60a5fa', crypto:'#fbbf24', bond:'#34d399',
+  cash:'#94a3b8', mutualfund:'#c4b5fd', realestate:'#fb923c', other:'#64748b'
+};
+const CORS_PROXIES = [
+  'https://corsproxy.io/?',
+  'https://api.allorigins.win/raw?url='
+];
+
+// ===== STATE =====
+let state = {
+  portfolio: [],
+  settings: { name:'My Portfolio', currency:'NZD', claudeApiKey:'', proxyUrl:'', supabaseUrl:'', supabaseKey:'' },
+  marketData: { indices:{}, fx:{}, crypto:{}, commodities:{} },
+  agentResults: null,
+  allocMode: 'type',
+  perfMode: 'value'
+};
+
+// ===== SUPABASE =====
+let _supabase = null;
+let _supaUser  = null;
+let _savePending = null;
+
+function initSupabase() {
+  const url = state.settings.supabaseUrl?.trim();
+  const key = state.settings.supabaseKey?.trim();
+  if (!url || !key) { _supabase = null; return false; }
+  try {
+    _supabase = window.supabase.createClient(url, key);
+    return true;
+  } catch(e) {
+    console.warn('Supabase init failed:', e);
+    _supabase = null;
+    return false;
+  }
+}
+
+function updateAuthUI() {
+  const badge = document.getElementById('supaUserBadge');
+  const signInBadge = document.getElementById('supaSignInBadge');
+  const emailEl = document.getElementById('supaUserEmail');
+  const gate = document.getElementById('authGate');
+  const hasSupaConfig = !!(state.settings.supabaseUrl?.trim() && state.settings.supabaseKey?.trim());
+
+  if (_supaUser) {
+    if (badge) { badge.style.display = 'flex'; }
+    if (emailEl) emailEl.textContent = _supaUser.email;
+    if (signInBadge) signInBadge.style.display = 'none';
+    if (gate) gate.style.display = 'none'; // hide gate — logged in
+  } else if (hasSupaConfig) {
+    if (badge) badge.style.display = 'none';
+    if (signInBadge) signInBadge.style.display = 'block';
+    if (gate) gate.style.display = 'flex'; // show gate — configured but not logged in
+  } else {
+    if (badge) badge.style.display = 'none';
+    if (signInBadge) signInBadge.style.display = 'none';
+    if (gate) gate.style.display = 'none'; // no config — local mode, no gate
+  }
+}
+
+// Auth gate helpers
+let _gateMode = 'signin';
+function switchGateTab(mode) {
+  _gateMode = mode;
+  const si = document.getElementById('gateTabSignIn');
+  const su = document.getElementById('gateTabSignUp');
+  const extra = document.getElementById('gateSignUpFields');
+  const label = document.getElementById('gateSubmitLabel');
+  const errEl = document.getElementById('gateError');
+  const okEl  = document.getElementById('gateSuccess');
+  if (errEl) errEl.style.display = 'none';
+  if (okEl)  okEl.style.display  = 'none';
+  if (mode === 'signin') {
+    if (si) { si.style.background='#6366f1'; si.style.color='white'; }
+    if (su) { su.style.background='none'; su.style.color='#4a6080'; }
+    if (extra) extra.style.display = 'none';
+    if (label) label.textContent = 'Sign In';
+  } else {
+    if (su) { su.style.background='#6366f1'; su.style.color='white'; }
+    if (si) { si.style.background='none'; si.style.color='#4a6080'; }
+    if (extra) extra.style.display = 'block';
+    if (label) label.textContent = 'Create Account';
+  }
+}
+
+async function submitGateAuth() {
+  const errEl = document.getElementById('gateError');
+  const okEl  = document.getElementById('gateSuccess');
+  const btn   = document.getElementById('gateSubmitBtn');
+  if (errEl) errEl.style.display = 'none';
+  if (okEl)  okEl.style.display  = 'none';
+
+  const email    = document.getElementById('gateEmail')?.value?.trim();
+  const password = document.getElementById('gatePassword')?.value;
+  if (!email || !password) {
+    if (errEl) { errEl.textContent = 'Email and password are required.'; errEl.style.display = 'block'; }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Please wait...'; }
+
+  let result;
+  if (_gateMode === 'signin') {
+    result = await signIn(email, password);
+  } else {
+    const p2 = document.getElementById('gatePassword2')?.value;
+    if (p2 !== password) {
+      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">Create Account</span>'; }
+      return;
+    }
+    result = await signUp(email, password);
+  }
+
+  if (btn) { btn.disabled=false; btn.innerHTML=`<i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">${_gateMode==='signin'?'Sign In':'Create Account'}</span>`; }
+
+  if (result.error) {
+    if (errEl) { errEl.textContent = result.error; errEl.style.display = 'block'; }
+  } else if (result.emailConfirm) {
+    if (okEl) { okEl.textContent = '✓ Account created! Check your email to confirm, then sign in.'; okEl.style.display = 'block'; }
+    switchGateTab('signin');
+  }
+  // On success, updateAuthUI() hides the gate automatically
+}
+
+async function loadFromSupabase() {
+  if (!_supabase || !_supaUser) return false;
+  try {
+    const { data, error } = await _supabase
+      .from('investiq_portfolios')
+      .select('portfolio, settings, agent_results, updated_at')
+      .eq('user_id', _supaUser.id)
+      .single();
+    if (error && error.code !== 'PGRST116') { console.warn('Supabase load:', error.message); return false; }
+    if (!data) return false;
+    // Merge remote into state — remote wins for portfolio; keep local API key
+    const remoteSettings = data.settings || {};
+    const apiKey = state.settings.claudeApiKey; // preserve local API key
+    state.settings = { ...state.settings, ...remoteSettings, claudeApiKey: apiKey };
+    state.portfolio = (data.portfolio || []).map(h => {
+      if (!h.lots || !h.lots.length) {
+        return { ...h, lots: [{ quantity: parseFloat(h.quantity)||0, price: parseFloat(h.purchasePrice)||0, date: h.purchaseDate||'' }] };
+      }
+      return h;
+    });
+    if (data.agent_results) state.agentResults = data.agent_results;
+    localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: state.portfolio, settings: state.settings, agentResults: state.agentResults }));
+    console.log('✓ Loaded from Supabase');
+    return true;
+  } catch(e) { console.warn('Supabase load error:', e); return false; }
+}
+
+async function saveToSupabase() {
+  if (!_supabase || !_supaUser) return;
+  try {
+    const settingsToSave = { ...state.settings };
+    delete settingsToSave.claudeApiKey; // never store API key in cloud
+    const { error } = await _supabase
+      .from('investiq_portfolios')
+      .upsert({
+        user_id: _supaUser.id,
+        portfolio: state.portfolio,
+        settings: settingsToSave,
+        agent_results: state.agentResults,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+    if (error) console.warn('Supabase save:', error.message);
+    else console.log('✓ Saved to Supabase');
+  } catch(e) { console.warn('Supabase save error:', e); }
+}
+
+function scheduleSupa() {
+  // Debounce: save to Supabase 2s after the last state change
+  if (_savePending) clearTimeout(_savePending);
+  _savePending = setTimeout(() => saveToSupabase(), 2000);
+}
+
+// ── DAILY PORTFOLIO SNAPSHOT ─────────────────────────────────────
+// Stores one row per user per day for a long-term performance chart.
+// Called after refreshPortfolioPrices() so values reflect LIVE market data,
+// not stale CSV prices.
+async function recordDailySnapshot() {
+  if (!_supabase || !_supaUser) return;
+  if (!state.portfolio.length) return;
+
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  try {
+    // Skip if today's snapshot already exists
+    const { data: existing } = await _supabase
+      .from('investiq_snapshots')
+      .select('id')
+      .eq('user_id', _supaUser.id)
+      .eq('snapshot_date', today)
+      .maybeSingle();
+    if (existing) return;
+
+    const metrics = getMetrics();
+    const byType = {};
+    const byPlatform = {};
+    metrics.holdings.forEach(h => {
+      byType[h.type]         = (byType[h.type]         || 0) + h.currentValue;
+      byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
+    });
+
+    await _supabase.from('investiq_snapshots').upsert({
+      user_id:        _supaUser.id,
+      snapshot_date:  today,
+      total_value:    Number(metrics.totalValue.toFixed(2)),
+      total_cost:     Number(metrics.totalCost.toFixed(2)),
+      total_gain:     Number(metrics.totalGain.toFixed(2)),
+      total_gain_pct: Number(metrics.totalGainPct.toFixed(4)),
+      holdings_count: metrics.holdings.length,
+      currency:       state.settings.currency || 'NZD',
+      breakdown:      { byType, byPlatform }
+    }, { onConflict: 'user_id,snapshot_date' });
+    console.log('✓ Daily snapshot recorded:', today);
+  } catch(e) {
+    console.warn('Snapshot error:', e.message);
+  }
+}
+
+async function loadSnapshotHistory(days = 90) {
+  if (!_supabase || !_supaUser) return [];
+  const since = new Date(Date.now() - days*24*60*60*1000).toISOString().slice(0,10);
+  try {
+    const { data } = await _supabase
+      .from('investiq_snapshots')
+      .select('snapshot_date, total_value, total_cost, total_gain, total_gain_pct')
+      .eq('user_id', _supaUser.id)
+      .gte('snapshot_date', since)
+      .order('snapshot_date', { ascending: true });
+    return data || [];
+  } catch(e) { console.warn('Snapshot history error:', e.message); return []; }
+}
+
+async function signIn(email, password) {
+  if (!_supabase) return { error: 'Supabase not configured' };
+  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+  if (error) return { error: error.message };
+  _supaUser = data.user;
+  await checkAdminStatus();
+  // Touch last_seen
+  _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
+  updateAuthUI();
+  const loaded = await loadFromSupabase();
+  if (loaded) { renderAll(); if (state.agentResults) renderInsightsSection(state.agentResults); }
+  return { ok: true };
+}
+
+async function signUp(email, password) {
+  if (!_supabase) return { error: 'Supabase not configured' };
+  const { data, error } = await _supabase.auth.signUp({ email, password });
+  if (error) return { error: error.message };
+  _supaUser = data.user;
+  updateAuthUI();
+  if (_supaUser) await saveToSupabase();
+  return { ok: true, emailConfirm: !data.session };
+}
+
+async function signOut() {
+  if (_supabase) await _supabase.auth.signOut();
+  _supaUser = null;
+  updateAuthUI();
+}
+
+// Auth modal helpers
+let _authMode = 'signin';
+function switchAuthTab(mode) {
+  _authMode = mode;
+  const signin = document.getElementById('authTabSignIn');
+  const signup = document.getElementById('authTabSignUp');
+  const extra  = document.getElementById('authSignUpFields');
+  const label  = document.getElementById('authSubmitLabel');
+  const errEl  = document.getElementById('authError');
+  const okEl   = document.getElementById('authSuccess');
+  if (errEl) errEl.style.display = 'none';
+  if (okEl)  okEl.style.display  = 'none';
+  if (mode === 'signin') {
+    if (signin) { signin.style.background='#6366f1'; signin.style.color='white'; }
+    if (signup) { signup.style.background='none'; signup.style.color='#4a6080'; }
+    if (extra)  extra.style.display = 'none';
+    if (label)  label.textContent = 'Sign In';
+  } else {
+    if (signup) { signup.style.background='#6366f1'; signup.style.color='white'; }
+    if (signin) { signin.style.background='none'; signin.style.color='#4a6080'; }
+    if (extra)  extra.style.display = 'block';
+    if (label)  label.textContent = 'Create Account';
+  }
+}
+
+async function submitAuth() {
+  const errEl = document.getElementById('authError');
+  const okEl  = document.getElementById('authSuccess');
+  const btn   = document.getElementById('authSubmitBtn');
+  const notCfg = document.getElementById('authNotConfigured');
+  if (errEl) errEl.style.display = 'none';
+  if (okEl)  okEl.style.display  = 'none';
+
+  if (!_supabase) {
+    if (notCfg) notCfg.style.display = 'block';
+    return;
+  }
+  if (notCfg) notCfg.style.display = 'none';
+
+  const email = document.getElementById('authEmail')?.value?.trim();
+  const password = document.getElementById('authPassword')?.value;
+  if (!email || !password) {
+    if (errEl) { errEl.textContent = 'Email and password are required.'; errEl.style.display = 'block'; }
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Please wait...'; }
+
+  let result;
+  if (_authMode === 'signin') {
+    result = await signIn(email, password);
+  } else {
+    const p2 = document.getElementById('authPassword2')?.value;
+    if (p2 !== password) {
+      if (errEl) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; }
+      if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt mr-2"></i><span id="authSubmitLabel">Create Account</span>'; }
+      return;
+    }
+    result = await signUp(email, password);
+  }
+
+  if (btn) { btn.disabled=false; btn.innerHTML=`<i class="fas fa-sign-in-alt mr-2"></i><span id="authSubmitLabel">${_authMode==='signin'?'Sign In':'Create Account'}</span>`; }
+
+  if (result.error) {
+    if (errEl) { errEl.textContent = result.error; errEl.style.display = 'block'; }
+  } else if (result.emailConfirm) {
+    if (okEl) { okEl.textContent = '✓ Account created! Check your email to confirm, then sign in.'; okEl.style.display = 'block'; }
+    switchAuthTab('signin');
+  } else {
+    closeModal('authModal');
+    renderAll();
+  }
+}
+
+let charts = {};
+let editingId = null;
+let currentSection = 'overview';
+
+// ===== STORAGE =====
+function loadState() {
+  try {
+    const s = localStorage.getItem('investiq_v2');
+    if (s) {
+      const parsed = JSON.parse(s);
+      // Migrate legacy holdings (no lots) to lots format
+      const portfolio = (parsed.portfolio || []).map(h => {
+        if (!h.lots || !h.lots.length) {
+          return { ...h, lots: [{ quantity: parseFloat(h.quantity)||0, price: parseFloat(h.purchasePrice)||0, date: h.purchaseDate||'' }] };
+        }
+        return h;
+      });
+      state.portfolio = portfolio;
+      state.settings = { ...state.settings, ...(parsed.settings||{}) };
+      state.agentResults = parsed.agentResults || null;
+    }
+  } catch(e) { console.warn('Failed to load state:', e); }
+}
+
+function saveState() {
+  localStorage.setItem('investiq_v2', JSON.stringify({
+    portfolio: state.portfolio,
+    settings: state.settings,
+    agentResults: state.agentResults
+  }));
+  scheduleSupa(); // sync to cloud if signed in
+}
+
+// ===== DIRECT ETORO IMPORT =====
+function loadEtoroHoldings() {
+  const rows = [
+    ["NVDA","eToro",3.00722,201.64,"United States","stock"],
+    ["SYM","eToro",5.35142,63.17,"United States","stock"],
+    ["GOOG","eToro",1.07698,339.40,"United States","stock"],
+    ["INTC","eToro",3.12726,68.51,"United States","stock"],
+    ["MRVL","eToro",1.44217,139.69,"United States","stock"],
+    ["AMD","eToro",1.13538,278.26,"United States","stock"],
+    ["AMZN","eToro",2.03467,250.56,"United States","stock"],
+    ["AAPL","eToro",1.49373,270.23,"United States","stock"],
+    ["TSM","eToro",0.61374,370.50,"International","stock"],
+    ["AVGO","eToro",0.27890,406.51,"United States","stock"],
+    ["AZN.L","eToro",0.714321,15088.00,"United Kingdom","stock"],
+    ["EME","eToro",0.17973,804.86,"United States","stock"],
+    ["ROK","eToro",0.19619,415.73,"United States","stock"],
+    ["ARKK","eToro",1.01817,79.26,"United States","etf"],
+    ["WPM","eToro",1.50279,152.38,"Canada","stock"],
+    ["URA","eToro",5.85366,55.85,"Global","etf"],
+    ["GLD","eToro",0.83027,445.93,"Global","etf"],
+    ["BROS","eToro",1.35980,53.44,"United States","stock"],
+    ["VOO","eToro",0.18752,652.78,"United States","etf"],
+    ["NEE","eToro",1.20403,91.98,"United States","stock"],
+    ["UBER","eToro",1.55982,77.12,"United States","stock"],
+    ["ZVRA","eToro",3.67260,10.66,"United States","stock"],
+    ["GE","eToro",0.37789,304.13,"United States","stock"],
+    ["XOP","eToro",1.97613,159.66,"United States","etf"],
+    ["BA","eToro",0.49918,223.38,"United States","stock"],
+    ["SHOP","eToro",0.46620,131.15,"International","stock"],
+    ["TSLA","eToro",0.27142,400.71,"United States","stock"],
+    ["BABA","eToro",0.43040,141.01,"China","stock"],
+    ["LLY","eToro",0.06414,927.03,"United States","stock"],
+    ["AIR.PA","eToro",0.503428,179.48,"Europe","stock"],
+    ["META","eToro",0.29672,688.55,"United States","stock"],
+    ["AS","eToro",1.35627,37.10,"International","stock"],
+    ["CPI.L","eToro",8.358227,293.50,"United Kingdom","stock"],
+    ["COST","eToro",0.14786,999.68,"United States","stock"],
+    ["DDOG","eToro",0.34802,126.61,"United States","stock"],
+    ["SMH","eToro",0.64890,464.16,"United States","etf"],
+    ["MET","eToro",1.27747,78.08,"United States","stock"],
+    ["MSFT","eToro",0.99531,422.79,"United States","stock"],
+    ["OKLO","eToro",0.72748,66.84,"United States","stock"],
+    ["00285.HK","eToro",12.562436,28.30,"China","stock"],
+    ["IBM","eToro",0.38145,253.51,"United States","stock"],
+    ["UNH","eToro",0.59856,324.45,"United States","stock"],
+    ["V","eToro",0.28768,317.05,"United States","stock"],
+    ["ETOR","eToro",0.92936,37.67,"United States","stock"],
+    ["LGVN","eToro",9.30233,1.10,"United States","stock"],
+    ["KTOS","eToro",2.63466,70.99,"United States","stock"],
+    ["SNOW","eToro",0.60060,143.98,"United States","stock"],
+    ["DKNG","eToro",1.12918,22.82,"United States","stock"],
+    ["ADBE","eToro",0.27397,244.45,"United States","stock"],
+    ["PLTR","eToro",2.83977,146.39,"United States","stock"],
+    ["BEEM","eToro",6.66667,1.52,"United States","stock"],
+    ["ORCL","eToro",0.32525,175.07,"United States","stock"],
+    ["SOL","eToro",0.535122,88.97,"Global","crypto"],
+    ["NAAS","eToro",1.63613,2.30,"China","stock"],
+    ["TIA","eToro",9.206407,0.427,"Global","crypto"],
+    ["DOGE","eToro",257.049584,0.10024,"Global","crypto"],
+    ["LTC","eToro",2.59787,56.63,"Global","crypto"],
+    ["ETH","eToro",0.249629,2427.39,"Global","crypto"],
+    ["AVAX","eToro",5.035008,9.77,"Global","crypto"],
+    ["BTC","eToro",0.032682,77362.49,"Global","crypto"]
+  ];
+  let added = 0, skipped = 0;
+  rows.forEach(([symbol, platform, quantity, price, country, type]) => {
+    const exists = state.portfolio.some(h => h.symbol === symbol && h.platform === platform);
+    if (exists) { skipped++; return; }
+    state.portfolio.push({
+      id: uuid(), symbol, name: symbol, type, platform,
+      currency: 'USD', sector: type === 'crypto' ? 'Crypto' : type === 'etf' ? 'ETF' : 'Equity',
+      country, notes: 'Imported from eToro',
+      currentPrice: null, dayChange: null, dayChangePct: null,
+      lots: [{ quantity, price, date: '' }]
+    });
+    added++;
+  });
+  saveState();
+  renderAll();
+  alert(`✓ Loaded ${added} eToro holdings${skipped ? ` (${skipped} already existed)` : ''}.\n\nFetching live prices & NZD rates now...`);
+  // Fetch market data (FX rates) first, then portfolio prices
+  refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
+}
+
+// ===== CSV IMPORT =====
+function parseCSVLine(line) {
+  // Handles: standard CSV, fully-quoted rows like "a,b,c", mixed quoting
+  const trimmed = line.trim();
+  if (!trimmed) return [];
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '"') {
+      if (inQ && trimmed[i+1] === '"') { cur += '"'; i++; } // escaped quote
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur.trim());
+  // If the whole row parsed as ONE field and it contains commas, it was wrapped in outer quotes
+  if (result.length === 1 && result[0].includes(',')) {
+    return result[0].split(',').map(c => c.trim());
+  }
+  return result;
+}
+
+async function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = ''; // reset so same file can be re-imported
+
+  let text;
+  try {
+    text = await file.text();
+  } catch(e) {
+    alert('Could not read file: ' + e.message); return;
+  }
+
+  // Strip BOM, normalise line endings
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = text.trim().split('\n').filter(l => l.trim());
+  if (lines.length < 2) { alert('CSV is empty or has only a header row.'); return; }
+
+  const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+  const col = h => headers.indexOf(h);
+
+  // Support both column name variations (including eToro export format)
+  const iSym   = col('symbol') >= 0 ? col('symbol') : col('ticker') >= 0 ? col('ticker') : col('instrument');
+  const iPlat  = col('platform') >= 0 ? col('platform') : col('broker');
+  const iQty   = col('quantity') >= 0 ? col('quantity') : col('units') >= 0 ? col('units') : col('shares');
+  // Price: our format → eToro "open rate" → generic "price"/"buyprice" → fallback from invested/amount
+  const iPrice = col('purchaseprice') >= 0 ? col('purchaseprice')
+               : col('avgcost')       >= 0 ? col('avgcost')
+               : col('averagecost')   >= 0 ? col('averagecost')
+               : col('avg cost')      >= 0 ? col('avg cost')
+               : col('average cost')  >= 0 ? col('average cost')
+               : col('open rate')     >= 0 ? col('open rate')
+               : col('openrate')      >= 0 ? col('openrate')
+               : col('buyprice')      >= 0 ? col('buyprice')
+               : col('price')         >= 0 ? col('price')
+               : -1;
+  // Invested/amount fallback — used to compute price when no price column exists
+  const iInvested = col('invested') >= 0 ? col('invested') : col('amount') >= 0 ? col('amount') : col('cost') >= 0 ? col('cost') : -1;
+  const iCur  = col('currency');
+  const iTyp  = col('type') >= 0 ? col('type') : col('assettype');
+  const iName = col('name') >= 0 ? col('name') : col('instrument');
+  const iSect = col('sector');
+  const iCtry = col('country') >= 0 ? col('country') : col('region');
+  const iDate = col('purchasedate') >= 0 ? col('purchasedate') : col('date');
+  const iNote = col('notes') >= 0 ? col('notes') : col('note');
+
+  if (iSym === -1) {
+    alert(`CSV needs a "symbol" column.\nFound: ${headers.join(', ')}`); return;
+  }
+
+  const typeMap = {
+    'stock':'stock','equity etf':'etf','commodity etf':'etf','etf':'etf',
+    'crypto':'crypto','bond':'bond','cash':'cash','mutualfund':'mutualfund','other':'other'
+  };
+
+  const importMode = document.getElementById('csvImportMode')?.value || 'add';
+
+  // REPLACE MODE: delete existing holdings for platforms that appear in the CSV,
+  // then import fresh. We detect platforms by scanning the CSV first.
+  let removedCount = 0;
+  if (importMode === 'replace' && iPlat >= 0) {
+    const platformsInCsv = new Set();
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim().startsWith('#')) continue;
+      const row = parseCSVLine(lines[i]);
+      const p = row[iPlat]?.trim();
+      if (p) platformsInCsv.add(p);
+    }
+    if (platformsInCsv.size) {
+      const confirmMsg = `REPLACE mode will DELETE all existing holdings on these platforms:\n\n  • ${[...platformsInCsv].join('\n  • ')}\n\nAnd re-import them from this CSV.\n\nContinue?`;
+      if (!confirm(confirmMsg)) { alert('Import cancelled.'); return; }
+      const before = state.portfolio.length;
+      state.portfolio = state.portfolio.filter(h => !platformsInCsv.has(h.platform));
+      removedCount = before - state.portfolio.length;
+    }
+  }
+
+  let added = 0, skipped = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCSVLine(lines[i]);
+    if (lines[i].trim().startsWith('#')) continue; // skip comment lines
+    const rawSym = row[iSym]?.trim();
+    if (!rawSym || rawSym === 'symbol' || rawSym === 'ticker') { skipped++; continue; }
+
+    const symbol   = rawSym.toUpperCase();
+    const platform = iPlat >= 0 ? (row[iPlat]?.trim() || 'Imported') : 'Imported';
+    const quantity = iQty  >= 0 ? (parseFloat(row[iQty])  || 0) : 0;
+    // Compute price: direct column first, then derive from invested ÷ quantity
+    let buyPrice = iPrice >= 0 ? (parseFloat(row[iPrice]) || 0) : 0;
+    if (!buyPrice && iInvested >= 0 && quantity > 0) {
+      const invested = parseFloat(row[iInvested]) || 0;
+      if (invested > 0) buyPrice = invested / quantity;
+    }
+    const currency = iCur  >= 0 ? (row[iCur]?.trim().toUpperCase() || 'USD') : 'USD';
+    const rawType  = iTyp  >= 0 ? (row[iTyp]?.trim().toLowerCase() || 'stock') : 'stock';
+    const assetType= typeMap[rawType] || 'stock';
+    const name     = iName >= 0 ? (row[iName]?.trim() || symbol) : symbol;
+    const sector   = iSect >= 0 ? (row[iSect]?.trim() || '') : '';
+    const country  = iCtry >= 0 ? (row[iCtry]?.trim() || '') : '';
+    const date     = iDate >= 0 ? (row[iDate]?.trim() || '') : '';
+    const notes    = iNote >= 0 ? (row[iNote]?.trim() || '') : '';
+
+    const syncMode = importMode === 'sync';
+    const existing = state.portfolio.find(h => h.symbol === symbol && h.platform === platform);
+
+    if (existing) {
+      if (syncMode) {
+        // SYNC MODE: treat CSV quantity as total current holding, update lot to match
+        // Keep cost basis (lots) intact, just update total quantity proportionally
+        const basis = getHoldingBasis(existing);
+        if (Math.abs(basis.quantity - quantity) > 0.0001) {
+          // Quantity changed — add adjustment lot with note
+          const priceDiff = buyPrice || basis.avgBuyPrice;
+          existing.lots = [...basis.lots, { quantity: quantity - basis.quantity, price: priceDiff, date, note: 'Sync adjustment' }];
+        }
+        // Update metadata from CSV
+        if (name && name !== symbol) existing.name = name;
+        if (sector) existing.sector = sector;
+        added++;
+      } else {
+        // ADD MODE: same position, new lot (e.g. bought more)
+        const basis = getHoldingBasis(existing);
+        const alreadyHasLot = basis.lots.some(l =>
+          Math.abs(parseFloat(l.quantity) - quantity) < 0.0001 &&
+          Math.abs(parseFloat(l.price) - buyPrice) < 0.001 &&
+          l.date === date
+        );
+        if (alreadyHasLot) { skipped++; continue; }
+        existing.lots = [...basis.lots, { quantity, price: buyPrice, date, note: notes }];
+        added++;
+      }
+    } else {
+      state.portfolio.push({
+        id: uuid(), symbol, name, type: assetType, platform,
+        currency, sector: sector || (assetType==='crypto'?'Crypto':assetType==='etf'?'ETF':'Equity'),
+        country, notes, currentPrice: null, dayChange: null, dayChangePct: null,
+        lots: [{ quantity, price: buyPrice, date, note: '' }]
+      });
+      added++;
+    }
+  }
+
+  if (added === 0 && skipped === 0) {
+    alert('No data rows found. Check your CSV has data below the header row.'); return;
+  }
+
+  const modeLabel = importMode === 'sync' ? 'synced' : importMode === 'replace' ? 'replaced' : 'imported';
+  saveState();
+  renderAll();
+  const removedNote = removedCount ? ` · ${removedCount} removed` : '';
+  alert(`✓ ${added} holding${added!==1?'s':''} ${modeLabel}${removedNote}${skipped ? ` · ${skipped} skipped (exact duplicates)` : ''}.\n\nFetching live prices now...`);
+  refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
+}
+
+function downloadCSVTemplate() {
+  const headers = 'symbol,platform,quantity,purchasePrice,purchaseDate,currency,type,name,sector,country,notes';
+  const examples = [
+    '# HOW AVERAGE COST WORKS:',
+    '# Add one row per purchase lot for the same symbol.',
+    '# InvestIQ automatically computes the weighted average cost across all lots.',
+    '# Example: NVDA bought twice → average cost is auto-calculated from both rows.',
+    'NVDA,eToro,3,148.30,2024-01-15,USD,stock,NVIDIA Corporation,Technology,United States,First buy',
+    'NVDA,eToro,2,210.50,2024-06-01,USD,stock,NVIDIA Corporation,Technology,United States,Top-up at higher price',
+    '# The above two rows = 5 units at avg cost of (3×148.30 + 2×210.50)/5 = $173.18',
+    '',
+    '# SINGLE PURCHASE (most common):',
+    'AAPL,eToro,5,207.53,2024-03-10,USD,stock,Apple Inc.,Technology,United States,',
+    'MSFT,eToro,1,423.99,2024-02-01,USD,stock,Microsoft Corp.,Technology,United States,',
+    'VOO,Sharesies,2,533.28,2024-01-20,USD,etf,Vanguard S&P 500 ETF,Index,United States,',
+    '',
+    '# SUPPORTED ASSET TYPES: stock | etf | crypto | bond | cash | mutualfund | realestate | other',
+    '# SUPPORTED CURRENCIES: USD | NZD | AUD | GBP | EUR | HKD | SGD',
+    '',
+    '# ETORO TIP: Export from eToro → use "Open Rate" as your purchasePrice,',
+    '# and "Units" as your quantity. Or use the eToro import button instead.',
+    'TSM,eToro,0.61,244.35,2024-01-10,USD,stock,Taiwan Semiconductor,Technology,Taiwan,',
+    'AZN.L,eToro,0.71,10434.00,2024-02-20,GBP,stock,AstraZeneca PLC,Healthcare,United Kingdom,',
+    'BTC-USD,eToro,0.05,45000.00,2024-03-10,USD,crypto,Bitcoin,Crypto,Global,'
+  ];
+  const csv = [headers, ...examples].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'investiq-holdings-template.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ===== HELPERS =====
+function uuid() { return Math.random().toString(36).substr(2,9) + Date.now().toString(36); }
+
+function fmt(num, dec=2) {
+  if (num === null || num === undefined || isNaN(num)) return '–';
+  return Math.abs(num).toFixed(dec);
+}
+
+function fmtCurrency(num, currency) {
+  const sym = CURRENCY_SYMBOLS[currency || state.settings.currency] || '£';
+  if (num === null || num === undefined || isNaN(num)) return sym+'–';
+  const abs = Math.abs(num);
+  let str;
+  if (abs >= 1e6) str = (abs/1e6).toFixed(2)+'M';
+  else if (abs >= 1e3) str = (abs/1e3).toFixed(1)+'K';
+  else str = abs.toFixed(2);
+  return sym + str;
+}
+
+function fmtChange(num) {
+  if (!num && num !== 0) return '<span class="neutral">–</span>';
+  const cls = num >= 0 ? 'pos' : 'neg';
+  const sign = num >= 0 ? '+' : '-';
+  return `<span class="${cls}">${sign}${fmtCurrency(num)} (${sign}${fmt(Math.abs(num / (state.portfolio.reduce((s,h) => s + h.quantity*(h.purchasePrice||0),0) || 1)*100))}%)</span>`;
+}
+
+function getTagClass(type) {
+  return 'tag tag-' + (type||'other').toLowerCase().replace(' ','');
+}
+
+// ===== FX CONVERSION =====
+function getFxRate(fromCurrency, toCurrency) {
+  if (!fromCurrency || fromCurrency === toCurrency) return 1;
+  const fx = state.marketData?.fx || {};
+  // Direct: e.g. USD/NZD
+  const direct = `${fromCurrency}/${toCurrency}`;
+  if (fx[direct]?.price) return fx[direct].price;
+  // Inverse: e.g. NZD/USD → 1/rate
+  const inverse = `${toCurrency}/${fromCurrency}`;
+  if (fx[inverse]?.price) return 1 / fx[inverse].price;
+  // Via USD if neither is USD
+  if (fromCurrency !== 'USD' && toCurrency !== 'USD') {
+    const toUSD = getFxRate(fromCurrency, 'USD');
+    const usdToTarget = getFxRate('USD', toCurrency);
+    if (toUSD && usdToTarget) return toUSD * usdToTarget;
+  }
+  return 1;
+}
+
+// ===== LOTS / WEIGHTED AVERAGE COST BASIS =====
+function getHoldingBasis(h) {
+  // Migrate legacy single-price holdings to lots format on the fly
+  const lots = (h.lots && h.lots.length)
+    ? h.lots
+    : [{ quantity: parseFloat(h.quantity) || 0, price: parseFloat(h.purchasePrice) || 0, date: h.purchaseDate || '' }];
+  const totalQty  = lots.reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0);
+  const totalCost = lots.reduce((s, l) => s + (parseFloat(l.quantity) || 0) * (parseFloat(l.price) || 0), 0);
+  return {
+    lots,
+    quantity:    totalQty,
+    avgBuyPrice: totalQty > 0 ? totalCost / totalQty : 0,
+    totalCost
+  };
+}
+
+// ===== PORTFOLIO CALCULATIONS =====
+function getMetrics() {
+  const base = state.settings.currency || 'NZD';
+  const holdings = state.portfolio.map(h => {
+    const basis = getHoldingBasis(h);
+    const fx = getFxRate(h.currency || 'USD', base);
+    const currentPrice = (h.currentPrice ?? basis.avgBuyPrice) * fx;
+    const avgBuyPrice  = basis.avgBuyPrice * fx;
+    const quantity     = basis.quantity;
+    const currentValue = quantity * currentPrice;
+    const costBasis    = quantity * avgBuyPrice;
+    const gain         = currentValue - costBasis;
+    const gainPct      = costBasis > 0 ? (gain / costBasis) * 100 : 0;
+    const dayChange    = h.dayChange ? quantity * h.dayChange * fx : null;
+    return { ...h, quantity, avgBuyPrice, buyPrice: avgBuyPrice, currentPrice, currentValue, costBasis, gain, gainPct, dayChange, fxRate: fx, lots: basis.lots };
+  });
+
+  const totalValue = holdings.reduce((s,h) => s + h.currentValue, 0);
+  const totalCost = holdings.reduce((s,h) => s + h.costBasis, 0);
+  const totalGain = totalValue - totalCost;
+  const totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
+  const totalDayChange = holdings.reduce((s,h) => s + (h.dayChange||0), 0);
+
+  holdings.forEach(h => h.weight = totalValue > 0 ? (h.currentValue / totalValue) * 100 : 0);
+
+  return { holdings, totalValue, totalCost, totalGain, totalGainPct, totalDayChange };
+}
+
+function calcDiversificationScore(metrics) {
+  if (!metrics.holdings.length) return null;
+  const types = [...new Set(metrics.holdings.map(h => h.type))].length;
+  const platforms = [...new Set(metrics.holdings.map(h => h.platform))].length;
+  const sectors = [...new Set(metrics.holdings.filter(h=>h.sector).map(h => h.sector))].length;
+  const maxWeight = Math.max(...metrics.holdings.map(h => h.weight));
+  const n = metrics.holdings.length;
+
+  let score = 0;
+  score += Math.min(types * 12, 30);
+  score += Math.min(platforms * 8, 20);
+  score += Math.min(sectors * 6, 24);
+  score += Math.min(n * 3, 15);
+  score += maxWeight < 20 ? 11 : maxWeight < 40 ? 6 : 0;
+
+  return Math.min(Math.round(score), 100);
+}
+
+// ===== MARKET DATA FETCHING =====
+const MARKET_SYMBOLS = {
+  indices: { 'S&P 500':'^GSPC', 'NASDAQ':'^IXIC', 'FTSE 100':'^FTSE', 'Nikkei 225':'^N225', 'DAX':'^GDAXI', 'NZX 50':'^NZ50' },
+  commodities: { 'Gold':'GC=F', 'Silver':'SI=F', 'Crude Oil':'CL=F', 'Natural Gas':'NG=F' },
+  crypto: { 'Bitcoin':'BTC-USD', 'Ethereum':'ETH-USD', 'BNB':'BNB-USD' },
+  fx: { 'USD/NZD':'USDNZD=X', 'AUD/NZD':'AUDNZD=X', 'GBP/NZD':'GBPNZD=X', 'USD/AUD':'USDAUD=X' }
+};
+
+async function fetchYahooQuotes(symbols) {
+  // Try local proxy first (most reliable, no CORS issues)
+  const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
+  try {
+    const res = await fetch(`${localProxy}/api/market?symbols=${encodeURIComponent(symbols.join(','))}`, { signal: AbortSignal.timeout(8000) });
+    if (res.ok) {
+      const data = await res.json();
+      // Proxy returns {sym: {price, change, changePct, name}}
+      if (Object.keys(data).length > 0) return data;
+    }
+  } catch(e) { /* fall through to public proxies */ }
+
+  // Fall back to public CORS proxies
+  const joined = symbols.join(',');
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,longName,shortName`;
+  for (const proxy of CORS_PROXIES) {
+    try {
+      const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const results = data.quoteResponse?.result || [];
+      const map = {};
+      results.forEach(q => {
+        map[q.symbol] = {
+          price: q.regularMarketPrice,
+          change: q.regularMarketChange,
+          changePct: q.regularMarketChangePercent,
+          name: q.longName || q.shortName || q.symbol
+        };
+      });
+      return map;
+    } catch(e) { continue; }
+  }
+  return {};
+}
+
+async function refreshMarketData() {
+  const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
+  try {
+    const res = await fetch(`${localProxy}/api/market`, { signal: AbortSignal.timeout(10000) });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.indices) {
+        state.marketData = { indices: data.indices || {}, commodities: data.commodities || {}, crypto: data.crypto || {}, fx: data.fx || {} };
+        renderMarketSection();
+        renderAll();
+        updateTicker();
+        return;
+      }
+    }
+  } catch(e) { /* fall through */ }
+
+  // Fall back to direct Yahoo Finance via CORS proxies
+  try {
+    const allSymbols = [
+      ...Object.values(MARKET_SYMBOLS.indices),
+      ...Object.values(MARKET_SYMBOLS.commodities),
+      ...Object.values(MARKET_SYMBOLS.crypto),
+      ...Object.values(MARKET_SYMBOLS.fx)
+    ];
+    const quotes = await fetchYahooQuotes(allSymbols);
+    ['indices','commodities','crypto','fx'].forEach(cat => {
+      Object.entries(MARKET_SYMBOLS[cat]).forEach(([name, sym]) => {
+        if (quotes[sym]) state.marketData[cat][name] = quotes[sym];
+      });
+    });
+    renderMarketSection();
+    renderAll();
+    updateTicker();
+  } catch(e) {
+    console.warn('Market data fetch failed:', e);
+  }
+}
+
+async function refreshPortfolioAndPrices() {
+  // Refresh portfolio prices AND market data together so FX rates are available
+  await refreshMarketData();
+  await refreshPortfolioPrices();
+  renderAll();
+  updateTicker();
+}
+
+async function refreshPortfolioPrices() {
+  const symbols = state.portfolio.filter(h => h.symbol && h.type !== 'cash').map(h => h.symbol);
+  if (!symbols.length) return;
+  try {
+    const quotes = await fetchYahooQuotes([...new Set(symbols)]);
+    state.portfolio.forEach(h => {
+      const q = quotes[h.symbol];
+      if (q) {
+        h.currentPrice = q.price;
+        h.dayChange = q.change;
+        h.dayChangePct = q.changePct;
+        if (q.name && q.name !== h.symbol) h.name = q.name;
+      }
+    });
+    saveState();
+    renderAll();
+    updatePortfolioTicker();
+  } catch(e) {
+    console.warn('Price refresh failed:', e);
+  }
+}
+
+// ===== RENDER FUNCTIONS =====
+function renderAll() {
+  const metrics = getMetrics();
+  renderSummaryCards(metrics);
+  renderSidebar(metrics);
+  renderHoldingsTable(metrics);
+  renderCharts(metrics);
+  renderRiskAnalysis(metrics);
+  renderPerformanceSection(metrics);
+  renderQuickInsights(metrics);
+  renderPlatformBreakdown(metrics);
+  if (state.agentResults) renderInsightsSection(state.agentResults);
+  populatePlatformFilter();
+  filterHoldings();
+}
+
+function renderPlatformBreakdown(metrics) {
+  const card = document.getElementById('platformBreakdownCard');
+  const el   = document.getElementById('platformBreakdown');
+  if (!metrics.holdings.length) { card.style.display = 'none'; return; }
+
+  const base = state.settings.currency || 'NZD';
+  const sym  = CURRENCY_SYMBOLS[base] || 'NZ$';
+
+  const byPlatform = {};
+  metrics.holdings.forEach(h => {
+    const p = h.platform || 'Unknown';
+    if (!byPlatform[p]) byPlatform[p] = { value:0, cost:0, count:0, types: new Set() };
+    byPlatform[p].value += h.currentValue;
+    byPlatform[p].cost  += h.costBasis;
+    byPlatform[p].count++;
+    byPlatform[p].types.add(h.type);
+  });
+
+  const sorted = Object.entries(byPlatform).sort((a,b) => b[1].value - a[1].value);
+  const total  = metrics.totalValue || 1;
+
+  el.innerHTML = sorted.map(([name, d]) => {
+    const gain    = d.value - d.cost;
+    const gainPct = d.cost > 0 ? (gain/d.cost*100) : 0;
+    const weight  = (d.value/total*100);
+    const color   = gain >= 0 ? '#34d399' : '#f87171';
+    const sign    = gain >= 0 ? '+' : '';
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #1e2d4a;cursor:pointer;"
+           onclick="document.getElementById('holdingsPlatformFilter').value='${name}';showSection('holdings');filterHoldings();">
+        <div style="width:36px;height:36px;border-radius:8px;background:#818cf822;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#818cf8;flex-shrink:0;">
+          ${name.slice(0,3).toUpperCase()}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span class="font-semibold text-sm">${name}</span>
+            <span class="mono font-semibold text-sm">${sym}${fmt(d.value)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;">
+            <span class="text-xs neutral">${d.count} holding${d.count!==1?'s':''} · ${[...d.types].join(', ')}</span>
+            <span class="text-xs" style="color:${color};">${sign}${sym}${fmt(Math.abs(gain))} (${sign}${fmt(Math.abs(gainPct))}%)</span>
+          </div>
+          <div style="margin-top:5px;height:3px;background:#1e2d4a;border-radius:2px;">
+            <div style="height:3px;border-radius:2px;background:#818cf8;width:${Math.min(weight,100)}%;"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  card.style.display = 'block';
+}
+
+function renderSidebar(metrics) {
+  const base = state.settings.currency || 'NZD';
+  const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+  document.getElementById('sidebarTotal').textContent = sym + fmt(metrics.totalValue);
+  document.getElementById('portfolioName').textContent = state.settings.name;
+
+  // Show live FX rate if base is NZD and we have USD holdings
+  const usdNzdRate = state.marketData?.fx?.['USD/NZD']?.price;
+  const fxEl = document.getElementById('sidebarFxRate');
+  if (fxEl) {
+    fxEl.textContent = usdNzdRate ? `USD/NZD: ${usdNzdRate.toFixed(4)}` : '';
+  }
+
+  const retEl = document.getElementById('sidebarReturn');
+  const sign = metrics.totalGain >= 0 ? '+' : '-';
+  retEl.innerHTML = `<span class="${metrics.totalGain >= 0 ? 'pos' : 'neg'}">${sign}${sym}${fmt(Math.abs(metrics.totalGain))} (${sign}${fmt(Math.abs(metrics.totalGainPct))}%)</span>`;
+
+  document.getElementById('statHoldings').textContent = metrics.holdings.length;
+  document.getElementById('statPlatforms').textContent = new Set(metrics.holdings.map(h=>h.platform)).size;
+  document.getElementById('statTypes').textContent = new Set(metrics.holdings.map(h=>h.type)).size;
+
+  const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
+  if (sorted.length) {
+    const best = sorted[0];
+    const worst = sorted[sorted.length-1];
+    document.getElementById('statBest').textContent = `${best.symbol} (+${fmt(best.gainPct)}%)`;
+    document.getElementById('statWorst').innerHTML = `<span class="neg">${worst.symbol} (${worst.gainPct >= 0 ? '+' : ''}${fmt(worst.gainPct)}%)</span>`;
+  }
+}
+
+function renderSummaryCards(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  document.getElementById('totalValue').textContent = sym + fmt(metrics.totalValue);
+  document.getElementById('totalCost').textContent = `Cost: ${sym}${fmt(metrics.totalCost)}`;
+
+  const retEl = document.getElementById('totalReturn');
+  const sign = metrics.totalGain >= 0 ? '+' : '';
+  retEl.className = 'text-2xl font-bold mono ' + (metrics.totalGain >= 0 ? 'pos' : 'neg');
+  retEl.textContent = sign + sym + fmt(Math.abs(metrics.totalGain));
+
+  const pctEl = document.getElementById('totalReturnPct');
+  pctEl.textContent = (metrics.totalGain >= 0 ? '+' : '') + fmt(metrics.totalGainPct) + '%';
+  pctEl.className = 'text-xs mt-2 ' + (metrics.totalGain >= 0 ? 'pos' : 'neg');
+
+  const dayEl = document.getElementById('dayChange');
+  if (metrics.totalDayChange !== 0) {
+    dayEl.className = 'text-2xl font-bold mono ' + (metrics.totalDayChange >= 0 ? 'pos' : 'neg');
+    dayEl.textContent = (metrics.totalDayChange >= 0 ? '+' : '') + sym + fmt(Math.abs(metrics.totalDayChange));
+  } else {
+    dayEl.textContent = '–';
+  }
+
+  const divScore = calcDiversificationScore(metrics);
+  const divEl = document.getElementById('divScore');
+  if (divScore !== null) {
+    divEl.textContent = divScore + '/100';
+    divEl.className = 'text-2xl font-bold mono ' + (divScore >= 70 ? 'pos' : divScore >= 40 ? '' : 'neg');
+    document.getElementById('divHint').textContent = divScore >= 70 ? 'Well diversified' : divScore >= 40 ? 'Moderate diversification' : 'Needs diversification';
+  }
+}
+
+function renderHoldingsTable(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const cols = '2fr 1fr 1fr 1fr 1fr 80px';
+
+  if (!metrics.holdings.length) {
+    document.getElementById('holdingsRows').innerHTML = renderEmptyHoldings();
+    return;
+  }
+
+  document.getElementById('holdingsRows').innerHTML = metrics.holdings.map(h => {
+    const priceStr = h.currentPrice ? (sym + fmt(h.currentPrice)) : '–';
+    const sign = h.gain >= 0 ? '+' : '';
+    const gainCls = h.gain >= 0 ? 'pos' : 'neg';
+    const badge = h.gain >= 0 ? 'badge-pos' : 'badge-neg';
+    return `
+      <div class="table-row" style="grid-template-columns:${cols};" onclick="viewHolding('${h.id}')">
+        <div class="flex items-center gap-3">
+          <div style="width:36px;height:36px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">
+            ${(h.symbol||'?').slice(0,3).toUpperCase()}
+          </div>
+          <div>
+            <div class="font-semibold text-sm">${h.symbol}</div>
+            <div class="text-xs neutral">${h.name || h.platform} &nbsp;<span class="${getTagClass(h.type)}">${h.type}</span></div>
+          </div>
+        </div>
+        <div class="text-right mono text-sm">${priceStr}</div>
+        <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
+        <div class="text-right"><span class="${badge}">${sign}${fmt(h.gainPct)}%</span></div>
+        <div class="text-right">
+          <div class="progress-bar" style="width:80px;margin-left:auto;">
+            <div class="progress-fill" style="width:${Math.min(h.weight,100)}%;background:${ASSET_COLORS[h.type]||'#818cf8'};"></div>
+          </div>
+          <div class="text-xs neutral text-right mt-0.5">${fmt(h.weight)}%</div>
+        </div>
+        <div class="text-right" onclick="event.stopPropagation()">
+          <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
+          <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderCharts(metrics) {
+  renderAllocChart(metrics);
+  renderPerfChart(metrics);
+  renderTypeBarChart(metrics);
+  renderPlatformBarChart(metrics);
+}
+
+function renderAllocChart(metrics) {
+  const isEmpty = metrics.holdings.length === 0;
+  document.getElementById('allocEmpty').style.display = isEmpty ? 'flex' : 'none';
+
+  let groups = {};
+  metrics.holdings.forEach(h => {
+    const key = state.allocMode === 'type' ? h.type
+      : state.allocMode === 'platform' ? h.platform
+      : (h.sector || 'Unknown');
+    groups[key] = (groups[key] || 0) + h.currentValue;
+  });
+
+  const labels = Object.keys(groups);
+  const values = Object.values(groups);
+  const colors = labels.map((l,i) => {
+    if (state.allocMode === 'type') return ASSET_COLORS[l] || '#64748b';
+    const palette = ['#818cf8','#60a5fa','#34d399','#fbbf24','#f87171','#c4b5fd','#fb923c','#94a3b8'];
+    return palette[i % palette.length];
+  });
+
+  if (charts.alloc) charts.alloc.destroy();
+  if (!isEmpty) {
+    const ctx = document.getElementById('allocChart').getContext('2d');
+    charts.alloc = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#0f1729', borderWidth: 3 }] },
+      options: {
+        cutout: '68%', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: (c) => ` ${c.label}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)` }
+        }}
+      }
+    });
+  }
+
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  document.getElementById('allocLegend').innerHTML = labels.map((l,i) => `
+    <div class="flex items-center justify-between text-xs">
+      <div class="flex items-center gap-2">
+        <div style="width:8px;height:8px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></div>
+        <span style="text-transform:capitalize;">${l}</span>
+      </div>
+      <span class="neutral">${sym}${fmt(values[i])} (${(values[i]/metrics.totalValue*100).toFixed(1)}%)</span>
+    </div>`).join('');
+}
+
+function renderPerfChart(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const sorted = [...metrics.holdings].sort((a,b) => b.gain - a.gain);
+  const labels = sorted.map(h => h.symbol);
+  const values = state.perfMode === 'value'
+    ? sorted.map(h => h.gain)
+    : sorted.map(h => h.gainPct);
+
+  if (charts.perf) charts.perf.destroy();
+  if (!labels.length) return;
+  const ctx = document.getElementById('perfChart').getContext('2d');
+  charts.perf = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: state.perfMode === 'value' ? 'P&L (' + sym + ')' : 'Return (%)',
+        data: values,
+        backgroundColor: values.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)'),
+        borderColor: values.map(v => v >= 0 ? '#34d399' : '#f87171'),
+        borderWidth: 1, borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } },
+        y: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderTypeBarChart(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const byType = {};
+  metrics.holdings.forEach(h => {
+    if (!byType[h.type]) byType[h.type] = { value: 0, cost: 0 };
+    byType[h.type].value += h.currentValue;
+    byType[h.type].cost += h.costBasis;
+  });
+  const labels = Object.keys(byType);
+  const values = labels.map(t => byType[t].value);
+  const costs = labels.map(t => byType[t].cost);
+  if (charts.typeBar) charts.typeBar.destroy();
+  if (!labels.length) return;
+  const ctx = document.getElementById('typeBarChart').getContext('2d');
+  charts.typeBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.map(l => l.charAt(0).toUpperCase()+l.slice(1)),
+      datasets: [
+        { label: 'Current Value', data: values, backgroundColor: labels.map(l => ASSET_COLORS[l]+'aa'), borderColor: labels.map(l => ASSET_COLORS[l]), borderWidth: 1, borderRadius: 4 },
+        { label: 'Cost Basis', data: costs, backgroundColor: 'rgba(30,45,74,0.6)', borderColor: '#2a3f60', borderWidth: 1, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#7a9cc0', font: { size: 11 } } } },
+      scales: {
+        x: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } },
+        y: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderPlatformBarChart(metrics) {
+  const byPlatform = {};
+  metrics.holdings.forEach(h => {
+    byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
+  });
+  const labels = Object.keys(byPlatform).sort((a,b) => byPlatform[b]-byPlatform[a]);
+  const values = labels.map(p => byPlatform[p]);
+  if (charts.platformBar) charts.platformBar.destroy();
+  if (!labels.length) return;
+  const ctx = document.getElementById('platformBarChart').getContext('2d');
+  const palette = ['#818cf8','#60a5fa','#34d399','#fbbf24','#f87171','#c4b5fd','#fb923c','#94a3b8'];
+  charts.platformBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{ label: 'Value', data: values, backgroundColor: palette, borderColor: palette, borderWidth: 1, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } },
+        y: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderRiskAnalysis(metrics) {
+  const el = document.getElementById('riskAnalysis');
+  if (!metrics.holdings.length) {
+    el.innerHTML = '<div class="neutral text-sm">Add holdings to see risk analysis.</div>';
+    return;
+  }
+
+  const maxWeight = Math.max(...metrics.holdings.map(h => h.weight));
+  const topHolding = metrics.holdings.find(h => h.weight === maxWeight);
+  const typeCount = new Set(metrics.holdings.map(h => h.type)).size;
+  const cryptoWeight = metrics.holdings.filter(h => h.type === 'crypto').reduce((s,h) => s+h.weight, 0);
+
+  const risks = [];
+  if (maxWeight > 30) risks.push({ level:'high', text:`<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — high concentration risk` });
+  else if (maxWeight > 20) risks.push({ level:'medium', text:`<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — moderate concentration` });
+  else risks.push({ level:'low', text:`No single asset exceeds 20% — good concentration management` });
+
+  if (typeCount < 2) risks.push({ level:'high', text:`Portfolio holds only ${typeCount} asset type — high correlation risk` });
+  else if (typeCount < 3) risks.push({ level:'medium', text:`${typeCount} asset types — consider more diversification` });
+  else risks.push({ level:'low', text:`${typeCount} asset types across portfolio — good diversification` });
+
+  if (cryptoWeight > 20) risks.push({ level:'high', text:`${fmt(cryptoWeight)}% in crypto — very high volatility exposure` });
+  else if (cryptoWeight > 10) risks.push({ level:'medium', text:`${fmt(cryptoWeight)}% in crypto — significant volatility exposure` });
+
+  const platforms = new Set(metrics.holdings.map(h => h.platform)).size;
+  if (platforms === 1) risks.push({ level:'medium', text:`All holdings on 1 platform — single platform risk` });
+
+  const colorMap = { high:'#f87171', medium:'#fbbf24', low:'#34d399' };
+  const iconMap = { high:'fa-exclamation-circle', medium:'fa-exclamation-triangle', low:'fa-check-circle' };
+
+  el.innerHTML = risks.map(r => `
+    <div class="flex items-start gap-3 text-sm">
+      <i class="fas ${iconMap[r.level]} mt-0.5" style="color:${colorMap[r.level]};font-size:14px;flex-shrink:0;"></i>
+      <span>${r.text}</span>
+    </div>`).join('');
+}
+
+function renderQuickInsights(metrics) {
+  const el = document.getElementById('quickInsights');
+  const insights = [];
+
+  if (state.agentResults?.finalAdvice) {
+    el.innerHTML = `<div class="text-xs neutral mb-2">Last AI analysis — <button onclick="openModal('agentsModal')" class="text-xs" style="color:#6366f1;background:none;border:none;cursor:pointer;">refresh</button></div>
+      <div class="text-sm" style="color:#94a3b8;line-height:1.7;">${formatMarkdown(state.agentResults.finalAdvice.slice(0,400))}${state.agentResults.finalAdvice.length>400?'...':''}</div>`;
+    return;
+  }
+
+  if (!metrics.holdings.length) {
+    el.innerHTML = '<div class="neutral text-sm">Add holdings to see insights.</div>';
+    return;
+  }
+
+  const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
+  if (sorted.length) {
+    const best = sorted[0];
+    insights.push(`<i class="fas fa-arrow-up pos mr-2"></i>${best.symbol} is your top performer at <b class="pos">+${fmt(best.gainPct)}%</b>`);
+    if (sorted.length > 1) {
+      const worst = sorted[sorted.length-1];
+      if (worst.gainPct < 0)
+        insights.push(`<i class="fas fa-arrow-down neg mr-2"></i>${worst.symbol} is underperforming at <b class="neg">${fmt(worst.gainPct)}%</b>`);
+    }
+  }
+
+  const divScore = calcDiversificationScore(metrics);
+  if (divScore !== null && divScore < 50)
+    insights.push(`<i class="fas fa-exclamation-triangle" style="color:#fbbf24;" class="mr-2"></i>Diversification score is ${divScore}/100. Consider adding more asset types.`);
+
+  const platforms = new Set(metrics.holdings.map(h => h.platform)).size;
+  if (platforms === 1) insights.push(`<i class="fas fa-building neutral mr-2"></i>All holdings on one platform — consider spreading risk.`);
+
+  el.innerHTML = insights.length
+    ? insights.map(i => `<div class="text-sm py-1.5" style="border-bottom:1px solid #1e2d4a;">${i}</div>`).join('')
+    : '<div class="neutral text-sm">Run AI Agents for personalized insights.</div>';
+}
+
+function renderMarketSection() {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+
+  const indicesEl = document.getElementById('indicesGrid');
+  const indices = state.marketData.indices;
+  if (Object.keys(indices).length) {
+    indicesEl.innerHTML = Object.entries(indices).map(([name, d]) => `
+      <div class="card2 p-4">
+        <div class="text-xs neutral mb-1">${name}</div>
+        <div class="font-bold mono">${d.price?.toFixed(0) || '–'}</div>
+        <div class="text-xs ${d.changePct >= 0 ? 'pos' : 'neg'} mt-1">
+          ${d.changePct >= 0 ? '+' : ''}${d.changePct?.toFixed(2) || '–'}%
+        </div>
+      </div>`).join('');
+  }
+
+  function renderMarketList(elId, data, priceDecimals=2) {
+    document.getElementById(elId).innerHTML = Object.entries(data).map(([name, d]) => `
+      <div class="flex justify-between items-center py-1.5" style="border-bottom:1px solid #1a2540;">
+        <span class="text-sm">${name}</span>
+        <div class="text-right">
+          <div class="mono text-sm font-semibold">${d.price?.toFixed(priceDecimals) || '–'}</div>
+          <div class="text-xs ${d.changePct >= 0 ? 'pos' : 'neg'}">${d.changePct >= 0 ? '+' : ''}${d.changePct?.toFixed(2) || '–'}%</div>
+        </div>
+      </div>`).join('');
+  }
+
+  renderMarketList('commoditiesGrid', state.marketData.commodities);
+  renderMarketList('fxGrid', state.marketData.fx, 4);
+  renderMarketList('cryptoGrid', state.marketData.crypto, 0);
+}
+
+function updateTicker() {
+  const items = [];
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
+
+  // Portfolio holdings first (most relevant)
+  state.portfolio.filter(h => h.currentPrice && h.dayChangePct != null).forEach(h => {
+    const sign = h.dayChangePct >= 0 ? '+' : '';
+    const color = h.dayChangePct >= 0 ? '#34d399' : '#f87171';
+    items.push(`<span style="color:#94a3b8;">${h.symbol}: <b style="color:${color}">${sym}${(h.currentPrice * (getFxRate(h.currency||'USD', state.settings.currency||'NZD'))).toFixed(2)} (${sign}${h.dayChangePct?.toFixed(2)}%)</b></span>`);
+  });
+
+  // Separator before market data
+  if (items.length) items.push('<span style="opacity:0.2;">———</span>');
+
+  // Market indices
+  Object.entries(state.marketData.indices).forEach(([name, d]) => {
+    const sign = d.changePct >= 0 ? '+' : '';
+    const color = d.changePct >= 0 ? '#34d399' : '#f87171';
+    items.push(`<span>${name}: <b style="color:${color}">${d.price?.toFixed(0)} (${sign}${d.changePct?.toFixed(2)}%)</b></span>`);
+  });
+
+  // FX rates relevant to NZ investor
+  Object.entries(state.marketData.fx).forEach(([name, d]) => {
+    const color = d.changePct >= 0 ? '#34d399' : '#f87171';
+    const sign = d.changePct >= 0 ? '+' : '';
+    items.push(`<span style="color:#94a3b8;">${name}: <b style="color:${color}">${d.price?.toFixed(4)} (${sign}${d.changePct?.toFixed(2)}%)</b></span>`);
+  });
+
+  if (items.length) {
+    const doubled = [...items, ...items].join('<span style="opacity:0.3;"> &nbsp;|&nbsp; </span>');
+    document.getElementById('tickerContent').innerHTML = doubled;
+  }
+}
+
+function updatePortfolioTicker() {
+  // Call after portfolio prices are refreshed to update ticker with latest stock prices
+  updateTicker();
+}
+
+function renderPerformanceSection(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
+  const top = sorted.slice(0,5);
+  const bottom = sorted.filter(h=>h.gainPct < 0).slice(-5).reverse();
+
+  document.getElementById('performersTable').innerHTML = `
+    <div>
+      <div class="text-sm font-semibold pos mb-3"><i class="fas fa-arrow-up mr-1"></i>Top Performers</div>
+      ${top.map(h => `
+        <div class="flex items-center justify-between py-2" style="border-bottom:1px solid #1a2540;">
+          <div>
+            <div class="font-semibold text-sm">${h.symbol}</div>
+            <div class="text-xs neutral">${sym}${fmt(h.currentValue)}</div>
+          </div>
+          <span class="badge-pos">+${fmt(h.gainPct)}%</span>
+        </div>`).join('') || '<div class="neutral text-sm">No data</div>'}
+    </div>
+    <div>
+      <div class="text-sm font-semibold neg mb-3"><i class="fas fa-arrow-down mr-1"></i>Underperformers</div>
+      ${bottom.map(h => `
+        <div class="flex items-center justify-between py-2" style="border-bottom:1px solid #1a2540;">
+          <div>
+            <div class="font-semibold text-sm">${h.symbol}</div>
+            <div class="text-xs neutral">${sym}${fmt(h.currentValue)}</div>
+          </div>
+          <span class="badge-neg">${fmt(h.gainPct)}%</span>
+        </div>`).join('') || '<div class="neutral text-sm">No underperformers</div>'}
+    </div>`;
+}
+
+function renderInsightsSection(results) {
+  if (!results) return;
+  document.getElementById('insightsContent').innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+      <div class="insight-box">
+        <h4>🏥 Portfolio Health Agent</h4>
+        <div class="prose-sm">${formatMarkdown(results.healthAnalysis || '')}</div>
+      </div>
+      <div class="insight-box">
+        <h4>🌍 Market Impact Agent</h4>
+        <div class="prose-sm">${formatMarkdown(results.marketAnalysis || '')}</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="insight-box">
+        <h4>🎯 Opportunity Scout Agent</h4>
+        <div class="prose-sm">${formatMarkdown(results.opportunities || '')}</div>
+      </div>
+      <div class="insight-box" style="background:rgba(52,211,153,0.05);border-color:rgba(52,211,153,0.25);">
+        <h4 style="color:#34d399;">💼 Personal Advisor Summary</h4>
+        <div class="prose-sm">${formatMarkdown(results.finalAdvice || '')}</div>
+      </div>
+    </div>`;
+
+  if (results.portfolioScore) {
+    updateScoreRing(results.portfolioScore);
+  }
+}
+
+function updateScoreRing(score) {
+  const circle = document.getElementById('scoreCircle');
+  const circumference = 201;
+  const offset = circumference - (score / 100) * circumference;
+  circle.style.strokeDashoffset = offset;
+  circle.style.stroke = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
+  document.getElementById('scoreNum').textContent = score;
+  document.getElementById('scoreNum').style.color = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
+  document.getElementById('scoreLabel').textContent = score >= 70 ? 'Healthy' : score >= 40 ? 'Moderate' : 'Needs Work';
+  document.getElementById('scoreHint').textContent = 'Based on AI analysis';
+}
+
+function formatMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^### (.*$)/gm, '<div class="font-semibold mt-2 mb-1">$1</div>')
+    .replace(/^## (.*$)/gm, '<div class="font-semibold mt-2 mb-1">$1</div>')
+    .replace(/^- (.*$)/gm, '<div class="ml-3 mb-1">• $1</div>')
+    .replace(/^\d+\. (.*$)/gm, '<div class="ml-3 mb-1">$1</div>')
+    .replace(/\n\n/g, '<div class="mb-2"></div>')
+    .replace(/\n/g, '<br>');
+}
+
+// ===== AI AGENTS =====
+// Each agent has its own model tuned to its task:
+//   haiku  → fast, structured, data-crunching tasks
+//   sonnet → balanced reasoning, market analysis
+//   opus   → deep synthesis, strategic advice
+const AGENT_DEFS = {
+  portfolio: {
+    label: '📊 Portfolio Health',
+    model: 'claude-haiku-4-5',          // fast scorer — pure data analysis
+    maxTokens: 800,
+    system: `You are a portfolio health specialist. Analyze the provided portfolio data for:
+1. Diversification quality (asset types, sectors, geographies)
+2. Concentration risks (any single holding >20% weight)
+3. Overall performance health
+
+Always start your response with exactly: "Health Score: X/100"
+Then give 3-4 specific bullet observations about these actual holdings. Be concise and data-driven.`
+  },
+  market: {
+    label: '🌍 Market Impact',
+    model: 'claude-sonnet-4-5',         // needs real market knowledge + reasoning
+    maxTokens: 800,
+    system: `You are a global macro analyst. Given the portfolio and current market data:
+1. Identify the top 3 global market factors affecting THIS specific portfolio right now
+2. For each, name which exact holdings are impacted and how (bullish/bearish + why)
+3. Give an overall market sentiment score for this portfolio: Bullish / Neutral / Bearish
+
+Reference real market dynamics. Be specific to the actual tickers listed. Under 220 words.`
+  },
+  opportunity: {
+    label: '🔭 Opportunity Scout',
+    model: 'claude-sonnet-4-5',         // creative gap analysis needs reasoning
+    maxTokens: 800,
+    system: `You are a strategic investment opportunity analyst. Based on the portfolio:
+1. Identify 2-3 specific gaps — sectors, geographies, or asset classes underrepresented
+2. For each gap, name a specific, real instrument (ETF ticker, stock, asset class) to fill it
+3. Flag one hedging opportunity if there is an obvious unhedged risk
+
+Be concrete. Suggest real tickers where possible. Consider the investor is NZ-based. Under 220 words.`
+  },
+  advisor: {
+    label: '💼 Senior Advisor',
+    model: 'claude-opus-4-5',           // synthesis + strategy → best model
+    maxTokens: 1200,
+    system: `You are a senior personal financial advisor. Your specialist team has produced:
+- A Portfolio Health analysis
+- A Market Impact analysis
+- An Opportunity Scout analysis
+
+Synthesize all three into a clear, prioritised action plan:
+1. **Top 5 Priority Actions** — ranked by importance, specific and actionable
+2. **One key risk** to watch in the next 30 days
+3. **One strong positive** — what is working well
+4. **30-day focus** — one single thing the investor should do first
+
+Use the actual portfolio data to make this personal. Reference specific holdings by ticker. Under 300 words.`
+  }
+};
+
+async function callClaude(agentKey, userMessage) {
+  const apiKey = state.settings.claudeApiKey;
+  if (!apiKey) throw new Error('No Claude API key — set it in Settings');
+
+  const def = AGENT_DEFS[agentKey];
+  const body = JSON.stringify({
+    model: def.model,
+    max_tokens: def.maxTokens || 1024,
+    system: def.system,
+    messages: [{ role: 'user', content: userMessage }]
+  });
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01'
+  };
+
+  const webappBase = (state.settings.proxyUrl || '').replace(/\/$/, '');
+  const endpoints = [];
+  if (webappBase) endpoints.push(webappBase + '/v1/messages');
+  endpoints.push('https://api.anthropic.com/v1/messages');
+
+  let lastError = null;
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, { method:'POST', headers, body, signal: AbortSignal.timeout(60000) });
+      if (res.ok) {
+        const data = await res.json();
+        return data.content?.[0]?.text || 'No response from agent.';
+      }
+      // Surface the ACTUAL error from Anthropic / the proxy
+      const errText = await res.text();
+      let errMsg;
+      try {
+        const errJson = JSON.parse(errText);
+        errMsg = errJson.error?.message || errJson.message || errText;
+      } catch { errMsg = errText || `HTTP ${res.status}`; }
+      lastError = `[${res.status}] ${errMsg}`;
+      console.error(`[${agentKey}] ${url} →`, lastError);
+      // 400 (bad model / bad request) and 401 (auth) — no point retrying on direct API
+      if (res.status === 400 || res.status === 401) {
+        throw new Error(`${agentKey} (${def.model}): ${errMsg}`);
+      }
+    } catch (e) {
+      if (e.message?.includes(def.model) || e.message?.includes('API key')) throw e;
+      lastError = e.message;
+      console.warn(`[${agentKey}] ${url} threw:`, e.message);
+      continue;
+    }
+  }
+  throw new Error(`${agentKey} (${def.model}): ${lastError || 'unreachable'}`);
+}
+
+function setAgentState(agentKey, state2, text='') {
+  const card = document.getElementById('agent-' + agentKey);
+  const statusEl = document.getElementById('agent-' + agentKey + '-status');
+  const resultEl = document.getElementById('agent-' + agentKey + '-result');
+
+  card.className = 'agent-card agent-' + state2;
+  statusEl.textContent = { idle:'Idle', running:'Running...', done:'✓ Done', error:'✗ Error' }[state2] || state2;
+  statusEl.style.color = { idle:'#4a6080', running:'#818cf8', done:'#34d399', error:'#f87171' }[state2];
+
+  if (text) {
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = formatMarkdown(text);
+  }
+
+  if (state2 === 'running') {
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
+    spinner.style.display = 'inline-block';
+    spinner.style.marginRight = '4px';
+    statusEl.prepend(spinner);
+  }
+}
+
+async function runAgents() {
+  const metrics = getMetrics();
+  if (!metrics.holdings.length) {
+    document.getElementById('agentError').style.display = 'block';
+    document.getElementById('agentError').textContent = 'Add some holdings first before running analysis.';
+    return;
+  }
+
+  const apiKey = state.settings.claudeApiKey;
+  if (!apiKey) {
+    document.getElementById('agentError').style.display = 'block';
+    document.getElementById('agentError').textContent = 'Please set your Claude API key in Settings first.';
+    return;
+  }
+
+  document.getElementById('agentError').style.display = 'none';
+  document.getElementById('runAgentsBtn').disabled = true;
+  document.getElementById('runAgentsBtn').innerHTML = '<div class="spinner" style="width:14px;height:14px;margin-right:8px;display:inline-block;"></div>Running...';
+
+  ['portfolio','market','opportunity','advisor'].forEach(k => setAgentState(k, 'idle'));
+
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const portfolioSummary = {
+    totalValue: sym + fmt(metrics.totalValue),
+    totalReturn: (metrics.totalGain >= 0 ? '+' : '') + fmt(metrics.totalGainPct) + '%',
+    holdings: metrics.holdings.map(h => ({
+      symbol: h.symbol, name: h.name || h.symbol, type: h.type,
+      platform: h.platform, sector: h.sector || 'unknown',
+      quantity: h.quantity, purchasePrice: sym + fmt(h.purchasePrice),
+      currentPrice: h.currentPrice ? sym + fmt(h.currentPrice) : 'unknown',
+      currentValue: sym + fmt(h.currentValue),
+      weight: fmt(h.weight) + '%',
+      return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'
+    }))
+  };
+
+  const marketSummary = {
+    indices: state.marketData.indices,
+    crypto: state.marketData.crypto,
+    commodities: state.marketData.commodities
+  };
+
+  const marketContext = document.getElementById('marketContext').value;
+  const baseMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Data:\n${JSON.stringify(marketSummary, null, 2)}${marketContext ? '\n\nAdditional Context:\n' + marketContext : ''}`;
+
+  try {
+    // ── Phase 1: run portfolio, market, opportunity IN PARALLEL ──────────────
+    setAgentState('portfolio',   'running');
+    setAgentState('market',      'running');
+    setAgentState('opportunity', 'running');
+
+    const [healthAnalysis, marketAnalysis, opportunities] = await Promise.all([
+      callClaude('portfolio',   baseMsg),
+      callClaude('market',      baseMsg),
+      callClaude('opportunity', baseMsg)
+    ]);
+
+    setAgentState('portfolio',   'done', healthAnalysis);
+    setAgentState('market',      'done', marketAnalysis);
+    setAgentState('opportunity', 'done', opportunities);
+
+    const scoreMatch = healthAnalysis.match(/Health Score:\s*(\d+)/i);
+    if (scoreMatch) updateScoreRing(parseInt(scoreMatch[1]));
+
+    // ── Phase 2: advisor synthesises all three outputs ────────────────────────
+    setAgentState('advisor', 'running');
+    const advisorMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health Agent (${AGENT_DEFS.portfolio.model}):\n${healthAnalysis}\n\n🌍 Market Impact Agent (${AGENT_DEFS.market.model}):\n${marketAnalysis}\n\n🔭 Opportunity Scout Agent (${AGENT_DEFS.opportunity.model}):\n${opportunities}`;
+    const finalAdvice = await callClaude('advisor', advisorMsg);
+    setAgentState('advisor', 'done', finalAdvice);
+
+    state.agentResults = { healthAnalysis, marketAnalysis, opportunities, finalAdvice,
+      portfolioScore: scoreMatch ? parseInt(scoreMatch[1]) : null };
+    saveState();
+    renderInsightsSection(state.agentResults);
+    renderQuickInsights(metrics);
+
+  } catch(e) {
+    document.getElementById('agentError').style.display = 'block';
+    document.getElementById('agentError').textContent = 'Agent error: ' + e.message;
+    ['portfolio','market','opportunity','advisor'].forEach(k => {
+      if (document.getElementById('agent-'+k)?.className.includes('running'))
+        setAgentState(k, 'error');
+    });
+  }
+
+  document.getElementById('runAgentsBtn').disabled = false;
+  document.getElementById('runAgentsBtn').innerHTML = '<i class="fas fa-redo mr-2"></i>Run Again';
+}
+
+// ===== CRUD =====
+function populateAddForm() {
+  editingId = null;
+  document.getElementById('holdingForm').reset();
+  document.getElementById('holdingId').value = '';
+  document.getElementById('addModalTitle').textContent = 'Add Holding';
+  document.getElementById('saveHoldingLabel').textContent = 'Add Holding';
+  document.getElementById('hDate').value = new Date().toISOString().split('T')[0];
+}
+
+function editHolding(id) {
+  const h = state.portfolio.find(x => x.id === id);
+  if (!h) return;
+  editingId = id;
+  const basis = getHoldingBasis(h);
+  document.getElementById('holdingId').value = id;
+  document.getElementById('hSymbol').value = h.symbol || '';
+  document.getElementById('hName').value = h.name || '';
+  document.getElementById('hType').value = h.type || 'stock';
+  document.getElementById('hPlatform').value = h.platform || '';
+  document.getElementById('hCurrency').value = h.currency || 'USD';
+  document.getElementById('hSector').value = h.sector || '';
+  document.getElementById('hCountry').value = h.country || '';
+  document.getElementById('hNotes').value = h.notes || '';
+  // Clear lot fields — user fills these to ADD a new lot
+  document.getElementById('hQty').value = '';
+  document.getElementById('hBuyPrice').value = '';
+  document.getElementById('hDate').value = new Date().toISOString().split('T')[0];
+
+  // Show existing lots
+  const lotsSection = document.getElementById('existingLotsSection');
+  const sym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$';
+  if (basis.lots.length > 0) {
+    lotsSection.style.display = 'block';
+    document.getElementById('existingLotsList').innerHTML = basis.lots.map((l,i) =>
+      `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2d4a;">
+        <span style="color:#94a3b8;">Lot ${i+1}${l.date ? ' · '+l.date : ''}</span>
+        <span>${parseFloat(l.quantity).toFixed(4)} units @ ${sym}${parseFloat(l.price).toFixed(4)}
+        <button type="button" onclick="deleteLot('${id}',${i})" style="margin-left:8px;color:#f87171;background:none;border:none;cursor:pointer;font-size:11px;">✕</button></span>
+      </div>`
+    ).join('');
+    document.getElementById('avgCostDisplay').textContent =
+      `Total: ${basis.quantity.toFixed(4)} units  |  Avg cost: ${sym}${basis.avgBuyPrice.toFixed(4)} / unit`;
+  } else {
+    lotsSection.style.display = 'none';
+  }
+
+  document.getElementById('addModalTitle').textContent = 'Edit / Add Purchase Lot';
+  document.getElementById('saveHoldingLabel').textContent = 'Save';
+  document.getElementById('hQty').placeholder = 'New lot qty (optional)';
+  document.getElementById('hBuyPrice').placeholder = 'New lot price (optional)';
+  closeModal('viewModal');
+  openModal('addModal');
+}
+
+function deleteLot(holdingId, lotIdx) {
+  const h = state.portfolio.find(x => x.id === holdingId);
+  if (!h) return;
+  const basis = getHoldingBasis(h);
+  if (basis.lots.length <= 1) { alert('Cannot delete the only purchase lot. Delete the holding instead.'); return; }
+  basis.lots.splice(lotIdx, 1);
+  h.lots = basis.lots;
+  saveState();
+  renderAll();
+  editHolding(holdingId); // refresh the modal
+}
+
+function saveHolding(e) {
+  e.preventDefault();
+  const id = document.getElementById('holdingId').value || uuid();
+  const newQty   = parseFloat(document.getElementById('hQty').value) || 0;
+  const newPrice = parseFloat(document.getElementById('hBuyPrice').value) || 0;
+  const newDate  = document.getElementById('hDate').value;
+
+  const meta = {
+    symbol:   document.getElementById('hSymbol').value.toUpperCase().trim(),
+    name:     document.getElementById('hName').value.trim(),
+    type:     document.getElementById('hType').value,
+    platform: document.getElementById('hPlatform').value.trim(),
+    currency: document.getElementById('hCurrency').value,
+    sector:   document.getElementById('hSector').value,
+    country:  document.getElementById('hCountry').value.trim(),
+    notes:    document.getElementById('hNotes').value.trim(),
+  };
+
+  const idx = state.portfolio.findIndex(h => h.id === id);
+  if (idx >= 0) {
+    // Editing existing — update metadata and append new lot if qty/price provided
+    const existing = state.portfolio[idx];
+    const basis = getHoldingBasis(existing);
+    const newLots = newQty > 0 && newPrice > 0
+      ? [...basis.lots, { quantity: newQty, price: newPrice, date: newDate }]
+      : basis.lots;
+    state.portfolio[idx] = { ...existing, ...meta, id, lots: newLots, currentPrice: existing.currentPrice, dayChange: existing.dayChange, dayChangePct: existing.dayChangePct };
+  } else {
+    // New holding — first lot
+    state.portfolio.push({ ...meta, id, lots: [{ quantity: newQty, price: newPrice, date: newDate }], currentPrice: null, dayChange: null, dayChangePct: null });
+  }
+
+  saveState();
+  closeModal('addModal');
+  renderAll();
+  refreshPortfolioPrices().then(renderAll);
+}
+
+function deleteHolding(id) {
+  if (!confirm('Delete this holding? This cannot be undone.')) return;
+  state.portfolio = state.portfolio.filter(h => h.id !== id);
+  saveState();
+  closeModal('viewModal');
+  renderAll();
+}
+
+function viewHolding(id) {
+  const h = state.portfolio.find(x => x.id === id);
+  if (!h) return;
+  const base = state.settings.currency || 'NZD';
+  const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+  const fx = getFxRate(h.currency || 'USD', base);
+  const cur = (h.currentPrice ?? h.purchasePrice) * fx;
+  const buy = h.purchasePrice * fx;
+  const gain = (cur - buy) * h.quantity;
+  const gainPct = buy > 0 ? ((cur - buy) / buy) * 100 : 0;
+  const sign = gain >= 0 ? '+' : '';
+
+  const basis = getHoldingBasis(h);
+  const quantity = basis.quantity;
+  const avgBuy = basis.avgBuyPrice * fx;
+  const curVal = cur * quantity;
+  const gainTotal = (cur - avgBuy) * quantity;
+  const gainPctTotal = avgBuy > 0 ? ((cur - avgBuy) / avgBuy) * 100 : 0;
+  const signT = gainTotal >= 0 ? '+' : '';
+  const rawSym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$'; // original currency symbol
+
+  const lotsHTML = basis.lots.length > 0 ? `
+    <div class="col-span-2">
+      <span class="neutral">Purchase Lots</span>
+      <div class="mt-2" style="background:#080d1a;border-radius:8px;padding:10px;">
+        ${basis.lots.map((l,i) => `
+          <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #1e2d4a;">
+            <span style="color:#64748b;">Lot ${i+1}${l.date ? ' &nbsp;·&nbsp; '+l.date : ''}</span>
+            <span>${parseFloat(l.quantity).toFixed(4)} units @ ${rawSym}${parseFloat(l.price).toFixed(4)}
+              <span style="color:#64748b;"> = ${rawSym}${(parseFloat(l.quantity)*parseFloat(l.price)).toFixed(2)}</span>
+            </span>
+          </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;color:#818cf8;font-weight:600;">
+          <span>Avg Cost Basis</span>
+          <span>${quantity.toFixed(4)} units @ ${rawSym}${basis.avgBuyPrice.toFixed(4)}</span>
+        </div>
+      </div>
+    </div>` : '';
+
+  document.getElementById('viewModalTitle').textContent = h.symbol + (h.name && h.name !== h.symbol ? ' — ' + h.name : '');
+  document.getElementById('viewModalContent').innerHTML = `
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <div><span class="neutral">Type</span><div class="mt-1"><span class="${getTagClass(h.type)}">${h.type}</span></div></div>
+      <div><span class="neutral">Platform</span><div class="font-semibold mt-1">${h.platform}</div></div>
+      <div><span class="neutral">Total Units</span><div class="font-semibold mono mt-1">${quantity.toFixed(4)}</div></div>
+      <div><span class="neutral">Avg Buy Price</span><div class="font-semibold mono mt-1" style="color:#818cf8;">${sym}${fmt(avgBuy)}</div></div>
+      <div><span class="neutral">Current Price</span><div class="font-semibold mono mt-1">${h.currentPrice ? sym+fmt(cur) : '<span style="color:#4a6080;">refresh to load</span>'}</div></div>
+      <div><span class="neutral">Current Value</span><div class="font-semibold mono mt-1">${sym}${fmt(curVal)}</div></div>
+      <div><span class="neutral">Total P&L</span><div class="font-semibold mono mt-1 ${gainTotal >= 0 ? 'pos' : 'neg'}">${signT}${sym}${fmt(Math.abs(gainTotal))}</div></div>
+      <div><span class="neutral">Return %</span><div class="font-semibold mono mt-1 ${gainPctTotal >= 0 ? 'pos' : 'neg'}">${signT}${fmt(Math.abs(gainPctTotal))}%</div></div>
+      ${h.dayChangePct != null ? `<div class="col-span-2"><span class="neutral">Today</span><div class="font-semibold mono mt-1 ${h.dayChangePct>=0?'pos':'neg'}">${h.dayChangePct>=0?'+':''}${fmt(h.dayChangePct)}% &nbsp; (${h.dayChangePct>=0?'+':''}${sym}${fmt(Math.abs((h.dayChange||0)*fx*quantity))})</div></div>` : ''}
+      ${lotsHTML}
+      ${h.sector ? `<div><span class="neutral">Sector</span><div class="font-semibold mt-1">${h.sector}</div></div>` : ''}
+      ${h.country ? `<div><span class="neutral">Region</span><div class="font-semibold mt-1">${h.country}</div></div>` : ''}
+      ${h.notes ? `<div class="col-span-2"><span class="neutral">Notes</span><div class="mt-1 text-xs" style="color:#94a3b8;">${h.notes}</div></div>` : ''}
+    </div>`;
+
+  document.getElementById('viewEditBtn').onclick = () => editHolding(id);
+  document.getElementById('viewDeleteBtn').onclick = () => deleteHolding(id);
+  openModal('viewModal');
+}
+
+// ===== BACKUP / RESTORE (cross-browser data portability) =====
+function exportBackup() {
+  const backup = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    portfolioName: state.settings.name,
+    settings: { ...state.settings, claudeApiKey: '', supabaseKey: '' }, // never export secrets
+    portfolio: state.portfolio,
+    agentResults: state.agentResults
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `investiq-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function importBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  try {
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    if (!backup.portfolio) { alert('Invalid backup file.'); return; }
+    if (!confirm(`Restore backup from ${backup.exportedAt?.split('T')[0] || 'unknown date'}?\n\nThis will REPLACE your current ${state.portfolio.length} holdings with ${backup.portfolio.length} holdings from the backup.\n\nYour Claude API key will be kept.`)) return;
+    const apiKey = state.settings.claudeApiKey;
+    state.portfolio = backup.portfolio || [];
+    state.settings = { ...state.settings, ...(backup.settings||{}), claudeApiKey: apiKey };
+    state.agentResults = backup.agentResults || null;
+    saveState();
+    renderAll();
+    alert(`✓ Restored ${state.portfolio.length} holdings from backup.`);
+    refreshMarketData().then(() => refreshPortfolioPrices()).then(() => renderAll());
+  } catch(e) {
+    alert('Failed to read backup: ' + e.message);
+  }
+}
+
+// ===== IMPORT / EXPORT =====
+function exportCSV() {
+  if (!state.portfolio.length) { alert('No holdings to export.'); return; }
+  // Export one row per purchase lot — re-importing preserves full cost history
+  const headers = ['symbol','name','type','platform','quantity','purchasePrice','purchaseDate','currency','sector','country','notes'];
+  const esc = v => `"${(v||'').toString().replace(/"/g,'""')}"`;
+  const rows = [];
+  state.portfolio.forEach(h => {
+    const basis = getHoldingBasis(h);
+    basis.lots.forEach(lot => {
+      rows.push([
+        esc(h.symbol), esc(h.name), esc(h.type), esc(h.platform),
+        esc(lot.quantity), esc(lot.price), esc(lot.date||''),
+        esc(h.currency), esc(h.sector), esc(h.country), esc(h.notes)
+      ].join(','));
+    });
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'investiq-portfolio-' + new Date().toISOString().split('T')[0] + '.csv';
+  a.click();
+}
+
+function importCSV(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const lines = ev.target.result.split('\n').filter(l => l.trim());
+    const headers = lines[0].split(',').map(h => h.replace(/"/g,'').trim());
+    let added = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const vals = lines[i].split(',').map(v => v.replace(/^"|"$/g,'').trim());
+      const h = {};
+      headers.forEach((k,j) => h[k] = vals[j] || '');
+      if (h.symbol && h.quantity && h.purchasePrice) {
+        state.portfolio.push({
+          id: uuid(),
+          symbol: (h.symbol||'').toUpperCase(),
+          name: h.name || '',
+          type: (h.type||'stock').toLowerCase(),
+          platform: h.platform || 'Imported',
+          quantity: parseFloat(h.quantity),
+          currency: h.currency || state.settings.currency,
+          purchasePrice: parseFloat(h.purchasePrice),
+          purchaseDate: h.purchaseDate || '',
+          sector: h.sector || '',
+          country: h.country || '',
+          notes: h.notes || '',
+          currentPrice: null
+        });
+        added++;
+      }
+    }
+    saveState();
+    renderAll();
+    refreshPortfolioPrices().then(renderAll);
+    alert(`Imported ${added} holdings.`);
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ===== SETTINGS =====
+function populateSettingsForm() {
+  document.getElementById('settingName').value = state.settings.name || '';
+  document.getElementById('settingCurrency').value = state.settings.currency || 'NZD';
+  document.getElementById('settingApiKey').value = state.settings.claudeApiKey || '';
+  document.getElementById('settingProxy').value = state.settings.proxyUrl || '';
+  const urlEl = document.getElementById('settingSupabaseUrl');
+  const keyEl = document.getElementById('settingSupabaseKey');
+  if (urlEl) urlEl.value = state.settings.supabaseUrl || '';
+  if (keyEl) keyEl.value = state.settings.supabaseKey || '';
+}
+
+async function proxyHealthCheck() {
+  const proxyUrl = (state.settings.proxyUrl || '').replace(/\/$/, '');
+  const dot = document.getElementById('proxyStatusDot');
+  const label = document.getElementById('proxyStatusLabel');
+  if (!proxyUrl) {
+    if (dot) { dot.style.background = '#4a6080'; }
+    if (label) label.textContent = 'No proxy set';
+    return;
+  }
+  if (dot) { dot.style.background = '#fbbf24'; dot.title = 'Checking...'; }
+  try {
+    const res = await fetch(proxyUrl + '/health', { signal: AbortSignal.timeout(8000) });
+    const ok = res.ok;
+    if (dot) {
+      dot.style.background = ok ? '#34d399' : '#f87171';
+      dot.title = ok ? 'Proxy online' : 'Proxy error';
+    }
+    if (label) label.textContent = ok ? 'Proxy online' : 'Proxy error';
+  } catch(e) {
+    if (dot) { dot.style.background = '#f87171'; dot.title = 'Proxy unreachable'; }
+    if (label) label.textContent = 'Proxy offline';
+  }
+}
+
+function saveSettings() {
+  state.settings.name = document.getElementById('settingName').value || 'My Portfolio';
+  state.settings.currency = document.getElementById('settingCurrency').value;
+  state.settings.claudeApiKey = document.getElementById('settingApiKey').value.trim();
+  state.settings.proxyUrl = document.getElementById('settingProxy').value.trim();
+  const urlEl = document.getElementById('settingSupabaseUrl');
+  const keyEl = document.getElementById('settingSupabaseKey');
+  if (urlEl) state.settings.supabaseUrl = urlEl.value.trim();
+  if (keyEl) state.settings.supabaseKey = keyEl.value.trim();
+  // Re-init Supabase client if credentials changed
+  initSupabase();
+  updateAuthUI();
+  saveState();
+  closeModal('settingsModal');
+  renderAll();
+}
+
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('settingApiKey');
+  const btn = document.getElementById('apiKeyToggle');
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+  } else {
+    input.type = 'password';
+    btn.innerHTML = '<i class="fas fa-eye"></i>';
+  }
+}
+
+async function clearAllData() {
+  if (!confirm('Are you sure? This will delete ALL your portfolio data from this browser AND the cloud. This cannot be undone.')) return;
+  state.portfolio = [];
+  state.agentResults = null;
+  // Clear localStorage
+  localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: [], settings: state.settings, agentResults: null }));
+  // Clear Supabase row for this user
+  if (_supabase && _supaUser) {
+    try {
+      await _supabase.from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
+      console.log('✓ Supabase data cleared');
+    } catch(e) { console.warn('Supabase clear error:', e); }
+  }
+  renderAll();
+  closeModal('settingsModal');
+}
+
+// ===== NAVIGATION =====
+function showSection(name) {
+  ['overview','holdings','performance','market','insights','admin'].forEach(s => {
+    const el = document.getElementById('section-' + s);
+    if (el) el.style.display = s === name ? '' : 'none';
+  });
+  document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
+  event.currentTarget?.classList.add('active');
+  currentSection = name;
+  if (name === 'market') renderMarketSection();
+  if (name === 'admin') loadAdminData();
+  if (name === 'performance') loadSnapshotChart(90);
+}
+
+async function loadSnapshotChart(days = 90) {
+  const history = await loadSnapshotHistory(days);
+  const empty = document.getElementById('snapshotChartEmpty');
+  const wrap  = document.getElementById('snapshotChartWrap');
+  if (!history.length) {
+    if (empty) empty.style.display = 'block';
+    if (wrap)  wrap.style.display  = 'none';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+  if (wrap)  wrap.style.display  = 'block';
+
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
+  const labels = history.map(h => h.snapshot_date);
+  const values = history.map(h => Number(h.total_value));
+  const costs  = history.map(h => Number(h.total_cost));
+
+  const ctx = document.getElementById('snapshotChart')?.getContext('2d');
+  if (!ctx) return;
+  if (charts.snapshot) charts.snapshot.destroy();
+  charts.snapshot = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Market Value',
+          data: values,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52,211,153,0.12)',
+          fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4
+        },
+        {
+          label: 'Cost Basis',
+          data: costs,
+          borderColor: '#818cf8',
+          borderDash: [4, 4],
+          backgroundColor: 'transparent',
+          fill: false, tension: 0.3, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+        tooltip: {
+          callbacks: { label: (c) => `${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()}` }
+        }
+      },
+      scales: {
+        x: { ticks: { color: '#4a6080', maxTicksLimit: 8 }, grid: { color: '#1a2540' } },
+        y: { ticks: { color: '#4a6080', callback: v => sym + Number(v).toLocaleString() }, grid: { color: '#1a2540' } }
+      }
+    }
+  });
+}
+
+function switchAllocTab(el, mode) {
+  state.allocMode = mode;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderAllocChart(getMetrics());
+}
+
+function switchPerfTab(el, mode) {
+  state.perfMode = mode;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderPerfChart(getMetrics());
+}
+
+// ===== MODALS =====
+function openModal(id) {
+  if (id === 'settingsModal') populateSettingsForm();
+  else if (id === 'addModal' && !editingId) populateAddForm();
+  else if (id === 'connectionsModal') populateConnectionsForm();
+  document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'addModal') editingId = null;
+}
+
+function closeModalBg(e, id) {
+  if (e.target === e.currentTarget) closeModal(id);
+}
+
+// ===== REFRESH =====
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;display:inline-block;margin-right:4px;"></div>Updating...';
+  btn.disabled = true;
+
+  await Promise.all([refreshPortfolioPrices(), refreshMarketData()]);
+  renderAll();
+
+  document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> Refresh';
+  btn.disabled = false;
+}
+
+let groupByPlatform = false;
+
+function toggleGroupByPlatform() {
+  groupByPlatform = !groupByPlatform;
+  const btn = document.getElementById('groupByPlatformBtn');
+  btn.style.borderColor = groupByPlatform ? '#818cf8' : '#334155';
+  btn.style.color = groupByPlatform ? '#818cf8' : '';
+  filterHoldings();
+}
+
+function populatePlatformFilter() {
+  const sel = document.getElementById('holdingsPlatformFilter');
+  if (!sel) return;
+  const current = sel.value;
+  const platforms = [...new Set(state.portfolio.map(h => h.platform).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All Platforms</option>' +
+    platforms.map(p => `<option value="${p}" ${p===current?'selected':''}>${p}</option>`).join('');
+}
+
+function filterHoldings() {
+  const search   = document.getElementById('holdingsSearch').value.toLowerCase();
+  const typeF    = document.getElementById('holdingsTypeFilter').value.toLowerCase();
+  const platF    = document.getElementById('holdingsPlatformFilter').value;
+  const metrics  = getMetrics();
+  const filtered = metrics.holdings.filter(h =>
+    (!search || h.symbol.toLowerCase().includes(search) || (h.name||'').toLowerCase().includes(search) || (h.platform||'').toLowerCase().includes(search)) &&
+    (!typeF || h.type.toLowerCase() === typeF) &&
+    (!platF || h.platform === platF)
+  );
+  if (groupByPlatform) {
+    renderHoldingsByPlatform(filtered, metrics.totalValue);
+  } else {
+    renderDetailedHoldings(filtered, metrics.totalValue);
+  }
+}
+
+function renderEmptyHoldings() {
+  return `<div class="p-10 text-center">
+    <div style="font-size:52px;margin-bottom:12px;opacity:0.5;">📊</div>
+    <div class="font-bold text-lg mb-2" style="color:#c8d6ef;">Welcome to InvestIQ</div>
+    <div class="neutral text-sm mb-6">Import your holdings from any platform to get started</div>
+    <div class="flex gap-3 justify-center flex-wrap">
+      <label class="btn btn-primary cursor-pointer"><i class="fas fa-file-import mr-2"></i>Import CSV<input type="file" accept=".csv" style="display:none;" onchange="importCSV(event)"></label>
+      <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;"><i class="fas fa-download mr-2"></i>Download Template</button>
+      <button onclick="openModal('addModal')" class="btn btn-secondary"><i class="fas fa-plus mr-2"></i>Add Manually</button>
+    </div>
+    <div class="text-xs neutral mt-6">Supports eToro · Sharesies · Harbour · ANZ · BNZ · any CSV export</div>
+  </div>`;
+}
+
+function renderDetailedHoldings(holdings, totalValue) {
+  const base = state.settings.currency || 'NZD';
+  const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+  const el = document.getElementById('holdingsDetailed');
+  if (!holdings.length) {
+    el.innerHTML = state.portfolio.length
+      ? '<div class="p-6 text-center neutral text-sm">No holdings match your filters.</div>'
+      : renderEmptyHoldings();
+    return;
+  }
+  el.innerHTML = holdings.map(h => {
+    const haslive = h.dayChangePct != null;
+    const dayPct  = h.dayChangePct || 0;
+    const dayAmt  = h.dayChange || 0;
+    const dayColor= dayPct >= 0 ? '#34d399' : '#f87171';
+    const daySign = dayPct >= 0 ? '+' : '';
+    const liveTag = haslive
+      ? `<span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>`
+      : '<span style="font-size:10px;color:#4a6080;margin-left:4px;">live pending</span>';
+    return `
+    <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive ? dayColor : '#1e2d4a'};" onclick="viewHolding('${h.id}')">
+      <div class="flex items-center gap-3">
+        <div style="width:32px;height:32px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">
+          ${(h.symbol||'?').slice(0,3)}
+        </div>
+        <div>
+          <div class="font-semibold text-sm">${h.symbol} <span class="text-xs neutral">${h.platform}</span></div>
+          <div style="display:flex;align-items:center;">${liveTag}</div>
+        </div>
+      </div>
+      <div class="text-right mono text-sm">${Number(h.quantity).toFixed(4)}</div>
+      <div class="text-right mono text-sm">${sym}${fmt(h.avgBuyPrice ?? h.buyPrice ?? h.purchasePrice)}</div>
+      <div class="text-right mono text-sm" style="color:#94a3b8;" title="Avg cost × units = amount invested">${sym}${fmt(h.costBasis)}</div>
+      <div class="text-right mono text-sm" style="color:${haslive?(dayPct>=0?'#34d399':'#f87171'):'inherit'};">${sym}${fmt(h.currentPrice)}</div>
+      <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
+      <div class="text-right">
+        <span class="${h.gain >= 0 ? 'badge-pos' : 'badge-neg'}">${h.gain >= 0 ? '+' : ''}${fmt(h.gainPct)}%</span>
+        ${haslive ? `<div class="text-xs" style="color:${dayColor};">${daySign}${sym}${Math.abs(dayAmt).toFixed(2)} today</div>` : ''}
+      </div>
+      <div class="text-right" onclick="event.stopPropagation()">
+        <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1"><i class="fas fa-edit"></i></button>
+        <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== PLATFORM GROUPED VIEW =====
+function renderHoldingsByPlatform(holdings, totalValue) {
+  const base = state.settings.currency || 'NZD';
+  const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+  const el = document.getElementById('holdingsDetailed');
+  if (!holdings.length) { el.innerHTML = renderEmptyHoldings(); return; }
+
+  const byPlatform = {};
+  holdings.forEach(h => {
+    const p = h.platform || 'Unknown';
+    if (!byPlatform[p]) byPlatform[p] = [];
+    byPlatform[p].push(h);
+  });
+
+  // Sort platforms by total value desc
+  const platforms = Object.keys(byPlatform).sort((a,b) => {
+    const va = byPlatform[a].reduce((s,h)=>s+h.currentValue,0);
+    const vb = byPlatform[b].reduce((s,h)=>s+h.currentValue,0);
+    return vb - va;
+  });
+
+  el.innerHTML = platforms.map(platform => {
+    const hs = byPlatform[platform];
+    const platVal   = hs.reduce((s,h) => s + h.currentValue, 0);
+    const platCost  = hs.reduce((s,h) => s + h.costBasis, 0);
+    const platGain  = platVal - platCost;
+    const platPct   = platCost > 0 ? (platGain/platCost*100) : 0;
+    const platWeight= totalValue > 0 ? (platVal/totalValue*100) : 0;
+    const sign      = platGain >= 0 ? '+' : '';
+    const color     = platGain >= 0 ? '#34d399' : '#f87171';
+
+    return `
+      <div style="margin-bottom:8px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#0d1b2e;border-radius:8px 8px 0 0;border:1px solid #1e2d4a;border-bottom:none;">
+          <div class="flex items-center gap-3">
+            <i class="fas fa-building" style="color:#818cf8;font-size:13px;"></i>
+            <span class="font-semibold text-sm">${platform}</span>
+            <span class="text-xs neutral">${hs.length} holding${hs.length!==1?'s':''}</span>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <span class="mono font-semibold">${sym}${fmt(platVal)}</span>
+            <span class="mono" style="color:${color};">${sign}${sym}${fmt(Math.abs(platGain))} (${sign}${fmt(Math.abs(platPct))}%)</span>
+            <span class="text-xs neutral">${fmt(platWeight)}% of portfolio</span>
+          </div>
+        </div>
+        <div style="border:1px solid #1e2d4a;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
+          ${hs.map(h => {
+            const haslive = h.dayChangePct != null;
+            const dayPct  = h.dayChangePct || 0;
+            const dayColor= dayPct >= 0 ? '#34d399' : '#f87171';
+            const daySign = dayPct >= 0 ? '+' : '';
+            return `
+            <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive?dayColor:'#1e2d4a'};" onclick="viewHolding('${h.id}')">
+              <div class="flex items-center gap-3">
+                <div style="width:30px;height:30px;border-radius:6px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">${(h.symbol||'?').slice(0,3)}</div>
+                <div>
+                  <div class="font-semibold text-sm">${h.symbol}</div>
+                  ${haslive ? `<div style="font-size:10px;color:${dayColor};">${daySign}${dayPct.toFixed(2)}% today</div>` : '<div style="font-size:10px;color:#4a6080;">live pending</div>'}
+                </div>
+              </div>
+              <div class="text-right mono text-sm">${h.quantity.toFixed(4)}</div>
+              <div class="text-right mono text-sm">${sym}${fmt(h.avgBuyPrice)}</div>
+              <div class="text-right mono text-sm" style="color:${haslive?(dayPct>=0?'#34d399':'#f87171'):'inherit'};">${sym}${fmt(h.currentPrice)}</div>
+              <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
+              <div class="text-right" onclick="event.stopPropagation()">
+                <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1"><i class="fas fa-edit"></i></button>
+                <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ===== PLATFORM CONNECTIONS =====
+
+// -- Shared CSV parsing helper --
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; continue; }
+    if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
+    cur += c;
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function readCSVFile(file, callback) {
+  const reader = new FileReader();
+  reader.onload = e => callback(e.target.result);
+  reader.readAsText(file);
+}
+
+function showPlatformStatus(elId, msg, isError = false) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#f87171' : '#34d399';
+}
+
+// -- eToro CSV Import --
+// eToro statement CSV has a section starting with "Positions" containing:
+// Position ID, Action, Amount, Units, Open Date, Close Date, Leverage, Spread, Profit, Open Rate, Close Rate, Take Profit Rate, Stop Loss Rate, Rollover Fees And Dividends, Copied From, Type, ISIN, Notes
+function importEtoro(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readCSVFile(file, text => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // Find the "Closed Positions" or "Open Positions" section header
+    let openStart = -1, closedStart = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i].toLowerCase();
+      if (l.includes('open positions')) openStart = i;
+      if (l.includes('closed positions')) closedStart = i;
+    }
+
+    // Try to parse open positions first
+    const sectionStart = openStart >= 0 ? openStart : 0;
+    let headers = [], dataLines = [];
+
+    for (let i = sectionStart; i < lines.length; i++) {
+      const cols = parseCSVLine(lines[i]);
+      if (!headers.length && (cols.some(c => /action|units|open rate|amount/i.test(c)))) {
+        headers = cols.map(c => c.toLowerCase().trim());
+        continue;
+      }
+      if (headers.length && cols.length > 3) {
+        // Stop at next section header or empty block
+        if (cols[0] && /^[a-z\s]+$/i.test(cols[0]) && cols.filter(Boolean).length < 3) break;
+        dataLines.push(cols);
+      }
+    }
+
+    // Also try simpler format: just rows with ticker-like data
+    if (!headers.length) {
+      // Try treating first row as header
+      headers = parseCSVLine(lines[0]).map(c => c.toLowerCase().trim());
+      dataLines = lines.slice(1).map(l => parseCSVLine(l));
+    }
+
+    const col = name => headers.findIndex(h => h.includes(name));
+    const get = (row, name) => (row[col(name)] || '').trim();
+
+    let added = 0;
+    dataLines.forEach(row => {
+      if (row.length < 4) return;
+
+      // eToro uses "Action" for ticker or instrument name
+      const action = get(row, 'action') || get(row, 'instrument') || get(row, 'name') || '';
+      const units = parseFloat(get(row, 'units') || get(row, 'quantity') || '0');
+      const openRate = parseFloat(get(row, 'open rate') || get(row, 'price') || get(row, 'rate') || '0');
+      const openDate = get(row, 'open date') || get(row, 'date') || '';
+      const type = get(row, 'type') || 'stock';
+
+      if (!action || !units || !openRate) return;
+
+      // Clean symbol — eToro uses full names sometimes
+      const symbol = action.replace(/\s+/g, '-').toUpperCase().slice(0, 10);
+      const assetType = type.toLowerCase().includes('crypto') ? 'crypto'
+        : type.toLowerCase().includes('etf') ? 'etf' : 'stock';
+
+      state.portfolio.push({
+        id: uuid(), symbol, name: action, type: assetType,
+        platform: 'eToro', quantity: units, currency: 'USD',
+        purchasePrice: openRate, purchaseDate: openDate.split(' ')[0],
+        sector: '', country: '', notes: 'Imported from eToro', currentPrice: null
+      });
+      added++;
+    });
+
+    if (added === 0) {
+      showPlatformStatus('etoroStatus', '⚠ No positions found — try Account Statement CSV', true);
+    } else {
+      showPlatformStatus('etoroStatus', `✓ Imported ${added} positions`);
+      saveState(); renderAll();
+      setTimeout(() => refreshPortfolioPrices().then(renderAll), 500);
+    }
+  });
+  e.target.value = '';
+}
+
+// -- Sharesies CSV Import --
+// Sharesies portfolio export columns:
+// Investment, Code, Market, Shares/Units, Average buy price, Current value, Return, Return %
+function importSharesies(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readCSVFile(file, text => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) { showPlatformStatus('sharesiesStatus', '⚠ Empty file', true); return; }
+
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+    const col = name => headers.findIndex(h => h.includes(name));
+    const get = (row, name) => (row[col(name)] || '').replace(/[$,NZ]/g, '').trim();
+
+    let added = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const row = parseCSVLine(lines[i]);
+      if (row.length < 3) continue;
+
+      const name = get(row, 'investment') || get(row, 'name') || get(row, 'fund');
+      const symbol = (get(row, 'code') || get(row, 'ticker') || name.slice(0, 6)).toUpperCase().replace(/\s+/g, '');
+      const qty = parseFloat(get(row, 'shares') || get(row, 'units') || get(row, 'quantity') || '0');
+      const price = parseFloat(get(row, 'average buy') || get(row, 'buy price') || get(row, 'price') || '0');
+      const market = (get(row, 'market') || 'NZX').toUpperCase();
+      const currency = market.includes('US') ? 'USD' : market.includes('AU') ? 'AUD' : 'NZD';
+
+      if (!qty || !price) continue;
+
+      // Append market suffix for Yahoo Finance
+      const yahooSymbol = market === 'NZX' ? symbol + '.NZ'
+        : market === 'ASX' ? symbol + '.AX'
+        : symbol;
+
+      state.portfolio.push({
+        id: uuid(), symbol: yahooSymbol, name, type: 'etf',
+        platform: 'Sharesies', quantity: qty, currency,
+        purchasePrice: price, purchaseDate: '',
+        sector: '', country: market, notes: 'Imported from Sharesies', currentPrice: null
+      });
+      added++;
+    }
+
+    if (added === 0) {
+      showPlatformStatus('sharesiesStatus', '⚠ No holdings found — export Portfolio CSV from Sharesies', true);
+    } else {
+      showPlatformStatus('sharesiesStatus', `✓ Imported ${added} holdings`);
+      saveState(); renderAll();
+      setTimeout(() => refreshPortfolioPrices().then(renderAll), 500);
+    }
+  });
+  e.target.value = '';
+}
+
+// -- Harbour CSV Import --
+// Harbour uses a simple statement format
+function importHarbour(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readCSVFile(file, text => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) { showPlatformStatus('harbourStatus', '⚠ Empty file', true); return; }
+
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+    const col = name => headers.findIndex(h => h.includes(name));
+    const get = (row, name) => (row[col(name)] || '').replace(/[$,]/g, '').trim();
+
+    let added = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const row = parseCSVLine(lines[i]);
+      if (row.length < 2) continue;
+
+      const name = get(row, 'fund') || get(row, 'name') || get(row, 'investment') || row[0];
+      const qty = parseFloat(get(row, 'units') || get(row, 'quantity') || get(row, 'shares') || '0');
+      const price = parseFloat(get(row, 'unit price') || get(row, 'price') || get(row, 'nav') || '0');
+      const value = parseFloat(get(row, 'value') || get(row, 'market value') || '0');
+
+      // If we have value but not price, derive price
+      const effectiveQty = qty || 1;
+      const effectivePrice = price || (qty > 0 ? value / qty : value);
+
+      if (!name || (!qty && !value)) continue;
+
+      state.portfolio.push({
+        id: uuid(),
+        symbol: name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 5) || 'HRBR',
+        name, type: 'mutualfund',
+        platform: 'Harbour',
+        quantity: effectiveQty, currency: 'NZD',
+        purchasePrice: effectivePrice, purchaseDate: '',
+        sector: 'Managed Fund', country: 'NZ',
+        notes: 'Imported from Harbour', currentPrice: null
+      });
+      added++;
+    }
+
+    if (added === 0) {
+      showPlatformStatus('harbourStatus', '⚠ No holdings found — contact Harbour for CSV format', true);
+    } else {
+      showPlatformStatus('harbourStatus', `✓ Imported ${added} funds`);
+      saveState(); renderAll();
+    }
+  });
+  e.target.value = '';
+}
+
+// -- Akahu (NZ Open Banking) --
+function saveAkahuTokens() {
+  state.settings.akahuAppToken = document.getElementById('akahu_app_token').value.trim();
+  state.settings.akahuUserToken = document.getElementById('akahu_user_token').value.trim();
+  saveState();
+}
+
+async function syncAkahu() {
+  const appToken = state.settings.akahuAppToken || document.getElementById('akahu_app_token').value.trim();
+  const userToken = state.settings.akahuUserToken || document.getElementById('akahu_user_token').value.trim();
+
+  if (!appToken || !userToken) {
+    showPlatformStatus('akahuStatus', '⚠ Enter both tokens first', true);
+    return;
+  }
+
+  const btn = document.getElementById('akahuSyncBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;display:inline-block;margin-right:4px;"></div>Syncing...';
+  showPlatformStatus('akahuStatus', 'Connecting to Akahu...');
+
+  const headers = {
+    'Authorization': `Bearer ${userToken}`,
+    'X-Akahu-App-Token': appToken,
+    'Content-Type': 'application/json'
+  };
+
+  // Akahu requires a server-side proxy to avoid CORS.
+  // We call the Python proxy /api/akahu route (running at localhost:8080),
+  // which forwards the request to Akahu securely.
+  const proxyBase = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
+
+  try {
+    const res = await fetch(`${proxyBase}/api/akahu`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appToken, userToken }),
+      signal: AbortSignal.timeout(20000)
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const incoming = data.holdings || [];
+    let added = 0, updated = 0;
+
+    incoming.forEach(h => {
+      const existing = state.portfolio.find(x => x.platform === h.platform && x.name === h.name);
+      if (existing) {
+        existing.currentPrice = h.currentPrice;
+        updated++;
+      } else {
+        state.portfolio.push({ ...h, id: uuid() });
+        added++;
+      }
+    });
+
+    saveState(); renderAll();
+    showPlatformStatus('akahuStatus', `✓ ${added} added, ${updated} updated (${data.accountCount} accounts)`);
+
+  } catch (err) {
+    const msg = err.message || 'Connection failed';
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_CONNECTION_REFUSED')) {
+      showPlatformStatus('akahuStatus', '⚠ Webapp not running — see instructions below', true);
+      document.getElementById('akahuProxyHint').style.display = 'block';
+    } else {
+      showPlatformStatus('akahuStatus', '⚠ ' + msg, true);
+    }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i>Sync ANZ, BNZ &amp; Sharesies';
+}
+
+// Populate Akahu token fields when modal opens
+function populateConnectionsForm() {
+  const appEl = document.getElementById('akahu_app_token');
+  const userEl = document.getElementById('akahu_user_token');
+  if (appEl) appEl.value = state.settings.akahuAppToken || '';
+  if (userEl) userEl.value = state.settings.akahuUserToken || '';
+}
+
+// ===== ADMIN =====
+let _isAdmin = false;
+let _adminUsers = [];
+
+async function checkAdminStatus() {
+  if (!_supabase || !_supaUser) { _isAdmin = false; return; }
+  try {
+    const { data } = await _supabase
+      .from('profiles')
+      .select('is_admin')
+      .eq('id', _supaUser.id)
+      .single();
+    _isAdmin = !!(data?.is_admin);
+  } catch(e) { _isAdmin = false; }
+  const adminLink = document.getElementById('adminNavLink');
+  if (adminLink) adminLink.style.display = _isAdmin ? '' : 'none';
+}
+
+async function loadAdminData() {
+  if (!_isAdmin || !_supabase) return;
+  const tbody = document.getElementById('adminUserTable');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center p-6 neutral"><div class="spinner" style="width:18px;height:18px;margin:0 auto;"></div></td></tr>';
+
+  try {
+    // Load all profiles
+    const { data: profiles, error } = await _supabase
+      .from('profiles')
+      .select('id, email, is_admin, created_at, last_seen')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Load all portfolios to count holdings
+    const { data: portfolios } = await _supabase
+      .from('investiq_portfolios')
+      .select('user_id, portfolio');
+
+    const portfolioMap = {};
+    (portfolios || []).forEach(p => { portfolioMap[p.user_id] = (p.portfolio || []).length; });
+
+    _adminUsers = (profiles || []).map(p => ({
+      ...p,
+      holdingCount: portfolioMap[p.id] || 0
+    }));
+
+    // Update stats
+    const now = new Date();
+    const day7 = new Date(now - 7*24*60*60*1000);
+    const day30 = new Date(now - 30*24*60*60*1000);
+    document.getElementById('adminStatUsers').textContent     = _adminUsers.length;
+    document.getElementById('adminStatActive').textContent    = _adminUsers.filter(u => u.last_seen && new Date(u.last_seen) > day7).length;
+    document.getElementById('adminStatPortfolios').textContent= _adminUsers.filter(u => u.holdingCount > 0).length;
+    document.getElementById('adminStatNew').textContent       = _adminUsers.filter(u => new Date(u.created_at) > day30).length;
+
+    renderAdminTable(_adminUsers);
+  } catch(e) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center p-4" style="color:#f87171;">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function filterAdminUsers() {
+  const q = (document.getElementById('adminUserSearch')?.value || '').toLowerCase();
+  const filtered = _adminUsers.filter(u => (u.email || '').toLowerCase().includes(q));
+  renderAdminTable(filtered);
+}
+
+function renderAdminTable(users) {
+  const tbody = document.getElementById('adminUserTable');
+  if (!tbody) return;
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center p-6 neutral">No users found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    const joined   = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
+    const lastSeen = u.last_seen  ? timeSince(new Date(u.last_seen))            : 'Never';
+    const roleBadge = u.is_admin
+      ? `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Admin</span>`
+      : `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(148,163,184,0.1);color:#64748b;border:1px solid #1e2d4a;">User</span>`;
+    const holdingsBadge = u.holdingCount > 0
+      ? `<span style="color:#34d399;">${u.holdingCount} holdings</span>`
+      : `<span class="neutral">None</span>`;
+    const isSelf = u.id === _supaUser?.id;
+    return `<tr style="border-bottom:1px solid #0f1729;" onmouseover="this.style.background='#0f1729'" onmouseout="this.style.background=''">
+      <td class="p-3" style="color:#c8d6ef;">${u.email || '—'}${isSelf ? ' <span class="text-xs" style="color:#6366f1;">(you)</span>' : ''}</td>
+      <td class="p-3 neutral">${joined}</td>
+      <td class="p-3 neutral">${lastSeen}</td>
+      <td class="p-3">${holdingsBadge}</td>
+      <td class="p-3">${roleBadge}</td>
+      <td class="p-3">
+        <div class="flex gap-2">
+          ${!u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Make Admin</button>` : ''}
+          ${u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">Remove Admin</button>` : ''}
+          ${!isSelf ? `<button onclick="adminDeleteUser('${u.id}','${u.email}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function adminToggleAdmin(userId, makeAdmin) {
+  if (!_supabase) return;
+  if (!confirm(`${makeAdmin ? 'Grant' : 'Remove'} admin access for this user?`)) return;
+  await _supabase.from('profiles').update({ is_admin: makeAdmin }).eq('id', userId);
+  loadAdminData();
+}
+
+async function adminDeleteUser(userId, email) {
+  if (!confirm(`Permanently delete user ${email} and all their data? This cannot be undone.`)) return;
+  // Delete portfolio data first (cascade handles profiles)
+  await _supabase.from('investiq_portfolios').delete().eq('user_id', userId);
+  await _supabase.from('profiles').delete().eq('id', userId);
+  // Note: deleting from auth.users requires service role key — tell admin to do it in Supabase dashboard
+  alert(`Portfolio data deleted. To fully remove the auth account, go to Supabase → Authentication → Users and delete ${email} there.`);
+  loadAdminData();
+}
+
+function timeSince(date) {
+  const s = Math.floor((new Date() - date) / 1000);
+  if (s < 60) return 'Just now';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+// ===== INIT =====
+async function init() {
+  loadState();
+
+  // Remove any lingering sample/demo data (detected by known sample symbols+platforms)
+  const samplePlatforms = new Set(['Interactive Brokers','Vanguard ISA','Coinbase','Halifax','Hargreaves Lansdown']);
+  if (state.portfolio.length && state.portfolio.every(h => samplePlatforms.has(h.platform))) {
+    state.portfolio = [];
+    saveState();
+  }
+
+  renderAll();
+
+  // Init Supabase and restore session if credentials saved
+  if (initSupabase()) {
+    try {
+      const { data: { session } } = await _supabase.auth.getSession();
+      if (session?.user) {
+        _supaUser = session.user;
+        await checkAdminStatus();
+        // Touch last_seen on load
+        _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
+        updateAuthUI();
+        const loaded = await loadFromSupabase();
+        if (loaded) { renderAll(); }
+      } else {
+        updateAuthUI();
+      }
+      // Listen for auth state changes (e.g. email confirm redirect)
+      _supabase.auth.onAuthStateChange((_event, session) => {
+        _supaUser = session?.user || null;
+        updateAuthUI();
+      });
+    } catch(e) { console.warn('Supabase session check failed:', e); }
+  }
+
+  // Load market data first (gets FX rates), then portfolio prices, then re-render with correct NZD values
+  try {
+    await refreshMarketData();
+    await refreshPortfolioPrices();
+    renderAll();
+    updateTicker();
+    // Record daily snapshot once live prices are in — reflects true market value
+    recordDailySnapshot();
+  } catch(e) {}
+
+  // Auto-refresh every 5 minutes
+  setInterval(() => refreshAll(), 5 * 60 * 1000);
+
+  // Keep-alive ping every 14 min so Render free tier never sleeps
+  proxyHealthCheck();
+  setInterval(() => proxyHealthCheck(), 14 * 60 * 1000);
+
+  // Restore agent results if any
+  if (state.agentResults) {
+    renderInsightsSection(state.agentResults);
+    if (state.agentResults.portfolioScore) updateScoreRing(state.agentResults.portfolioScore);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
