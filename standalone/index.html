@@ -76,6 +76,11 @@
     .modal-overlay.open { display: flex; }
     .modal { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 16px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; position: relative; }
 
+    /* Onboarding cards */
+    .onboarding-card { display:block; width:100%; padding:16px; background:#141e33; border:1px solid #1e2d4a; border-radius:10px; cursor:pointer; transition:all 0.15s; }
+    .onboarding-card:hover { border-color:#6366f1; background:#1a2540; transform:translateY(-1px); }
+    .onboarding-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+
     .tag { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .tag-stock { background: rgba(99,102,241,0.15); color: #818cf8; }
     .tag-etf { background: rgba(59,130,246,0.15); color: #60a5fa; }
@@ -394,6 +399,59 @@
     <div class="text-xs neutral mt-6 text-center" style="line-height:1.6;">
       Your data is encrypted in your own Supabase project.<br>
       <span style="color:#4a6080;">InvestIQ never stores your credentials.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ONBOARDING MODAL — shown once after first signup, dismissed by picking a path -->
+<div class="modal-overlay" id="onboardingModal" onclick="event.stopPropagation()" style="background:rgba(8,13,26,0.95);">
+  <div class="modal" style="max-width:560px;">
+    <div class="text-center mb-6">
+      <div style="display:inline-flex;width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#6366f1,#818cf8);align-items:center;justify-content:center;margin-bottom:16px;">
+        <i class="fas fa-chart-line text-white" style="font-size:24px;"></i>
+      </div>
+      <h2 class="text-xl font-bold gradient-text">Welcome to InvestIQ</h2>
+      <div class="text-sm neutral mt-2">Let's get your portfolio set up — choose where your data lives first.</div>
+    </div>
+
+    <div class="space-y-3">
+      <button onclick="onboardingPath('csv')" class="onboarding-card">
+        <div class="flex items-center gap-3">
+          <div class="onboarding-icon" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-file-csv"></i></div>
+          <div class="text-left flex-1">
+            <div class="font-semibold text-sm">Upload a CSV from eToro / Sharesies</div>
+            <div class="text-xs neutral mt-1">Export from your broker and upload — works with most platforms.</div>
+          </div>
+          <i class="fas fa-chevron-right neutral"></i>
+        </div>
+      </button>
+
+      <button onclick="onboardingPath('manual')" class="onboarding-card">
+        <div class="flex items-center gap-3">
+          <div class="onboarding-icon" style="background:rgba(167,139,250,0.15);color:#c4b5fd;"><i class="fas fa-edit"></i></div>
+          <div class="text-left flex-1">
+            <div class="font-semibold text-sm">Add holdings manually</div>
+            <div class="text-xs neutral mt-1">One by one. Good for a small portfolio or testing the UI.</div>
+          </div>
+          <i class="fas fa-chevron-right neutral"></i>
+        </div>
+      </button>
+
+      <button onclick="onboardingPath('demo')" class="onboarding-card">
+        <div class="flex items-center gap-3">
+          <div class="onboarding-icon" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-flask"></i></div>
+          <div class="text-left flex-1">
+            <div class="font-semibold text-sm">Explore with sample data</div>
+            <div class="text-xs neutral mt-1">See the dashboard in action before you add anything real.</div>
+          </div>
+          <i class="fas fa-chevron-right neutral"></i>
+        </div>
+      </button>
+    </div>
+
+    <div class="mt-6 flex items-center justify-between text-xs neutral">
+      <span>You can change everything later in Settings.</span>
+      <button onclick="onboardingPath('skip')" class="btn btn-sm btn-secondary" style="font-size:11px;">Skip for now</button>
     </div>
   </div>
 </div>
@@ -1199,6 +1257,21 @@
             Platform defaults loaded from <code style="background:#141e33;padding:2px 6px;border-radius:4px;">PLATFORM_CONFIG</code> in the code.
           </div>
         </div>
+        <div style="border-top:1px dashed #1e2d4a;padding-top:16px;margin-top:4px;">
+          <label>🧠 AI Provider</label>
+          <select id="settingAiProvider" class="input mb-2">
+            <option value="claude">Claude (via proxy — default)</option>
+            <option value="openai-compatible">OpenAI-compatible (LM Studio / Ollama / local)</option>
+          </select>
+          <label>Provider URL <span class="text-xs" style="color:#4a6080;font-weight:normal;">(only for OpenAI-compatible)</span></label>
+          <input type="text" id="settingAiProviderUrl" class="input mb-2" placeholder="http://localhost:1234/v1">
+          <label>Provider API key <span class="text-xs" style="color:#4a6080;font-weight:normal;">(optional — LM Studio doesn't need one)</span></label>
+          <input type="password" id="settingAiProviderKey" class="input" placeholder="sk-... or leave blank">
+          <div class="text-xs mt-2" style="color:#4a6080;line-height:1.6;">
+            <b>LM Studio:</b> default URL <code style="background:#141e33;padding:2px 6px;border-radius:4px;">http://localhost:1234/v1</code> · <b>Ollama:</b> <code style="background:#141e33;padding:2px 6px;border-radius:4px;">http://localhost:11434/v1</code><br>
+            For local providers, set the URL and keep the key blank. To use LM Studio from the deployed dashboard, you'd need a public tunnel (ngrok/cloudflare) in front.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1441,7 +1514,16 @@ const PLATFORM_CONFIG = {
   // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
   // This prevents anyone else from using your proxy to burn your Claude credits.
   // Leave blank for local dev (proxy will warn but still allow requests).
-  proxySecret:  ''
+  proxySecret:  '',
+  // AI provider — 'claude' (default, routed via our proxy to Anthropic) or
+  // 'openai-compatible' (for LM Studio / Ollama / any local OpenAI-compatible
+  // endpoint). Admin can override via settings.aiProvider + aiProviderUrl
+  // + aiProviderKey in Settings → Admin Platform Config.
+  // LM Studio default: http://localhost:1234/v1
+  // Ollama default: http://localhost:11434/v1
+  aiProvider:    'claude',
+  aiProviderUrl: '',
+  aiProviderKey: ''
 };
 
 // Helper — returns headers object with X-Proxy-Secret injected when configured
@@ -1611,7 +1693,10 @@ const LOCAL_ONLY_SETTINGS = [
   'supabaseUrl',
   'supabaseKey',
   'akahuAppToken',
-  'akahuUserToken'
+  'akahuUserToken',
+  'aiProviderUrl',   // LM Studio / Ollama URL is local-machine specific
+  'aiProviderKey',   // Per-admin API key, never sync
+  'proxySecret'      // Never leak
 ];
 
 async function loadFromSupabase() {
@@ -3333,11 +3418,43 @@ Use the actual portfolio data to make this personal. Reference specific holdings
 };
 
 async function callClaude(agentKey, userMessage) {
-  // API key is OPTIONAL now — the proxy falls back to its own env var.
-  // Only admins would supply a personal key to override.
-  const apiKey = state.settings.claudeApiKey || '';
-
   const def = AGENT_DEFS[agentKey];
+
+  // Decide which AI provider to use — Claude (via our proxy) or an
+  // OpenAI-compatible endpoint (LM Studio / Ollama / etc.)
+  const provider  = (state.settings.aiProvider    || PLATFORM_CONFIG.aiProvider    || 'claude').toLowerCase();
+  const providerUrl = (state.settings.aiProviderUrl || PLATFORM_CONFIG.aiProviderUrl || '').replace(/\/$/,'');
+  const providerKey = (state.settings.aiProviderKey || PLATFORM_CONFIG.aiProviderKey || '');
+
+  // ── OpenAI-compatible path (LM Studio, Ollama, OpenRouter, etc.) ──
+  if (provider === 'openai-compatible' && providerUrl) {
+    const body = JSON.stringify({
+      model: def.modelOpenAI || def.model,
+      max_tokens: def.maxTokens || 1024,
+      messages: [
+        { role: 'system', content: def.system },
+        { role: 'user',   content: userMessage }
+      ]
+    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (providerKey) headers['Authorization'] = 'Bearer ' + providerKey;
+    try {
+      const res = await fetch(providerUrl + '/chat/completions', {
+        method:'POST', headers, body, signal: AbortSignal.timeout(120000)
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`[${res.status}] ${err || 'LM Studio/OpenAI-compat call failed'}`);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || 'No response from local model.';
+    } catch(e) {
+      throw new Error(`${agentKey} (local ${def.model}): ${e.message}`);
+    }
+  }
+
+  // ── Default Claude path (via proxy) ──
+  const apiKey = state.settings.claudeApiKey || '';
   const body = JSON.stringify({
     model: def.model,
     max_tokens: def.maxTokens || 1024,
@@ -3345,15 +3462,12 @@ async function callClaude(agentKey, userMessage) {
     messages: [{ role: 'user', content: userMessage }]
   });
 
-  const headers = proxyHeaders({
-    'anthropic-version': '2023-06-01'
-  });
-  if (apiKey) headers['x-api-key'] = apiKey; // only send if admin supplied a personal key
+  const headers = proxyHeaders({ 'anthropic-version': '2023-06-01' });
+  if (apiKey) headers['x-api-key'] = apiKey;
 
   const webappBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/, '');
   const endpoints = [];
   if (webappBase) endpoints.push(webappBase + '/v1/messages');
-  // Only try direct Anthropic if admin supplied a personal key (needs CORS + key)
   if (apiKey) endpoints.push('https://api.anthropic.com/v1/messages');
 
   let lastError = null;
@@ -3801,6 +3915,12 @@ function populateSettingsForm() {
     if (proxy)  proxy.value  = state.settings.proxyUrl || '';
     if (supUrl) supUrl.value = state.settings.supabaseUrl || '';
     if (supKey) supKey.value = state.settings.supabaseKey || '';
+    const aiProv    = document.getElementById('settingAiProvider');
+    const aiProvUrl = document.getElementById('settingAiProviderUrl');
+    const aiProvKey = document.getElementById('settingAiProviderKey');
+    if (aiProv)    aiProv.value    = state.settings.aiProvider    || PLATFORM_CONFIG.aiProvider || 'claude';
+    if (aiProvUrl) aiProvUrl.value = state.settings.aiProviderUrl || '';
+    if (aiProvKey) aiProvKey.value = state.settings.aiProviderKey || '';
   }
 
   updateAdminDiagnostics();
@@ -3856,6 +3976,12 @@ function saveSettings() {
     if (proxy)  state.settings.proxyUrl     = proxy.value.trim()  || PLATFORM_CONFIG.proxyUrl;
     if (supUrl) state.settings.supabaseUrl  = supUrl.value.trim() || PLATFORM_CONFIG.supabaseUrl;
     if (supKey) state.settings.supabaseKey  = supKey.value.trim() || PLATFORM_CONFIG.supabaseKey;
+    const aiProv    = document.getElementById('settingAiProvider');
+    const aiProvUrl = document.getElementById('settingAiProviderUrl');
+    const aiProvKey = document.getElementById('settingAiProviderKey');
+    if (aiProv)    state.settings.aiProvider    = aiProv.value;
+    if (aiProvUrl) state.settings.aiProviderUrl = aiProvUrl.value.trim();
+    if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
     initSupabase(); // re-init if credentials changed
   }
 
@@ -4084,15 +4210,30 @@ function filterHoldings() {
 
 function renderEmptyHoldings() {
   return `<div class="p-10 text-center">
-    <div style="font-size:52px;margin-bottom:12px;opacity:0.5;">📊</div>
-    <div class="font-bold text-lg mb-2" style="color:#c8d6ef;">Welcome to InvestIQ</div>
-    <div class="neutral text-sm mb-6">Import your holdings from any platform to get started</div>
-    <div class="flex gap-3 justify-center flex-wrap">
-      <label class="btn btn-primary cursor-pointer"><i class="fas fa-file-import mr-2"></i>Import CSV<input type="file" accept=".csv" style="display:none;" onchange="importCSV(event)"></label>
-      <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;"><i class="fas fa-download mr-2"></i>Download Template</button>
-      <button onclick="openModal('addModal')" class="btn btn-secondary"><i class="fas fa-plus mr-2"></i>Add Manually</button>
+    <div style="font-size:56px;margin-bottom:16px;opacity:0.6;">📊</div>
+    <div class="font-bold text-xl mb-2" style="color:#c8d6ef;">Your portfolio is empty</div>
+    <div class="neutral text-sm mb-6" style="max-width:420px;margin:0 auto 24px;">Pick one of these to get started. You can always mix and match later.</div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6" style="max-width:680px;margin:0 auto;">
+      <label class="onboarding-card" style="padding:20px;">
+        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-file-csv"></i></div>
+        <div class="font-semibold text-sm mb-1">Upload CSV</div>
+        <div class="text-xs neutral">From eToro, Sharesies, or any platform</div>
+        <input type="file" accept=".csv" style="display:none;" onchange="importCSV(event)">
+      </label>
+      <button onclick="openModal('addModal')" class="onboarding-card" style="padding:20px;">
+        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(167,139,250,0.15);color:#c4b5fd;"><i class="fas fa-edit"></i></div>
+        <div class="font-semibold text-sm mb-1">Add Manually</div>
+        <div class="text-xs neutral">Enter holdings one at a time</div>
+      </button>
+      <button onclick="loadDemoData()" class="onboarding-card" style="padding:20px;">
+        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-flask"></i></div>
+        <div class="font-semibold text-sm mb-1">Try Sample Data</div>
+        <div class="text-xs neutral">5 example holdings to explore the UI</div>
+      </button>
     </div>
-    <div class="text-xs neutral mt-6">Supports eToro · Sharesies · Harbour · ANZ · BNZ · any CSV export</div>
+    <div class="text-xs neutral mt-4">
+      Need a starting point? <button onclick="downloadCSVTemplate()" style="background:none;border:none;color:#818cf8;cursor:pointer;text-decoration:underline;padding:0;">Download the CSV template</button>
+    </div>
   </div>`;
 }
 
@@ -4519,6 +4660,67 @@ function populateConnectionsForm() {
   if (userEl) userEl.value = state.settings.akahuUserToken || '';
 }
 
+// ===== ONBOARDING =====
+// Show the onboarding modal once per user, after first signin with no portfolio.
+// Stored in settings.onboardingComplete so it syncs across devices.
+function maybeShowOnboarding() {
+  if (state.settings.onboardingComplete) return;
+  if (state.portfolio.length > 0) {
+    // They already have data — mark complete and move on
+    state.settings.onboardingComplete = true;
+    saveState();
+    return;
+  }
+  const modal = document.getElementById('onboardingModal');
+  if (modal) modal.classList.add('open');
+}
+
+function onboardingPath(path) {
+  state.settings.onboardingComplete = true;
+  saveState();
+  const modal = document.getElementById('onboardingModal');
+  if (modal) modal.classList.remove('open');
+
+  switch(path) {
+    case 'csv':
+      showSection('holdings', document.querySelector('[onclick*="showSection(\'holdings\'"]'));
+      setTimeout(() => document.getElementById('csvImportInput')?.click(), 300);
+      break;
+    case 'manual':
+      openModal('addModal');
+      break;
+    case 'demo':
+      loadDemoData();
+      break;
+    case 'skip':
+    default:
+      break;
+  }
+}
+
+function loadDemoData() {
+  // Small representative NZ-investor portfolio across a few platforms/asset types
+  const today = new Date().toISOString().slice(0, 10);
+  const demo = [
+    { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'stock', platform: 'eToro',     currency: 'USD', sector: 'Technology',         country: 'United States', qty: 3,   price: 180 },
+    { symbol: 'VOO',  name: 'Vanguard S&P 500 ETF', type: 'etf',  platform: 'Sharesies', currency: 'USD', sector: 'Index',              country: 'United States', qty: 2,   price: 520 },
+    { symbol: 'AIR.NZ', name: 'Air New Zealand',   type: 'stock', platform: 'Sharesies', currency: 'NZD', sector: 'Industrials',        country: 'New Zealand',   qty: 500, price: 0.95 },
+    { symbol: 'BTC-USD', name: 'Bitcoin',          type: 'crypto',platform: 'eToro',     currency: 'USD', sector: 'Crypto',             country: 'Global',        qty: 0.02,price: 60000 },
+    { symbol: 'VWRL.L', name: 'Vanguard FTSE All-World', type: 'etf', platform: 'Sharesies', currency: 'GBP', sector: 'Index',          country: 'Global',        qty: 10,  price: 110 },
+  ];
+  state.portfolio = demo.map(d => ({
+    id: uuid(),
+    symbol: d.symbol, name: d.name, type: d.type, platform: d.platform,
+    currency: d.currency, sector: d.sector, country: d.country, notes: 'Sample data',
+    currentPrice: null, dayChange: null, dayChangePct: null,
+    lots: [{ quantity: d.qty, price: d.price, date: today, note: 'Demo' }]
+  }));
+  saveState();
+  renderAll();
+  alert('✓ Loaded 5 sample holdings. Refreshing live prices…');
+  refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
+}
+
 // ===== ADMIN =====
 let _isAdmin = false;
 let _adminUsers = [];
@@ -4915,6 +5117,8 @@ async function init() {
           healDuplicates();       // heal any dups that came from cloud
           renderAll();
         }
+        // Show onboarding for new users who have no holdings yet
+        maybeShowOnboarding();
       } else {
         updateAuthUI();
       }
