@@ -1343,6 +1343,11 @@ function initSupabase() {
   const url = state.settings.supabaseUrl?.trim();
   const key = state.settings.supabaseKey?.trim();
   if (!url || !key) { _supabase = null; return false; }
+  if (!window.supabase?.createClient) {
+    console.warn('Supabase library not loaded yet');
+    _supabase = null;
+    return false;
+  }
   try {
     _supabase = window.supabase.createClient(url, key);
     return true;
@@ -4247,7 +4252,11 @@ async function init() {
   }
 }
 
-init();
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init, { once: true });
+} else {
+  init();
+}
 
 // Public showSection — wraps core + syncs mobile tab bar
 function showSection(name, el) {
