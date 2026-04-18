@@ -669,17 +669,20 @@
           <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Download blank CSV template">
             <i class="fas fa-download mr-1"></i>Template
           </button>
-          <div class="flex items-center" style="border:1px solid #334155;border-radius:6px;overflow:hidden;">
-            <label class="btn" style="background:#1e293b;border:none;border-radius:0;cursor:pointer;" title="Import / sync holdings from CSV">
-              <i class="fas fa-file-import mr-1"></i>Import CSV
+          <div class="flex items-center gap-2">
+            <!-- Simple CSV import: date + file picker. Smart merge by default. -->
+            <label class="btn btn-primary" style="cursor:pointer;" title="Upload an eToro / Sharesies / generic CSV">
+              <i class="fas fa-file-import mr-1"></i>Upload CSV
               <input type="file" accept=".csv" id="csvImportInput" style="display:none;" onchange="importCSV(event)">
             </label>
-            <select id="csvImportMode" class="input" style="border:none;border-left:1px solid #334155;border-radius:0;background:#1e293b;padding:0 8px;width:auto;font-size:11px;" title="Import mode">
-              <option value="add">Add lots (append new purchases)</option>
-              <option value="sync">Sync (adjust quantities)</option>
-              <option value="replace">Replace platform (overwrite all)</option>
-            </select>
-            <input type="date" id="csvImportDate" class="input" style="border:none;border-left:1px solid #334155;border-radius:0;background:#1e293b;padding:0 8px;width:auto;font-size:11px;color-scheme:dark;" title="Snapshot date — the portfolio state will be snapshotted as of this date">
+            <div class="flex items-center gap-1 text-xs neutral" title="The portfolio will be snapshotted as of this date — pick a past date to backfill history">
+              <i class="fas fa-calendar" style="font-size:11px;opacity:0.5;"></i>
+              <input type="date" id="csvImportDate" class="input" style="background:#1e293b;padding:4px 8px;font-size:11px;color-scheme:dark;width:140px;">
+            </div>
+            <label class="flex items-center gap-1 text-xs neutral" style="cursor:pointer;" title="Wipe all existing holdings before importing — use when the CSV is the full authoritative state">
+              <input type="checkbox" id="csvReplaceAll" style="cursor:pointer;">
+              <span>Replace all</span>
+            </label>
           </div>
           <button onclick="openModal('addModal')" class="btn btn-primary">
             <i class="fas fa-plus mr-1"></i>Add Holding
@@ -1870,6 +1873,7 @@ function normalizeHoldingLots(h) {
 
 function consolidatePortfolio(holdings) {
   const merged = new Map();
+  const duplicateLog = [];
   (holdings || []).forEach(raw => {
     const h = normalizeHoldingLots(raw);
     const key = holdingKey(h);
@@ -1882,8 +1886,26 @@ function consolidatePortfolio(holdings) {
       });
       return;
     }
+    // DUPLICATE KEY — previously we concatenated lots which caused the
+    // "value doubled on cross-browser load" bug. Now: dedupe lots by
+    // (date + quantity + price) signature so re-importing the same data
+    // doesn't double-count. Only genuinely new lots are appended.
     const existing = merged.get(key);
-    existing.lots = [...(existing.lots || []), ...(h.lots || [])];
+    const existingSig = new Set(
+      (existing.lots || []).map(l =>
+        `${l.date||''}::${(+l.quantity||0).toFixed(6)}::${(+l.price||0).toFixed(6)}`
+      )
+    );
+    const incomingNewLots = (h.lots || []).filter(l => {
+      const sig = `${l.date||''}::${(+l.quantity||0).toFixed(6)}::${(+l.price||0).toFixed(6)}`;
+      return !existingSig.has(sig);
+    });
+    if ((h.lots || []).length && !incomingNewLots.length) {
+      duplicateLog.push(`${key}: all ${h.lots.length} incoming lot(s) already present — skipped`);
+    } else if (incomingNewLots.length < (h.lots || []).length) {
+      duplicateLog.push(`${key}: merged ${incomingNewLots.length} new lot(s), skipped ${(h.lots||[]).length - incomingNewLots.length} duplicate(s)`);
+    }
+    existing.lots = [...(existing.lots || []), ...incomingNewLots];
     existing.name = existing.name || h.name;
     existing.type = existing.type || h.type;
     existing.platform = existing.platform || h.platform;
@@ -1895,6 +1917,9 @@ function consolidatePortfolio(holdings) {
     if (h.dayChange != null) existing.dayChange = h.dayChange;
     if (h.dayChangePct != null) existing.dayChangePct = h.dayChangePct;
   });
+  if (duplicateLog.length) {
+    console.warn('[consolidatePortfolio] duplicate keys found and lot-deduped:\n  • ' + duplicateLog.join('\n  • '));
+  }
   return [...merged.values()];
 }
 
@@ -2112,34 +2137,28 @@ async function _importCSVImpl(event) {
     'crypto':'crypto','bond':'bond','cash':'cash','mutualfund':'mutualfund','other':'other'
   };
 
-  const importMode = document.getElementById('csvImportMode')?.value || 'add';
-
   // Case-insensitive platform normaliser (so "eToro", "etoro", "Etoro" all match)
   const normPlat = (p) => (p || '').trim().toLowerCase();
 
-  // REPLACE MODE: delete existing holdings for platforms that appear in the CSV,
-  // then import fresh. Platform match is case-insensitive.
+  // Single mode now: SMART MERGE. Match existing holdings by symbol+platform,
+  // update quantity/price to match CSV (CSV is truth for each matched row),
+  // create new entries for anything unseen, leave other platforms untouched.
+  // If "Replace all" is checked, wipe everything first for a clean slate.
+  const replaceAll = document.getElementById('csvReplaceAll')?.checked || false;
   let removedCount = 0;
-  if (importMode === 'replace' && iPlat >= 0) {
-    const platformsInCsv = new Set();
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i].trim().startsWith('#')) continue;
-      const row = parseCSVLine(lines[i]);
-      const p = row[iPlat]?.trim();
-      if (p) platformsInCsv.add(normPlat(p));
+  if (replaceAll) {
+    if (!confirm(`"Replace all" is checked.\n\nThis will DELETE all ${state.portfolio.length} existing holdings across all platforms, then import from this CSV.\n\nContinue?`)) {
+      alert('Import cancelled.'); return;
     }
-    if (platformsInCsv.size) {
-      const confirmMsg = `REPLACE mode will DELETE all existing holdings on these platforms:\n\n  • ${[...platformsInCsv].join('\n  • ')}\n\nAnd re-import them from this CSV.\n\nContinue?`;
-      if (!confirm(confirmMsg)) { alert('Import cancelled.'); return; }
-      const before = state.portfolio.length;
-      state.portfolio = state.portfolio.filter(h => !platformsInCsv.has(normPlat(h.platform)));
-      removedCount = before - state.portfolio.length;
-    }
+    removedCount = state.portfolio.length;
+    state.portfolio = [];
+    // Reset the checkbox so it doesn't persist silently into the next import
+    const rc = document.getElementById('csvReplaceAll'); if (rc) rc.checked = false;
   }
 
-  console.log(`[csv-import] mode=${importMode} | existing holdings=${state.portfolio.length} | existing platforms=${JSON.stringify([...new Set(state.portfolio.map(h => h.platform))])}`);
+  console.log(`[csv-import] smart-merge | existing holdings=${state.portfolio.length} | existing platforms=${JSON.stringify([...new Set(state.portfolio.map(h => h.platform))])} | replaceAll=${replaceAll}`);
 
-  let added = 0, updated = 0, newCreated = 0, skipped = 0;
+  let updated = 0, newCreated = 0, skipped = 0;
   for (let i = 1; i < lines.length; i++) {
     const row = parseCSVLine(lines[i]);
     if (lines[i].trim().startsWith('#')) continue; // skip comment lines
@@ -2164,16 +2183,12 @@ async function _importCSVImpl(event) {
     const date     = iDate >= 0 ? (row[iDate]?.trim() || '') : '';
     const notes    = iNote >= 0 ? (row[iNote]?.trim() || '') : '';
 
-    const syncMode = importMode === 'sync';
-
-    // Case-insensitive match on symbol+platform (handles eToro vs etoro vs ETORO).
-    // Fallback: if no platform match in sync/replace mode, match by symbol only
-    // (common when CSV has no platform column → all rows become "Imported").
+    // Match existing holding: symbol+platform first, symbol-only fallback
     let existing = state.portfolio.find(h =>
       (h.symbol || '').toUpperCase().trim() === symbol &&
       normPlat(h.platform) === normPlat(platform)
     );
-    if (!existing && (syncMode || importMode === 'replace')) {
+    if (!existing) {
       existing = state.portfolio.find(h =>
         (h.symbol || '').toUpperCase().trim() === symbol
       );
@@ -2183,34 +2198,21 @@ async function _importCSVImpl(event) {
     }
 
     if (existing) {
-      if (syncMode) {
-        // SYNC MODE: CSV is the authoritative latest state.
-        // Consolidate into a SINGLE clean lot at CSV quantity + CSV price.
-        const finalPrice = buyPrice || getHoldingBasis(existing).avgBuyPrice || 0;
-        existing.lots = [{
-          quantity,
-          price: finalPrice,
-          date: date || new Date().toISOString().slice(0,10),
-          note: 'Sync (CSV)'
-        }];
-        if (name && name !== symbol) existing.name = name;
-        if (sector)  existing.sector  = sector;
-        if (country) existing.country = country;
-        if (currency) existing.currency = currency;
-        existing.platform = platform;
-        updated++;
-      } else {
-        // ADD MODE: same position, new lot (e.g. bought more)
-        const basis = getHoldingBasis(existing);
-        const alreadyHasLot = basis.lots.some(l =>
-          Math.abs(parseFloat(l.quantity) - quantity) < 0.0001 &&
-          Math.abs(parseFloat(l.price) - buyPrice) < 0.001 &&
-          l.date === date
-        );
-        if (alreadyHasLot) { skipped++; continue; }
-        existing.lots = [...basis.lots, { quantity, price: buyPrice, date, note: notes }];
-        added++;
-      }
+      // SMART MERGE: CSV is the authoritative current state for this holding.
+      // Consolidate into a SINGLE clean lot with CSV quantity and CSV price.
+      const finalPrice = buyPrice || getHoldingBasis(existing).avgBuyPrice || 0;
+      existing.lots = [{
+        quantity,
+        price: finalPrice,
+        date: date || new Date().toISOString().slice(0,10),
+        note: 'CSV import'
+      }];
+      if (name && name !== symbol) existing.name = name;
+      if (sector)  existing.sector  = sector;
+      if (country) existing.country = country;
+      if (currency) existing.currency = currency;
+      existing.platform = platform;
+      updated++;
     } else {
       state.portfolio.push({
         id: uuid(), symbol, name, type: assetType, platform,
@@ -2222,26 +2224,24 @@ async function _importCSVImpl(event) {
     }
   }
 
-  if (added === 0 && updated === 0 && newCreated === 0 && skipped === 0) {
+  if (updated === 0 && newCreated === 0 && skipped === 0) {
     alert('No data rows found. Check your CSV has data below the header row.'); return;
   }
 
   saveState();
   renderAll();
   const parts = [];
-  if (updated)    parts.push(`${updated} existing updated in place`);
+  if (updated)    parts.push(`${updated} existing holdings updated`);
   if (newCreated) parts.push(`${newCreated} new holdings created`);
-  if (added && !updated && !newCreated) parts.push(`${added} lots added`);
-  else if (added) parts.push(`${added} extra lots appended`);
-  if (removedCount) parts.push(`${removedCount} removed before re-import`);
-  if (skipped)    parts.push(`${skipped} duplicates skipped`);
-  console.log(`[csv-import] ✓ mode=${importMode} | ${parts.join(' · ')}`);
+  if (removedCount) parts.push(`${removedCount} cleared before re-import`);
+  if (skipped)    parts.push(`${skipped} rows skipped`);
+  console.log(`[csv-import] ✓ ${parts.join(' · ')}`);
 
   // Snapshot date captured from the date picker next to the import button
   const snapshotDate = (document.getElementById('csvImportDate')?.value || '').trim()
     || new Date().toISOString().slice(0,10);
 
-  alert(`✓ CSV import complete (${importMode} mode):\n\n• ${parts.join('\n• ')}\n\nSnapshot date: ${snapshotDate}\nFetching live prices…`);
+  alert(`✓ CSV import complete:\n\n• ${parts.join('\n• ')}\n\nSnapshot date: ${snapshotDate}\nFetching live prices…`);
 
   // Fetch live prices, then force a snapshot using the chosen date
   refreshMarketData()
