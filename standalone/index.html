@@ -540,6 +540,7 @@
       <div class="nav-link" onclick="showSection('market',this)"><i class="fas fa-globe"></i> Market</div>
       <div class="nav-link" onclick="showSection('insights',this)"><i class="fas fa-brain"></i> AI Insights</div>
       <div class="nav-link" onclick="showSection('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
+      <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
       <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
@@ -860,6 +861,56 @@
           <span>Symbol</span><span class="text-right">Price</span><span class="text-right">Day %</span><span class="text-right">Added</span><span class="text-right">Actions</span>
         </div>
         <div id="watchlistRows"></div>
+      </div>
+    </div>
+
+    <!-- NZ TAX (FIF) SECTION -->
+    <div id="section-tax" style="display:none;">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-receipt" style="color:#34d399;"></i>NZ Foreign Investment Fund (FIF) Check
+          </h2>
+          <div class="text-xs neutral mt-1">
+            NZ residents: if the <b>original cost</b> of your overseas investments exceeds NZD $50,000 at any time during the year, you generally owe FIF income tax.
+            <span style="color:#fbbf24;">This is analysis only, not tax advice — talk to an accountant.</span>
+          </div>
+        </div>
+        <button onclick="refreshFIF()" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Recalculate</button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="metric-card">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Overseas Cost Basis (NZD)</div>
+          <div class="text-2xl font-bold mono" id="fifCostBasis">NZ$0</div>
+          <div class="text-xs mt-2" id="fifThresholdHint" style="color:#4a6080;">NZ$50,000 threshold</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">FIF Status</div>
+          <div class="text-2xl font-bold" id="fifStatus">—</div>
+          <div class="text-xs mt-2" id="fifStatusHint" style="color:#4a6080;">Calculating…</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Estimated FIF Income (FDR 5%)</div>
+          <div class="text-2xl font-bold mono" id="fifFdrEstimate">NZ$0</div>
+          <div class="text-xs mt-2" style="color:#4a6080;">Fair Dividend Rate method</div>
+        </div>
+      </div>
+
+      <div class="card p-5 mb-4">
+        <div class="section-title mb-4"><i class="fas fa-globe" style="color:#818cf8;"></i> Overseas Holdings Contributing to FIF</div>
+        <div id="fifHoldingsTable"></div>
+      </div>
+
+      <div class="card p-5">
+        <div class="text-sm mb-3" style="color:#c8d6ef;font-weight:600;">About the FIF rules</div>
+        <div class="text-xs neutral" style="line-height:1.8;">
+          • The NZ$50,000 threshold is based on <b>original cost</b> of overseas investments (not current market value).<br>
+          • NZ-listed, ASX-listed (some), and AU-unit-trust holdings are generally exempt.<br>
+          • Two main calculation methods: <b>FDR (Fair Dividend Rate, 5% flat)</b> and <b>CV (Comparative Value, cap at actual gain)</b>.<br>
+          • InvestIQ shows the FDR estimate as the default conservative view. Your actual liability may be lower under CV.<br>
+          • Always consult a qualified NZ tax adviser before filing.
+        </div>
       </div>
     </div>
 
@@ -4078,12 +4129,11 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','admin'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','tax','admin'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
   document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
-  // el is passed explicitly from onclick; fall back to finding by data attribute
   const active = el || document.querySelector(`.nav-link[onclick*="'${name}'"]`);
   if (active) active.classList.add('active');
   currentSection = name;
@@ -4091,6 +4141,7 @@ function _showSectionCore(name, el) {
   if (name === 'admin') loadAdminData();
   if (name === 'performance') loadSnapshotChart(90);
   if (name === 'watchlist') { renderWatchlist(); refreshWatchlist(); }
+  if (name === 'tax') refreshFIF();
 }
 
 async function loadSnapshotChart(days = 90) {
@@ -4683,6 +4734,83 @@ function populateConnectionsForm() {
   const userEl = document.getElementById('akahu_user_token');
   if (appEl) appEl.value = state.settings.akahuAppToken || '';
   if (userEl) userEl.value = state.settings.akahuUserToken || '';
+}
+
+// ===== NZ FIF TAX CHECK =====
+// Rough FIF (Foreign Investment Fund) calculator for NZ residents.
+// - Sums cost basis (lots × price) for overseas holdings (country ≠ NZ),
+//   converted to NZD.
+// - If total > NZ$50,000 → user is "FIF zone" and owes income tax on
+//   overseas investments (outside the de-minimis exemption).
+// - FDR method: 5% of opening market value is taxed.
+// NOT tax advice — flagged in UI.
+const FIF_THRESHOLD_NZD = 50000;
+const NZ_EXEMPT_COUNTRIES = new Set(['NEW ZEALAND', 'NZ', 'AOTEAROA']);
+
+function refreshFIF() {
+  const base = 'NZD'; // FIF is always computed in NZD regardless of user's display currency
+  let totalCost = 0;
+  let totalMarket = 0;
+  const rows = [];
+  state.portfolio.forEach(h => {
+    const country = (h.country || '').toUpperCase().trim();
+    if (NZ_EXEMPT_COUNTRIES.has(country)) return; // NZ-resident investments exempt
+    if (!country) return;
+    const basis = getHoldingBasis(h);
+    const fx = getFxRate(h.currency || 'USD', base);
+    const costNZD   = basis.quantity * basis.avgBuyPrice * fx;
+    const marketNZD = basis.quantity * (h.currentPrice ?? basis.avgBuyPrice) * fx;
+    if (costNZD <= 0) return;
+    totalCost += costNZD;
+    totalMarket += marketNZD;
+    rows.push({
+      symbol: h.symbol, name: h.name, country, currency: h.currency,
+      quantity: basis.quantity, avgCost: basis.avgBuyPrice, costNZD, marketNZD
+    });
+  });
+
+  const inFIFZone = totalCost > FIF_THRESHOLD_NZD;
+  const fdrEstimate = inFIFZone ? totalMarket * 0.05 : 0;
+
+  document.getElementById('fifCostBasis').textContent = 'NZ$' + totalCost.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
+  document.getElementById('fifThresholdHint').innerHTML = inFIFZone
+    ? `<span style="color:#f87171;">NZ$${(totalCost - FIF_THRESHOLD_NZD).toLocaleString('en-NZ', {maximumFractionDigits:0})} over threshold</span>`
+    : `<span style="color:#34d399;">NZ$${(FIF_THRESHOLD_NZD - totalCost).toLocaleString('en-NZ', {maximumFractionDigits:0})} under threshold</span>`;
+
+  const statusEl = document.getElementById('fifStatus');
+  const hintEl   = document.getElementById('fifStatusHint');
+  if (inFIFZone) {
+    statusEl.innerHTML = `<span style="color:#f87171;">⚠ FIF applies</span>`;
+    hintEl.textContent = 'Overseas cost basis exceeds NZ$50,000 — file IR3 with FIF income';
+  } else {
+    statusEl.innerHTML = `<span style="color:#34d399;">✓ De-minimis exempt</span>`;
+    hintEl.textContent = 'Under threshold — normal dividends / distributions taxation only';
+  }
+
+  document.getElementById('fifFdrEstimate').textContent = 'NZ$' + fdrEstimate.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
+
+  const tableEl = document.getElementById('fifHoldingsTable');
+  if (!rows.length) {
+    tableEl.innerHTML = `<div class="text-sm neutral p-4 text-center">No overseas holdings found. All your holdings appear to be NZ-based (exempt) or missing country info.</div>`;
+    return;
+  }
+  rows.sort((a,b) => b.costNZD - a.costNZD);
+  tableEl.innerHTML = `
+    <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
+      <span>Asset</span><span class="text-right">Country</span><span class="text-right">Cost (NZD)</span><span class="text-right">Market (NZD)</span><span class="text-right">FDR 5%</span>
+    </div>
+    ${rows.map(r => `
+      <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
+        <div>
+          <div class="font-semibold text-sm">${r.symbol}</div>
+          <div class="text-xs neutral">${r.name || ''}</div>
+        </div>
+        <div class="text-right text-sm">${r.country}</div>
+        <div class="text-right mono text-sm">NZ$${r.costNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
+        <div class="text-right mono text-sm">NZ$${r.marketNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
+        <div class="text-right mono text-sm" style="color:${inFIFZone?'#fbbf24':'#64748b'};">NZ$${(inFIFZone ? r.marketNZD * 0.05 : 0).toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
+      </div>`).join('')}
+  `;
 }
 
 // ===== WATCHLIST =====
