@@ -1217,6 +1217,16 @@ async function submitGateAuth() {
   // On success, updateAuthUI() hides the gate automatically
 }
 
+// Credentials that must ALWAYS stay local — never saved to cloud, never overwritten from cloud.
+// Keeps your API keys, Supabase creds, and Akahu tokens sticky across sessions/deploys.
+const LOCAL_ONLY_SETTINGS = [
+  'claudeApiKey',
+  'supabaseUrl',
+  'supabaseKey',
+  'akahuAppToken',
+  'akahuUserToken'
+];
+
 async function loadFromSupabase() {
   if (!_supabase || !_supaUser) return false;
   try {
@@ -1227,10 +1237,14 @@ async function loadFromSupabase() {
       .single();
     if (error && error.code !== 'PGRST116') { console.warn('Supabase load:', error.message); return false; }
     if (!data) return false;
-    // Merge remote into state — remote wins for portfolio; keep local API key
+
+    // Snapshot LOCAL credentials first, then merge remote, then restore locals on top
+    const localOnly = {};
+    LOCAL_ONLY_SETTINGS.forEach(k => { if (state.settings[k]) localOnly[k] = state.settings[k]; });
+
     const remoteSettings = data.settings || {};
-    const apiKey = state.settings.claudeApiKey; // preserve local API key
-    state.settings = { ...state.settings, ...remoteSettings, claudeApiKey: apiKey };
+    state.settings = { ...state.settings, ...remoteSettings, ...localOnly };
+
     state.portfolio = (data.portfolio || []).map(h => {
       if (!h.lots || !h.lots.length) {
         return { ...h, lots: [{ quantity: parseFloat(h.quantity)||0, price: parseFloat(h.purchasePrice)||0, date: h.purchaseDate||'' }] };
@@ -1247,8 +1261,10 @@ async function loadFromSupabase() {
 async function saveToSupabase() {
   if (!_supabase || !_supaUser) return;
   try {
+    // Strip ALL local-only credentials before writing to cloud
     const settingsToSave = { ...state.settings };
-    delete settingsToSave.claudeApiKey; // never store API key in cloud
+    LOCAL_ONLY_SETTINGS.forEach(k => delete settingsToSave[k]);
+
     const { error } = await _supabase
       .from('investiq_portfolios')
       .upsert({
@@ -2922,17 +2938,17 @@ function viewHolding(id) {
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
   const fx = getFxRate(h.currency || 'USD', base);
-  const cur = (h.currentPrice ?? h.purchasePrice) * fx;
-  const buy = h.purchasePrice * fx;
-  const gain = (cur - buy) * h.quantity;
-  const gainPct = buy > 0 ? ((cur - buy) / buy) * 100 : 0;
-  const sign = gain >= 0 ? '+' : '';
 
+  // Use lots-based basis (legacy purchasePrice/quantity fields removed)
   const basis = getHoldingBasis(h);
   const quantity = basis.quantity;
-  const avgBuy = basis.avgBuyPrice * fx;
-  const curVal = cur * quantity;
-  const gainTotal = (cur - avgBuy) * quantity;
+  const avgBuyRaw = basis.avgBuyPrice;            // in holding's native currency
+  const curRaw    = (h.currentPrice ?? avgBuyRaw); // in holding's native currency
+
+  const avgBuy  = avgBuyRaw * fx;                  // in user's base currency
+  const cur     = curRaw    * fx;
+  const curVal  = cur * quantity;
+  const gainTotal    = (cur - avgBuy) * quantity;
   const gainPctTotal = avgBuy > 0 ? ((cur - avgBuy) / avgBuy) * 100 : 0;
   const signT = gainTotal >= 0 ? '+' : '';
   const rawSym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$'; // original currency symbol
