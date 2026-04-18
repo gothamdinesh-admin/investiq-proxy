@@ -92,7 +92,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     # ── Anthropic proxy ──────────────────────────────────────────
     def _proxy_anthropic(self, body):
-        api_key = self.headers.get("x-api-key", "")
+        # Use caller's key if provided, else fall back to the platform env var
+        # (set ANTHROPIC_API_KEY on Render). This makes Claude work for every
+        # signed-in user without them needing their own API key.
+        api_key = self.headers.get("x-api-key", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return self._json(500, {"error": {"message": "No Claude API key available on server. Admin must set ANTHROPIC_API_KEY env var on the proxy."}})
         fwd_headers = {
             "Content-Type": "application/json",
             "x-api-key": api_key,

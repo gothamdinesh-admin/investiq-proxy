@@ -565,10 +565,7 @@
         <div class="card p-8 text-center">
           <i class="fas fa-robot text-5xl mb-4 block" style="color:#6366f1;opacity:0.4;"></i>
           <div class="text-lg font-semibold mb-2">Multi-Agent AI Analysis</div>
-          <div class="neutral text-sm mb-4">Configure your Claude API key in Settings, then click "Run AI Analysis" above to get personalized insights from 4 specialized AI agents.</div>
-          <button onclick="openModal('settingsModal')" class="btn btn-secondary mr-2">
-            <i class="fas fa-key mr-1"></i>Set API Key
-          </button>
+          <div class="neutral text-sm mb-4">Click "Run AI Analysis" above to get insights from 4 specialised Claude agents analysing your portfolio in parallel.</div>
           <button onclick="openModal('agentsModal')" class="btn btn-primary">
             <i class="fas fa-play mr-1"></i>Run Now
           </button>
@@ -833,33 +830,43 @@
           <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
         </select>
       </div>
-      <div style="border-top:1px solid #1e2d4a;padding-top:16px;">
-        <label>Claude API Key <span class="text-xs" style="color:#6366f1;font-weight:normal;">(for AI agents)</span></label>
-        <div class="flex gap-2">
-          <input type="password" id="settingApiKey" class="input" placeholder="sk-ant-api03-...">
-          <button onclick="toggleApiKeyVisibility()" class="btn btn-secondary btn-sm" id="apiKeyToggle" type="button">
-            <i class="fas fa-eye"></i>
-          </button>
+      <!-- ═══════════ ADMIN-ONLY PLATFORM SETTINGS ═══════════ -->
+      <!-- Hidden for regular users. Admin sees + can override platform defaults. -->
+      <div id="adminSettingsSection" style="display:none;">
+        <div style="border-top:1px solid #fbbf24;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-shield-alt" style="color:#fbbf24;"></i>
+            <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Admin · Platform Config</span>
+          </div>
+          <div class="text-xs mb-3" style="color:#64748b;">
+            These credentials apply to ALL users of this deployment. Regular users don't see this section.
+          </div>
         </div>
-        <div class="text-xs mt-2" style="color:#4a6080;">
-          Your key is stored locally in your browser only. Get a key at console.anthropic.com.
-          <br>Note: Direct browser API calls may be restricted — use the Node.js webapp for reliable access.
+        <div>
+          <label>Claude API Key <span class="text-xs" style="color:#6366f1;font-weight:normal;">(platform key — you pay for AI)</span></label>
+          <div class="flex gap-2">
+            <input type="password" id="settingApiKey" class="input" placeholder="sk-ant-api03-... (or leave blank to use proxy env var)">
+            <button onclick="toggleApiKeyVisibility()" class="btn btn-secondary btn-sm" id="apiKeyToggle" type="button">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+          <div class="text-xs mt-2" style="color:#4a6080;">
+            If blank, the proxy uses its own ANTHROPIC_API_KEY env var. Get a key at console.anthropic.com.
+          </div>
         </div>
-      </div>
-      <div>
-        <label>Proxy URL (optional — for CORS-free Claude API access)</label>
-        <input type="text" id="settingProxy" class="input" placeholder="http://localhost:8080">
-        <div class="text-xs mt-1" style="color:#4a6080;">Run <code style="background:#141e33;padding:2px 6px;border-radius:4px;">python ../proxy/claude_proxy.py</code> locally, or leave blank.</div>
-      </div>
-      <div style="border-top:1px solid #1e2d4a;padding-top:16px;">
-        <div class="flex items-center justify-between mb-3">
-          <label style="margin:0;">☁️ Supabase Cloud Sync <span class="text-xs" style="color:#34d399;font-weight:normal;">(cross-browser sync)</span></label>
-          <button onclick="openModal('authModal')" class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);font-size:11px;padding:3px 10px;">Sign In / Up</button>
+        <div>
+          <label>Proxy URL</label>
+          <input type="text" id="settingProxy" class="input" placeholder="https://investiq-proxy.onrender.com">
+          <div class="text-xs mt-1" style="color:#4a6080;">Platform default loaded automatically.</div>
         </div>
-        <input type="text" id="settingSupabaseUrl" class="input mb-2" placeholder="https://xxxx.supabase.co">
-        <input type="password" id="settingSupabaseKey" class="input" placeholder="anon public key (eyJ...)">
-        <div class="text-xs mt-2" style="color:#4a6080;">
-          Get these from your <b style="color:#818cf8;">Supabase → Settings → API</b> page. Your data is stored in your own Supabase project.
+        <div>
+          <label>☁️ Supabase URL</label>
+          <input type="text" id="settingSupabaseUrl" class="input mb-2" placeholder="https://xxxx.supabase.co">
+          <label>Supabase anon key</label>
+          <input type="password" id="settingSupabaseKey" class="input" placeholder="eyJ...">
+          <div class="text-xs mt-2" style="color:#4a6080;">
+            Platform defaults loaded from <code style="background:#141e33;padding:2px 6px;border-radius:4px;">PLATFORM_CONFIG</code> in the code.
+          </div>
         </div>
       </div>
     </div>
@@ -1090,6 +1097,17 @@
 <!-- ============================================================ -->
 <script>
 
+// ═══════════════════════════════════════════════════════════════════════
+// PLATFORM CONFIG — managed by admin, baked in for all users.
+// Regular users never need to enter these. Admin can override in Settings.
+// The Supabase anon key is designed to be public; RLS enforces security.
+// ═══════════════════════════════════════════════════════════════════════
+const PLATFORM_CONFIG = {
+  supabaseUrl: 'https://szyclmouetbbigxexdrn.supabase.co',
+  supabaseKey: 'sb_publishable_C1kpO9njxnSS1Y9GWNSnHQ_pt7yt482',
+  proxyUrl:    'https://investiq-proxy.onrender.com'
+};
+
 // ===== CONFIG =====
 const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', AED:'د.إ', SGD:'S$', AUD:'A$' };
 const ASSET_COLORS = {
@@ -1104,12 +1122,27 @@ const CORS_PROXIES = [
 // ===== STATE =====
 let state = {
   portfolio: [],
-  settings: { name:'My Portfolio', currency:'NZD', claudeApiKey:'', proxyUrl:'', supabaseUrl:'', supabaseKey:'' },
+  settings: {
+    name: 'My Portfolio', currency: 'NZD',
+    claudeApiKey: '',
+    // Platform creds default to PLATFORM_CONFIG — user/admin can override
+    proxyUrl:    PLATFORM_CONFIG.proxyUrl,
+    supabaseUrl: PLATFORM_CONFIG.supabaseUrl,
+    supabaseKey: PLATFORM_CONFIG.supabaseKey
+  },
   marketData: { indices:{}, fx:{}, crypto:{}, commodities:{} },
   agentResults: null,
   allocMode: 'type',
   perfMode: 'value'
 };
+
+// Fill any empty platform creds with PLATFORM_CONFIG defaults.
+// Admin overrides (stored in localStorage) persist. New users get platform defaults.
+function applyPlatformDefaults() {
+  if (!state.settings.proxyUrl    && PLATFORM_CONFIG.proxyUrl)    state.settings.proxyUrl    = PLATFORM_CONFIG.proxyUrl;
+  if (!state.settings.supabaseUrl && PLATFORM_CONFIG.supabaseUrl) state.settings.supabaseUrl = PLATFORM_CONFIG.supabaseUrl;
+  if (!state.settings.supabaseKey && PLATFORM_CONFIG.supabaseKey) state.settings.supabaseKey = PLATFORM_CONFIG.supabaseKey;
+}
 
 // ===== SUPABASE =====
 let _supabase = null;
@@ -1468,6 +1501,7 @@ function loadState() {
       state.settings = { ...state.settings, ...(parsed.settings||{}) };
       state.agentResults = parsed.agentResults || null;
     }
+    applyPlatformDefaults();
   } catch(e) { console.warn('Failed to load state:', e); }
 }
 
@@ -2654,8 +2688,9 @@ Use the actual portfolio data to make this personal. Reference specific holdings
 };
 
 async function callClaude(agentKey, userMessage) {
-  const apiKey = state.settings.claudeApiKey;
-  if (!apiKey) throw new Error('No Claude API key — set it in Settings');
+  // API key is OPTIONAL now — the proxy falls back to its own env var.
+  // Only admins would supply a personal key to override.
+  const apiKey = state.settings.claudeApiKey || '';
 
   const def = AGENT_DEFS[agentKey];
   const body = JSON.stringify({
@@ -2667,14 +2702,15 @@ async function callClaude(agentKey, userMessage) {
 
   const headers = {
     'Content-Type': 'application/json',
-    'x-api-key': apiKey,
     'anthropic-version': '2023-06-01'
   };
+  if (apiKey) headers['x-api-key'] = apiKey; // only send if admin supplied one
 
-  const webappBase = (state.settings.proxyUrl || '').replace(/\/$/, '');
+  const webappBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/, '');
   const endpoints = [];
   if (webappBase) endpoints.push(webappBase + '/v1/messages');
-  endpoints.push('https://api.anthropic.com/v1/messages');
+  // Only try direct Anthropic if admin supplied a personal key (needs CORS + key)
+  if (apiKey) endpoints.push('https://api.anthropic.com/v1/messages');
 
   let lastError = null;
   for (const url of endpoints) {
@@ -2738,13 +2774,7 @@ async function runAgents() {
     return;
   }
 
-  const apiKey = state.settings.claudeApiKey;
-  if (!apiKey) {
-    document.getElementById('agentError').style.display = 'block';
-    document.getElementById('agentError').textContent = 'Please set your Claude API key in Settings first.';
-    return;
-  }
-
+  // API key no longer required — proxy has platform key. Admin override optional.
   document.getElementById('agentError').style.display = 'none';
   document.getElementById('runAgentsBtn').disabled = true;
   document.getElementById('runAgentsBtn').innerHTML = '<div class="spinner" style="width:14px;height:14px;margin-right:8px;display:inline-block;"></div>Running...';
@@ -3102,12 +3132,22 @@ function importCSV(e) {
 function populateSettingsForm() {
   document.getElementById('settingName').value = state.settings.name || '';
   document.getElementById('settingCurrency').value = state.settings.currency || 'NZD';
-  document.getElementById('settingApiKey').value = state.settings.claudeApiKey || '';
-  document.getElementById('settingProxy').value = state.settings.proxyUrl || '';
-  const urlEl = document.getElementById('settingSupabaseUrl');
-  const keyEl = document.getElementById('settingSupabaseKey');
-  if (urlEl) urlEl.value = state.settings.supabaseUrl || '';
-  if (keyEl) keyEl.value = state.settings.supabaseKey || '';
+
+  // Admin-only platform config — hidden for regular users
+  const adminSection = document.getElementById('adminSettingsSection');
+  if (adminSection) adminSection.style.display = _isAdmin ? 'block' : 'none';
+
+  // Only populate the admin inputs if they exist and are visible
+  if (_isAdmin) {
+    const apiKey = document.getElementById('settingApiKey');
+    const proxy  = document.getElementById('settingProxy');
+    const supUrl = document.getElementById('settingSupabaseUrl');
+    const supKey = document.getElementById('settingSupabaseKey');
+    if (apiKey) apiKey.value = state.settings.claudeApiKey || '';
+    if (proxy)  proxy.value  = state.settings.proxyUrl || '';
+    if (supUrl) supUrl.value = state.settings.supabaseUrl || '';
+    if (supKey) supKey.value = state.settings.supabaseKey || '';
+  }
 }
 
 async function proxyHealthCheck() {
@@ -3137,14 +3177,20 @@ async function proxyHealthCheck() {
 function saveSettings() {
   state.settings.name = document.getElementById('settingName').value || 'My Portfolio';
   state.settings.currency = document.getElementById('settingCurrency').value;
-  state.settings.claudeApiKey = document.getElementById('settingApiKey').value.trim();
-  state.settings.proxyUrl = document.getElementById('settingProxy').value.trim();
-  const urlEl = document.getElementById('settingSupabaseUrl');
-  const keyEl = document.getElementById('settingSupabaseKey');
-  if (urlEl) state.settings.supabaseUrl = urlEl.value.trim();
-  if (keyEl) state.settings.supabaseKey = keyEl.value.trim();
-  // Re-init Supabase client if credentials changed
-  initSupabase();
+
+  // Only admins can override platform creds
+  if (_isAdmin) {
+    const apiKey = document.getElementById('settingApiKey');
+    const proxy  = document.getElementById('settingProxy');
+    const supUrl = document.getElementById('settingSupabaseUrl');
+    const supKey = document.getElementById('settingSupabaseKey');
+    if (apiKey) state.settings.claudeApiKey = apiKey.value.trim();
+    if (proxy)  state.settings.proxyUrl     = proxy.value.trim()  || PLATFORM_CONFIG.proxyUrl;
+    if (supUrl) state.settings.supabaseUrl  = supUrl.value.trim() || PLATFORM_CONFIG.supabaseUrl;
+    if (supKey) state.settings.supabaseKey  = supKey.value.trim() || PLATFORM_CONFIG.supabaseKey;
+    initSupabase(); // re-init if credentials changed
+  }
+
   updateAuthUI();
   saveState();
   closeModal('settingsModal');
