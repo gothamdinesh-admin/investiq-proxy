@@ -878,6 +878,37 @@
         </div>
       </div>
 
+      <!-- Diagnostic Tools -->
+      <div class="card mb-6" style="overflow:hidden;">
+        <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
+          <div class="font-semibold text-sm flex items-center gap-2">
+            <i class="fas fa-stethoscope" style="color:#fbbf24;"></i>
+            Diagnostic Tools
+          </div>
+          <div class="text-xs neutral mt-1">One-click actions to test and heal the system.</div>
+        </div>
+        <div class="p-4 flex flex-wrap gap-2">
+          <button onclick="adminTestSupabase()" class="btn btn-sm btn-secondary">
+            <i class="fas fa-database mr-1"></i>Test Supabase R/W
+          </button>
+          <button onclick="adminTestProxy()" class="btn btn-sm btn-secondary">
+            <i class="fas fa-network-wired mr-1"></i>Test Proxy
+          </button>
+          <button onclick="adminHealDuplicates()" class="btn btn-sm" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">
+            <i class="fas fa-band-aid mr-1"></i>Scan & Fix Duplicates
+          </button>
+          <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
+            <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
+          </button>
+          <button onclick="adminClearCloudRow()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">
+            <i class="fas fa-trash-alt mr-1"></i>Reset Cloud Portfolio
+          </button>
+        </div>
+        <div id="adminToolOutput" class="px-4 pb-4" style="display:none;">
+          <pre id="adminToolOutputBox" class="mono text-xs" style="background:#0a1120;border:1px solid #1e2d4a;border-radius:6px;padding:12px;color:#94a3b8;max-height:240px;overflow-y:auto;white-space:pre-wrap;word-break:break-word;"></pre>
+        </div>
+      </div>
+
       <!-- User table -->
       <div class="card" style="overflow:hidden;">
         <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
@@ -1989,6 +2020,50 @@ function loadState() {
     }
     applyPlatformDefaults();
   } catch(e) { console.warn('Failed to load state:', e); }
+}
+
+// Self-healing duplicate check — runs on load + after any sync.
+// Detects accidental duplication (same symbol+platform appearing as multiple
+// rows in state.portfolio) and fixes in-place, then logs + saves the fix.
+// Returns the number of duplicates that were merged.
+function healDuplicates(silent = false) {
+  if (!state.portfolio?.length) return 0;
+  const seen = new Map();
+  let healed = 0;
+  const issues = [];
+
+  for (const h of state.portfolio) {
+    const key = `${(h.symbol||'').toUpperCase().trim()}::${(h.platform||'').toLowerCase().trim()}`;
+    if (!key || key === '::') continue;
+    if (!seen.has(key)) {
+      seen.set(key, h);
+      continue;
+    }
+    // Duplicate detected → merge lots using signature-based dedup
+    const prev = seen.get(key);
+    const existingSigs = new Set(
+      (prev.lots || []).map(l =>
+        `${l.date||''}::${(+l.quantity||0).toFixed(6)}::${(+l.price||0).toFixed(6)}`
+      )
+    );
+    const newLots = (h.lots || []).filter(l => {
+      const sig = `${l.date||''}::${(+l.quantity||0).toFixed(6)}::${(+l.price||0).toFixed(6)}`;
+      return !existingSigs.has(sig);
+    });
+    const droppedLots = (h.lots || []).length - newLots.length;
+    if (newLots.length) prev.lots = [...(prev.lots||[]), ...newLots];
+    healed++;
+    issues.push(`${key}: merged duplicate row (${newLots.length} new lot(s) kept, ${droppedLots} exact duplicate(s) dropped)`);
+  }
+
+  if (healed > 0) {
+    state.portfolio = [...seen.values()];
+    if (!silent) {
+      console.warn(`[self-heal] 🩹 Fixed ${healed} duplicate holding${healed>1?'s':''}:\n  • ${issues.join('\n  • ')}`);
+    }
+    try { saveState(); } catch(e) {}
+  }
+  return healed;
 }
 
 function saveState() {
@@ -4653,6 +4728,121 @@ function renderAdminTable(users) {
   }).join('');
 }
 
+// ── Diagnostic tools (admin only) ───────────────────────────────────
+function _adminLog(...parts) {
+  const box  = document.getElementById('adminToolOutputBox');
+  const wrap = document.getElementById('adminToolOutput');
+  if (wrap) wrap.style.display = 'block';
+  if (box) box.textContent += parts.join(' ') + '\n';
+  console.log('[admin-tool]', ...parts);
+}
+
+function _adminClearOutput() {
+  const box = document.getElementById('adminToolOutputBox');
+  if (box) box.textContent = '';
+}
+
+async function adminTestSupabase() {
+  _adminClearOutput();
+  _adminLog('🔍 Testing Supabase read/write…');
+  if (!_supabase || !_supaUser) return _adminLog('✗ Not signed in. Cannot test.');
+  try {
+    _adminLog('→ SELECT investiq_portfolios for current user…');
+    const t0 = Date.now();
+    const { data: r1, error: e1 } = await _supabase
+      .from('investiq_portfolios')
+      .select('user_id, updated_at')
+      .eq('user_id', _supaUser.id)
+      .maybeSingle();
+    if (e1) return _adminLog(`✗ Read failed: ${e1.message}`);
+    _adminLog(`✓ Read OK (${Date.now()-t0}ms). Row exists: ${!!r1}`);
+
+    _adminLog('→ SELECT profiles for current user…');
+    const { data: r2, error: e2 } = await _supabase
+      .from('profiles')
+      .select('id, email, is_admin, last_seen')
+      .eq('id', _supaUser.id)
+      .maybeSingle();
+    if (e2) return _adminLog(`✗ Profile read failed: ${e2.message}`);
+    _adminLog(`✓ Profile: ${r2?.email} · is_admin=${r2?.is_admin} · last_seen=${r2?.last_seen}`);
+
+    _adminLog('→ Testing is_admin() RPC…');
+    const { data: r3, error: e3 } = await _supabase.rpc('is_admin');
+    if (e3) return _adminLog(`✗ is_admin() RPC failed: ${e3.message}`);
+    _adminLog(`✓ is_admin() returned: ${r3}`);
+
+    _adminLog('→ Testing snapshot write…');
+    const testDate = new Date().toISOString().slice(0,10);
+    const { error: e4 } = await _supabase.from('investiq_snapshots').upsert({
+      user_id: _supaUser.id, snapshot_date: testDate,
+      total_value: 0, total_cost: 0, total_gain: 0, total_gain_pct: 0,
+      holdings_count: 0, currency: 'NZD', breakdown: { source: 'admin-test' }
+    }, { onConflict: 'user_id,snapshot_date' });
+    if (e4) return _adminLog(`✗ Snapshot write failed: ${e4.message}`);
+    _adminLog('✓ Snapshot write OK');
+
+    _adminLog('\n🎉 All Supabase tests passed. RLS is correctly configured.');
+  } catch(e) { _adminLog(`✗ Exception: ${e.message}`); }
+}
+
+async function adminTestProxy() {
+  _adminClearOutput();
+  const proxy = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  if (!proxy) return _adminLog('✗ No proxy URL set');
+  _adminLog(`🔍 Pinging ${proxy}/health …`);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(proxy + '/health', { signal: AbortSignal.timeout(15000) });
+    const j = await res.json().catch(() => null);
+    _adminLog(`✓ ${res.status} (${Date.now()-t0}ms): ${JSON.stringify(j)}`);
+  } catch(e) {
+    _adminLog(`✗ Proxy unreachable: ${e.message}`);
+    _adminLog('  (Render free tier sleeps after 15 min — the next request wakes it)');
+  }
+}
+
+function adminHealDuplicates() {
+  _adminClearOutput();
+  _adminLog('🩹 Scanning state.portfolio for duplicates…');
+  const keys = new Map();
+  state.portfolio.forEach(h => {
+    const k = `${(h.symbol||'').toUpperCase()}::${(h.platform||'').toLowerCase()}`;
+    keys.set(k, (keys.get(k)||0)+1);
+  });
+  const dups = [...keys].filter(([,c]) => c > 1);
+  if (!dups.length) {
+    _adminLog(`✓ No duplicates found (${state.portfolio.length} holdings, all unique keys)`);
+    return;
+  }
+  _adminLog(`Found ${dups.length} duplicate key(s):`);
+  dups.forEach(([k,c]) => _adminLog(`  • ${k} × ${c}`));
+  const healed = healDuplicates(true);
+  _adminLog(`\n✓ Healed ${healed} duplicate entries. Portfolio now has ${state.portfolio.length} unique holdings.`);
+  _adminLog('→ Saving corrected state to cloud…');
+  saveToSupabase().then(() => { _adminLog('✓ Pushed to Supabase'); renderAll(); });
+}
+
+async function adminForceReload() {
+  _adminClearOutput();
+  _adminLog('🔄 Force-reloading portfolio from Supabase…');
+  // Bypass the local-is-newer guard by clearing the local timestamp
+  delete state.settings.updatedAt;
+  localStorage.removeItem('investiq_updated_at');
+  const ok = await loadFromSupabase();
+  healDuplicates();
+  renderAll();
+  _adminLog(ok ? `✓ Reloaded. ${state.portfolio.length} holdings.` : '✗ Reload failed — see console.');
+}
+
+async function adminClearCloudRow() {
+  if (!confirm('Delete the cloud portfolio row? This wipes your cloud data. Local browser data is preserved.\n\nContinue?')) return;
+  _adminClearOutput();
+  _adminLog('🗑 Deleting cloud portfolio row…');
+  const { error } = await _supabase.from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
+  if (error) return _adminLog(`✗ Delete failed: ${error.message}`);
+  _adminLog('✓ Cloud row deleted. Your local data is intact. Next save will push it back up fresh.');
+}
+
 async function adminToggleAdmin(userId, makeAdmin) {
   if (!_supabase) return;
   if (!confirm(`${makeAdmin ? 'Grant' : 'Remove'} admin access for this user?`)) return;
@@ -4685,6 +4875,7 @@ async function init() {
   if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
 
   loadState();
+  healDuplicates();               // heal any dups that snuck into localStorage
   updateAdminDiagnostics();
 
   // Show auth gate immediately if Supabase is configured — before any async work.
@@ -4720,7 +4911,10 @@ async function init() {
         _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
         updateAuthUI();
         const loaded = await loadFromSupabase();
-        if (loaded) { renderAll(); }
+        if (loaded) {
+          healDuplicates();       // heal any dups that came from cloud
+          renderAll();
+        }
       } else {
         updateAuthUI();
       }
