@@ -142,11 +142,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             "Content-Type": "application/json",
         }
 
-        # Fetch accounts
-        req = urllib.request.Request(f"{AKAHU_API}/accounts", headers=headers)
+        def akahu_get(path):
+            req = urllib.request.Request(f"{AKAHU_API}{path}", headers=headers)
+            with urllib.request.urlopen(req, context=ctx, timeout=20) as r:
+                return json.loads(r.read())
+
+        # Fetch all accounts first
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
-                accounts_data = json.loads(r.read())
+            accounts_data = akahu_get("/accounts")
         except urllib.error.HTTPError as e:
             err = json.loads(e.read()) if e.fp else {}
             return self._json(e.code, {"error": err.get("message", f"Akahu error {e.code}")})
@@ -156,39 +159,123 @@ class ProxyHandler(BaseHTTPRequestHandler):
         accounts = accounts_data.get("items", [])
 
         holdings = []
+        cash_accounts = 0
+        investment_accounts = 0
+        securities_total = 0
+
         for acc in accounts:
             bal      = (acc.get("balance") or {})
             balance  = bal.get("current") or bal.get("available") or 0
             currency = bal.get("currency", "NZD")
             conn     = (acc.get("connection") or {}).get("name", "Akahu")
             atype    = acc.get("type", "")
+            atype_upper = atype.upper()
+            acc_id   = acc.get("_id", "")
             name     = acc.get("name") or acc.get("formatted_account") or conn
 
-            asset_type = (
-                "etf"   if any(x in atype.upper() for x in ["INVEST","PORTFOLIO","KIWISAVER"])
-                else "cash" if any(x in atype.upper() for x in ["SAVING","CHECKING","TERM","DEPOSIT"])
-                else "other"
-            )
+            is_investment = any(x in atype_upper for x in ["INVEST","PORTFOLIO","KIWISAVER","WEALTH","BROKER","SHARESIES","HATCH","STAKE"])
 
-            symbol = (conn[:3] + (acc.get("_id","")[-4:])).upper()
+            # ── INVESTMENT ACCOUNTS — fetch actual securities ──
+            if is_investment and acc_id:
+                try:
+                    holdings_data = akahu_get(f"/accounts/{acc_id}/holdings")
+                    items = holdings_data.get("items", [])
+                    for sec in items:
+                        instrument = sec.get("instrument", {}) or {}
+                        sec_symbol   = (instrument.get("code") or instrument.get("symbol") or sec.get("symbol") or "").upper().strip()
+                        sec_name     = instrument.get("name") or sec.get("name") or sec_symbol
+                        sec_qty      = float(sec.get("quantity") or 0)
+                        sec_avg_cost = float(sec.get("cost_basis") or sec.get("average_price") or sec.get("price") or 0)
+                        sec_cur_val  = float(sec.get("value") or sec.get("market_value") or 0)
+                        sec_currency = sec.get("currency") or instrument.get("currency") or "NZD"
+                        sec_type_raw = (instrument.get("type") or sec.get("type") or "stock").lower()
 
-            holdings.append({
-                "symbol":       symbol,
-                "name":         name,
-                "type":         asset_type,
-                "platform":     conn,
-                "quantity":     1,
-                "currency":     currency,
-                "purchasePrice":balance,
-                "currentPrice": balance,
-                "purchaseDate": (acc.get("created_at") or "")[:10],
-                "sector":       "Cash" if asset_type == "cash" else "Investment",
-                "country":      "NZ",
-                "notes":        f"Akahu sync — {atype} {acc.get('formatted_account','')}".strip(),
-            })
+                        # Map Akahu instrument types → our asset types
+                        if any(x in sec_type_raw for x in ["etf","fund","pie"]):
+                            sec_type = "etf"
+                        elif "crypto" in sec_type_raw:
+                            sec_type = "crypto"
+                        elif "bond" in sec_type_raw:
+                            sec_type = "bond"
+                        else:
+                            sec_type = "stock"
 
-        self._json(200, {"holdings": holdings, "accountCount": len(accounts)})
-        print(f"  ✓ Akahu: {len(accounts)} accounts synced")
+                        if not sec_symbol or sec_qty <= 0:
+                            continue
+
+                        # If we have current value but no avg cost, derive
+                        if not sec_avg_cost and sec_cur_val and sec_qty:
+                            sec_avg_cost = sec_cur_val / sec_qty
+
+                        cur_price = (sec_cur_val / sec_qty) if (sec_cur_val and sec_qty) else sec_avg_cost
+
+                        holdings.append({
+                            "symbol":       sec_symbol,
+                            "name":         sec_name,
+                            "type":         sec_type,
+                            "platform":     conn,
+                            "quantity":     sec_qty,
+                            "currency":     sec_currency.upper(),
+                            "purchasePrice":sec_avg_cost,
+                            "currentPrice": cur_price,
+                            "purchaseDate": (sec.get("acquired_at") or acc.get("created_at") or "")[:10],
+                            "sector":       instrument.get("sector") or "Investment",
+                            "country":      instrument.get("country") or "NZ",
+                            "notes":        f"Akahu sync — {conn} · {atype}",
+                        })
+                        securities_total += 1
+                    investment_accounts += 1
+                    # If no securities returned but account has balance, still record as a cash-equivalent
+                    if not items and balance:
+                        holdings.append(self._akahu_cash_holding(conn, name, atype, balance, currency, acc))
+                        cash_accounts += 1
+                    continue
+                except urllib.error.HTTPError as e:
+                    # Holdings endpoint not supported for this account → fall back to balance
+                    print(f"  ℹ Akahu: {conn} holdings not available ({e.code}), using balance")
+                except Exception as ex:
+                    print(f"  ℹ Akahu: {conn} holdings error ({ex}), using balance")
+
+            # ── BANK / CASH ACCOUNTS ──
+            holdings.append(self._akahu_cash_holding(conn, name, atype, balance, currency, acc))
+            cash_accounts += 1
+
+        summary = {
+            "holdings": holdings,
+            "accountCount": len(accounts),
+            "cashAccounts": cash_accounts,
+            "investmentAccounts": investment_accounts,
+            "securitiesFound": securities_total,
+        }
+        self._json(200, summary)
+        print(f"  ✓ Akahu: {len(accounts)} accounts · {securities_total} securities · {cash_accounts} cash")
+
+    def _akahu_cash_holding(self, conn, name, atype, balance, currency, acc):
+        atype_upper = (atype or "").upper()
+        if any(x in atype_upper for x in ["SAVING","CHECKING","TERM","DEPOSIT","TRANSACTION","CREDIT","LOAN","MORTGAGE"]):
+            asset_type = "cash"
+            sector = "Cash"
+        elif any(x in atype_upper for x in ["INVEST","PORTFOLIO","KIWISAVER","WEALTH"]):
+            asset_type = "etf"
+            sector = "Fund"
+        else:
+            asset_type = "other"
+            sector = "Other"
+        symbol = (conn[:3] + (acc.get("_id","")[-4:])).upper()
+        return {
+            "symbol":       symbol,
+            "name":         name,
+            "type":         asset_type,
+            "platform":     conn,
+            "quantity":     1,
+            "currency":     currency,
+            "purchasePrice":balance,
+            "currentPrice": balance,
+            "purchaseDate": (acc.get("created_at") or "")[:10],
+            "sector":       sector,
+            "country":      "NZ",
+            "notes":        f"Akahu sync — {atype} {acc.get('formatted_account','')}".strip(),
+        }
 
     # ── Yahoo Finance market data ────────────────────────────────
     def _fetch_market(self):

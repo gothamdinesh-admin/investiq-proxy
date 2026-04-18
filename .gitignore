@@ -1,0 +1,21 @@
+# Claude Code session data
+.claude/
+
+# Abandoned Next.js webapp — not deployed
+webapp/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Node
+node_modules/
