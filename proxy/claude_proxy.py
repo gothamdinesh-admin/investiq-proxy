@@ -1,6 +1,6 @@
 """
-InvestIQ — Local Proxy Server
-Handles all external API calls for the standalone dashboard, avoiding browser CORS restrictions.
+InvestIQ — Proxy Server (Render / cloud deployment)
+Handles all external API calls for the dashboard, avoiding browser CORS restrictions.
 
 Endpoints:
   POST /v1/messages          → Anthropic Claude API
@@ -9,11 +9,19 @@ Endpoints:
   GET  /api/market?symbols=  → Yahoo Finance portfolio prices
   GET  /health               → Health check
 
-Usage:
-  pip install requests
-  python proxy.py
+Required env vars on Render:
+  ANTHROPIC_API_KEY   — your Anthropic key (sk-ant-...)
+  PROXY_SECRET        — a random secret string (e.g. openssl rand -hex 32)
+                        Must match VITE_PROXY_SECRET / proxySecret in the frontend.
 
-Then in InvestIQ Settings set Proxy URL to: http://localhost:8080
+Optional env vars:
+  ALLOWED_ORIGIN      — your Netlify URL (default: *)
+  PORT                — port to listen on (default: 8080)
+
+Local dev:
+  pip install yfinance
+  ANTHROPIC_API_KEY=sk-ant-... PROXY_SECRET=dev python claude_proxy.py
+  Then set Proxy URL to http://localhost:8080 in InvestIQ Settings.
 """
 
 import json
@@ -26,10 +34,19 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta
 
 import os
-PORT = int(os.environ.get("PORT", 8080))
-HOST = "0.0.0.0"   # bind to all interfaces (required for Render/cloud hosting)
-ANTHROPIC_API = "https://api.anthropic.com"
-AKAHU_API     = "https://api.akahu.io/v1"
+from socketserver import ThreadingMixIn
+
+PORT           = int(os.environ.get("PORT", 8080))
+HOST           = "0.0.0.0"   # bind to all interfaces (required for Render/cloud hosting)
+ANTHROPIC_API  = "https://api.anthropic.com"
+AKAHU_API      = "https://api.akahu.io/v1"
+
+# Auth: every non-OPTIONS request must include X-Proxy-Secret matching this value.
+# Set PROXY_SECRET as an env var on Render. Use 'dev' locally for quick testing.
+PROXY_SECRET   = os.environ.get("PROXY_SECRET", "")
+
+# CORS: lock to your Netlify origin in production. Falls back to * for local dev.
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 
 ctx = ssl.create_default_context()
 
@@ -51,12 +68,28 @@ class ProxyHandler(BaseHTTPRequestHandler):
         print(f"  {fmt % args}")
 
     def send_cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", ALLOWED_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers",
-                         "Content-Type, x-api-key, anthropic-version, anthropic-beta, X-Akahu-App-Token, Authorization")
+                         "Content-Type, x-api-key, anthropic-version, anthropic-beta, "
+                         "X-Akahu-App-Token, Authorization, X-Proxy-Secret")
+
+    def _check_secret(self):
+        """Return True if the request is authorised, False (and send 403) if not.
+        Skips the check if PROXY_SECRET is not configured (local dev without env var).
+        """
+        if not PROXY_SECRET:
+            # No secret set — warn loudly but allow through (dev mode)
+            print("  ⚠  PROXY_SECRET not set — all requests allowed (not safe for production!)")
+            return True
+        incoming = self.headers.get("X-Proxy-Secret", "")
+        if incoming != PROXY_SECRET:
+            self._json(403, {"error": "Forbidden — invalid proxy secret"})
+            return False
+        return True
 
     def do_OPTIONS(self):
+        # OPTIONS preflight must always succeed (no secret check)
         self.send_response(204)
         self.send_cors()
         self.end_headers()
@@ -65,10 +98,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
 
+        # Health check is public — no secret required (used by keep-alive ping)
         if parsed.path == "/health":
             self._json(200, {"status": "ok", "service": "InvestIQ Proxy"})
+            return
 
-        elif parsed.path == "/api/market":
+        if not self._check_secret():
+            return
+
+        if parsed.path == "/api/market":
             symbols = params.get("symbols", [None])[0]
             if symbols:
                 self._fetch_prices(symbols.split(","))
@@ -78,6 +116,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if not self._check_secret():
+            return
         length = int(self.headers.get("Content-Length", 0))
         body   = self.rfile.read(length)
 
@@ -455,28 +495,39 @@ Currency: {payload.get('currency','NZD')}
         print(f"  ✗ {msg}")
 
 
+# Threading server — handles concurrent requests (multiple users / AI + price calls at once)
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True  # don't block shutdown waiting for in-flight requests
+
+
 if __name__ == "__main__":
-    server = HTTPServer((HOST, PORT), ProxyHandler)
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("  ⚠  ANTHROPIC_API_KEY not set — Claude calls will fail")
+    if not PROXY_SECRET:
+        print("  ⚠  PROXY_SECRET not set — proxy is open to anyone (dev mode)")
+    else:
+        print(f"  ✓  PROXY_SECRET configured ({len(PROXY_SECRET)} chars)")
+
+    server = ThreadedHTTPServer((HOST, PORT), ProxyHandler)
     print(f"""
-╔══════════════════════════════════════════════════════╗
-║   InvestIQ Proxy — All-in-one local API server       ║
-║                                                      ║
-║   Listening on  http://localhost:{PORT}                 ║
-║                                                      ║
-║   Handles:                                           ║
-║   • Anthropic Claude API  (AI agents)                ║
-║   • Akahu NZ Open Banking (ANZ, BNZ, Sharesies)      ║
-║   • Yahoo Finance         (live prices)              ║
-║                                                      ║
-║   Set Proxy URL in dashboard Settings:               ║
-║   http://localhost:{PORT}                               ║
-║                                                      ║
-║   To enable AI agents, set your API key first:       ║
-║   Windows: set ANTHROPIC_API_KEY=sk-ant-...          ║
-║   Then run: python proxy.py                          ║
-║                                                      ║
-║   Press Ctrl+C to stop                               ║
-╚══════════════════════════════════════════════════════╝
+╭──────────────────────────────────────────────────────╮
+│  InvestIQ Proxy — threaded, multi-user              │
+│                                                    │
+│  Listening on  http://0.0.0.0:{PORT:<5}               │
+│  Allowed origin: {ALLOWED_ORIGIN:<35} │
+│                                                    │
+│  Handles:                                          │
+│  • Anthropic Claude API  (AI agents)               │
+│  • Akahu NZ Open Banking (ANZ, BNZ, Sharesies)     │
+│  • Yahoo Finance         (live prices)             │
+│                                                    │
+│  Render env vars needed:                           │
+│    ANTHROPIC_API_KEY=sk-ant-...                     │
+│    PROXY_SECRET=<random string>                    │
+│    ALLOWED_ORIGIN=https://your-app.netlify.app     │
+│                                                    │
+│  Press Ctrl+C to stop                              │
+╰──────────────────────────────────────────────────────╯
 """)
     try:
         server.serve_forever()
