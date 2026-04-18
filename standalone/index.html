@@ -4172,11 +4172,21 @@ async function checkAdminStatus() {
     return;
   }
   try {
-    const { data } = await _supabase
+    // Ensure the user's profile row exists before checking admin state.
+    // Without this, first-time users can fail the select and never reach bootstrap.
+    await _supabase
+      .from('profiles')
+      .upsert(
+        { id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
+
+    const { data, error } = await _supabase
       .from('profiles')
       .select('is_admin')
       .eq('id', _supaUser.id)
-      .single();
+      .maybeSingle();
+    if (error) throw error;
     _isAdmin = !!(data?.is_admin);
 
     // ── Bootstrap: if NO admin exists yet, auto-promote the first signed-in user ──
@@ -4391,8 +4401,18 @@ async function init() {
         updateAuthUI();
       }
       // Listen for auth state changes (e.g. email confirm redirect)
-      _supabase.auth.onAuthStateChange((_event, session) => {
+      _supabase.auth.onAuthStateChange(async (_event, session) => {
         _supaUser = session?.user || null;
+        if (_supaUser) {
+          await checkAdminStatus();
+        } else {
+          _isAdmin = false;
+          const adminLink = document.getElementById('adminNavLink');
+          if (adminLink) adminLink.style.display = 'none';
+          const mobileAdminTab = document.getElementById('mobileAdminTab');
+          if (mobileAdminTab) mobileAdminTab.style.display = 'none';
+          updateAdminDiagnostics();
+        }
         updateAuthUI();
       });
     } catch(e) { console.warn('Supabase session check failed:', e); }
