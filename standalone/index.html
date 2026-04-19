@@ -680,7 +680,7 @@
           </button>
         </div>
         <div id="holdingsTableWrap">
-          <div class="table-header" style="grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
+          <div class="table-header" style="display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
             <span>Asset</span><span class="text-right">Price</span><span class="text-right">Value</span><span class="text-right">Return</span><span class="text-right">Weight</span><span class="text-right">Actions</span>
           </div>
           <div id="holdingsRows"></div>
@@ -3031,20 +3031,22 @@ function renderHoldingsTable(metrics) {
   }
 
   if (header) header.style.display = '';
+  // Small helper to escape HTML so odd chars in user data can't break the template
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   document.getElementById('holdingsRows').innerHTML = metrics.holdings.map(h => {
     const priceStr = h.currentPrice ? (sym + fmt(h.currentPrice)) : '–';
     const sign = h.gain >= 0 ? '+' : '';
     const gainCls = h.gain >= 0 ? 'pos' : 'neg';
     const badge = h.gain >= 0 ? 'badge-pos' : 'badge-neg';
     return `
-      <div class="table-row" style="grid-template-columns:${cols};" onclick="viewHolding('${h.id}')">
-        <div class="flex items-center gap-3">
-          <div style="width:36px;height:36px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">
-            ${(h.symbol||'?').slice(0,3).toUpperCase()}
+      <div class="table-row" style="display:grid;grid-template-columns:${cols};" onclick="viewHolding('${esc(h.id)}')">
+        <div class="flex items-center gap-3" style="min-width:0;">
+          <div style="width:36px;height:36px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">
+            ${esc((h.symbol||'?').slice(0,3).toUpperCase())}
           </div>
-          <div>
-            <div class="font-semibold text-sm">${h.symbol}</div>
-            <div class="text-xs neutral">${h.name || h.platform} &nbsp;<span class="${getTagClass(h.type)}">${h.type}</span></div>
+          <div style="min-width:0;overflow:hidden;">
+            <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.symbol)}</div>
+            <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(h.name || h.platform)} &nbsp;<span class="${getTagClass(h.type)}">${esc(h.type)}</span></div>
           </div>
         </div>
         <div class="text-right mono text-sm">${priceStr}</div>
@@ -3059,8 +3061,8 @@ function renderHoldingsTable(metrics) {
           </div>
         </div>
         <div class="text-right" onclick="event.stopPropagation()">
-          <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
-          <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+          <button onclick="editHolding('${esc(h.id)}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
+          <button onclick="deleteHolding('${esc(h.id)}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
         </div>
       </div>`;
   }).join('');
