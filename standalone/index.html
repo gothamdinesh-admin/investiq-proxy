@@ -348,6 +348,19 @@
     .overview-mobile-stat-value { font-size: 13px; color: #c8d6ef; font-weight: 600; }
     .overview-mobile-actions { display: flex; gap: 8px; }
 
+    /* Skeleton loaders */
+    @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+    .skeleton {
+      background: linear-gradient(90deg, #0f1729 0%, #1a2540 50%, #0f1729 100%);
+      background-size: 800px 100%;
+      animation: shimmer 1.6s infinite linear;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .skeleton-text { height: 14px; margin: 2px 0; }
+    .skeleton-title { height: 18px; margin: 4px 0; }
+    .skeleton-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px; gap: 12px; padding: 14px 16px; align-items: center; border-bottom: 1px solid #1a2540; }
+
     /* Sortable column headers */
     .sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
     .sortable:hover { color: #818cf8 !important; }
@@ -1096,6 +1109,9 @@
           </button>
           <button onclick="adminHealDuplicates()" class="btn btn-sm" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">
             <i class="fas fa-band-aid mr-1"></i>Scan & Fix Duplicates
+          </button>
+          <button onclick="adminFixTickers()" class="btn btn-sm" style="background:rgba(129,140,248,0.1);color:#818cf8;border:1px solid rgba(129,140,248,0.3);">
+            <i class="fas fa-magic mr-1"></i>Fix Crypto Tickers
           </button>
           <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
             <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
@@ -2506,6 +2522,26 @@ function parseCSVLine(line) {
   return result;
 }
 
+// Normalise common ticker aliases so Yahoo Finance can find them.
+// Without this, BTC/ETH/etc. return bogus prices (Yahoo has different symbols).
+const CRYPTO_ALIAS = {
+  'BTC':'BTC-USD', 'BITCOIN':'BTC-USD',
+  'ETH':'ETH-USD', 'ETHEREUM':'ETH-USD',
+  'SOL':'SOL-USD', 'ADA':'ADA-USD', 'XRP':'XRP-USD', 'DOGE':'DOGE-USD',
+  'DOT':'DOT-USD', 'AVAX':'AVAX-USD', 'MATIC':'MATIC-USD',
+  'LINK':'LINK-USD', 'LTC':'LTC-USD', 'BCH':'BCH-USD',
+  'BNB':'BNB-USD', 'ATOM':'ATOM-USD', 'SHIB':'SHIB-USD', 'TRX':'TRX-USD'
+};
+function normaliseSymbol(sym, type) {
+  if (!sym) return sym;
+  const upper = sym.toUpperCase().trim();
+  // If already has -USD suffix or a period (exchange suffix like AZN.L), leave it
+  if (upper.includes('-') || upper.includes('.')) return upper;
+  const isCrypto = (type || '').toLowerCase().includes('crypto');
+  if (CRYPTO_ALIAS[upper] && (isCrypto || upper.length <= 5)) return CRYPTO_ALIAS[upper];
+  return upper;
+}
+
 // Prevent double-fire of the file input (known browser quirk on some drag-drop flows)
 // and prevent Supabase from reloading stale data mid-import.
 let _importInProgress = false;
@@ -2607,7 +2643,7 @@ async function _importCSVImpl(event) {
     const rawSym = row[iSym]?.trim();
     if (!rawSym || rawSym === 'symbol' || rawSym === 'ticker') { skipped++; continue; }
 
-    const symbol   = rawSym.toUpperCase();
+    const symbol   = normaliseSymbol(rawSym.toUpperCase(), iTyp >= 0 ? (row[iTyp]||'').trim().toLowerCase() : '');
     const platform = iPlat >= 0 ? (row[iPlat]?.trim() || 'Imported') : 'Imported';
     const quantity = iQty  >= 0 ? (parseFloat(row[iQty])  || 0) : 0;
     // Compute price: direct column first, then derive from invested ÷ quantity
@@ -2962,6 +2998,7 @@ function renderAll() {
   renderPerformanceSection(metrics);
   renderQuickInsights(metrics);
   renderPlatformBreakdown(metrics);
+  refreshSidebarScore(metrics);
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
@@ -3040,16 +3077,26 @@ function renderSidebar(metrics) {
   document.getElementById('statPlatforms').textContent = new Set(metrics.holdings.map(h=>h.platform)).size;
   document.getElementById('statTypes').textContent = new Set(metrics.holdings.map(h=>h.type)).size;
 
-  const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
+  // Exclude holdings with suspiciously extreme gains from "best performer" — likely
+  // a pence-vs-pounds or wrong-ticker issue. 500% cap covers any real investor.
+  const REAL_RANGE = (gp) => Math.abs(gp) < 500;
+  const realGain = metrics.holdings.filter(h => REAL_RANGE(h.gainPct));
+  const suspicious = metrics.holdings.filter(h => !REAL_RANGE(h.gainPct));
+  const sorted = [...realGain].sort((a,b) => b.gainPct - a.gainPct);
   if (sorted.length) {
     const best = sorted[0];
     const worst = sorted[sorted.length-1];
     document.getElementById('statBest').textContent = `${best.symbol} (+${fmt(best.gainPct)}%)`;
-    // Only use red styling if the worst performer is actually negative
     const worstCls = worst.gainPct < 0 ? 'neg' : 'neutral';
     const worstSign = worst.gainPct >= 0 ? '+' : '';
     document.getElementById('statWorst').innerHTML = `<span class="${worstCls}">${worst.symbol} (${worstSign}${fmt(worst.gainPct)}%)</span>`;
+  } else if (metrics.holdings.length) {
+    // All holdings are in the suspicious range — data needs review
+    document.getElementById('statBest').innerHTML = `<span style="color:#fbbf24;">Data issues</span>`;
+    document.getElementById('statWorst').innerHTML = `<span style="color:#fbbf24;">review tickers</span>`;
   }
+  // Attach suspicious list to state so admin tools can surface them
+  state._suspiciousHoldings = suspicious;
 }
 
 function renderSummaryCards(metrics) {
@@ -3564,8 +3611,9 @@ function renderInsightsSection(results) {
   }
 }
 
-function updateScoreRing(score) {
+function updateScoreRing(score, source) {
   const circle = document.getElementById('scoreCircle');
+  if (!circle) return;
   const circumference = 201;
   const offset = circumference - (score / 100) * circumference;
   circle.style.strokeDashoffset = offset;
@@ -3573,7 +3621,31 @@ function updateScoreRing(score) {
   document.getElementById('scoreNum').textContent = score;
   document.getElementById('scoreNum').style.color = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
   document.getElementById('scoreLabel').textContent = score >= 70 ? 'Healthy' : score >= 40 ? 'Moderate' : 'Needs Work';
-  document.getElementById('scoreHint').textContent = 'Based on AI analysis';
+  document.getElementById('scoreHint').textContent = source || 'Based on AI analysis';
+}
+
+// Update the sidebar score based on whichever signal is available:
+// AI agents (if run) > local diversification calc > empty
+function refreshSidebarScore(metrics) {
+  const aiScore = state.agentResults?.portfolioScore;
+  if (aiScore != null) {
+    updateScoreRing(aiScore, 'AI agent analysis');
+    return;
+  }
+  const divScore = calcDiversificationScore(metrics);
+  if (divScore != null) {
+    updateScoreRing(divScore, 'Diversification score · run AI for deeper analysis');
+    return;
+  }
+  // No holdings yet — show dash
+  const num = document.getElementById('scoreNum');
+  const label = document.getElementById('scoreLabel');
+  const hint = document.getElementById('scoreHint');
+  const circle = document.getElementById('scoreCircle');
+  if (num) num.textContent = '–';
+  if (label) label.textContent = 'Add holdings';
+  if (hint) hint.textContent = 'to see your score';
+  if (circle) { circle.style.strokeDashoffset = 201; }
 }
 
 function formatMarkdown(text) {
@@ -4554,20 +4626,37 @@ function renderDetailedHoldings(holdings, totalValue) {
     const liveTag = haslive
       ? `<span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>`
       : '<span style="font-size:10px;color:#4a6080;margin-left:4px;">live pending</span>';
+    // Build a rich tooltip with lot breakdown + FX info
+    const lotsInfo = (h.lots && h.lots.length)
+      ? h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${l.price ? sym+fmt(l.price*h.fxRate) : '?'} ${l.date ? '('+l.date+')' : ''}`).join('\n')
+      : '  (no lot data)';
+    const nativeSym = CURRENCY_SYMBOLS[h.currency||'USD'] || '$';
+    const tipText = `${h.symbol} — ${h.name || h.platform}
+Type: ${h.type}${h.sector ? ' · '+h.sector : ''}${h.country ? ' · '+h.country : ''}
+
+Cost basis: ${sym}${fmt(h.costBasis)} (${h.quantity.toFixed(4)} × ${sym}${fmt(h.avgBuyPrice)})
+Market value: ${sym}${fmt(h.currentValue)}
+P&L: ${h.gain>=0?'+':''}${sym}${fmt(Math.abs(h.gain))} (${h.gain>=0?'+':''}${fmt(h.gainPct)}%)
+
+Lots (native ${h.currency || 'USD'}):
+${h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${nativeSym}${(+l.price).toFixed(4)}${l.date ? ' ('+l.date+')' : ''}`).join('\n')}
+
+FX rate ${h.currency || 'USD'} → ${state.settings.currency || 'NZD'}: ${(h.fxRate||1).toFixed(4)}
+${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct.toFixed(2)+'%' : ''}`;
     return `
-    <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive ? dayColor : '#1e2d4a'};" onclick="viewHolding('${h.id}')">
-      <div class="flex items-center gap-3">
-        <div style="width:32px;height:32px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">
+    <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive ? dayColor : '#1e2d4a'};" onclick="viewHolding('${h.id}')" title="${tipText.replace(/"/g,'&quot;')}">
+      <div class="flex items-center gap-3" style="min-width:0;">
+        <div style="width:32px;height:32px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">
           ${(h.symbol||'?').slice(0,3)}
         </div>
-        <div>
-          <div class="font-semibold text-sm">${h.symbol} <span class="text-xs neutral">${h.platform}</span></div>
+        <div style="min-width:0;overflow:hidden;">
+          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.symbol} <span class="text-xs neutral">${h.platform}</span></div>
           <div style="display:flex;align-items:center;">${liveTag}</div>
         </div>
       </div>
       <div class="text-right mono text-sm">${Number(h.quantity).toFixed(4)}</div>
       <div class="text-right mono text-sm">${sym}${fmt(h.avgBuyPrice ?? h.buyPrice ?? h.purchasePrice)}</div>
-      <div class="text-right mono text-sm" style="color:#94a3b8;" title="Avg cost × units = amount invested">${sym}${fmt(h.costBasis)}</div>
+      <div class="text-right mono text-sm" style="color:#94a3b8;">${sym}${fmt(h.costBasis)}</div>
       <div class="text-right mono text-sm" style="color:${haslive?(dayPct>=0?'#34d399':'#f87171'):'inherit'};">${sym}${fmt(h.currentPrice)}</div>
       <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
       <div class="text-right">
@@ -4575,8 +4664,8 @@ function renderDetailedHoldings(holdings, totalValue) {
         ${haslive ? `<div class="text-xs" style="color:${dayColor};">${daySign}${sym}${Math.abs(dayAmt).toFixed(2)} today</div>` : ''}
       </div>
       <div class="text-right" onclick="event.stopPropagation()">
-        <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1"><i class="fas fa-edit"></i></button>
-        <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+        <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
+        <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
       </div>
     </div>`;
   }).join('');
@@ -5536,6 +5625,34 @@ async function adminForceReload() {
   _adminLog(ok ? `✓ Reloaded. ${state.portfolio.length} holdings.` : '✗ Reload failed — see console.');
 }
 
+function adminFixTickers() {
+  _adminClearOutput();
+  _adminLog('🔍 Scanning holdings for ticker aliases that need fixing…');
+  const changes = [];
+  state.portfolio.forEach(h => {
+    const newSym = normaliseSymbol(h.symbol, h.type);
+    if (newSym !== h.symbol) {
+      changes.push({ id: h.id, from: h.symbol, to: newSym });
+      h.symbol = newSym;
+      h.currentPrice = null;  // force re-fetch with corrected ticker
+      h.dayChange = null;
+      h.dayChangePct = null;
+    }
+  });
+  if (!changes.length) {
+    _adminLog('✓ All tickers already use Yahoo-compatible symbols.');
+    return;
+  }
+  _adminLog(`Fixed ${changes.length} ticker(s):`);
+  changes.forEach(c => _adminLog(`  • ${c.from}  →  ${c.to}`));
+  saveState();
+  _adminLog('\n→ Refreshing prices with corrected tickers…');
+  refreshPortfolioPrices().then(() => {
+    renderAll();
+    _adminLog('✓ Prices refreshed. Totals should now be correct.');
+  });
+}
+
 async function adminClearCloudRow() {
   if (!confirm('Delete the cloud portfolio row? This wipes your cloud data. Local browser data is preserved.\n\nContinue?')) return;
   _adminClearOutput();
@@ -5571,6 +5688,28 @@ function timeSince(date) {
 }
 
 // ===== INIT =====
+function showSkeletons() {
+  // Only show skeletons when we have no data yet — otherwise user sees real data
+  if (state.portfolio.length) return;
+  const el = document.getElementById('holdingsDetailed');
+  if (el) {
+    el.innerHTML = Array(3).fill(0).map(() => `
+      <div class="skeleton-row">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="skeleton" style="width:32px;height:32px;border-radius:8px;"></div>
+          <div style="flex:1;"><div class="skeleton skeleton-title" style="width:60%;"></div><div class="skeleton skeleton-text" style="width:40%;"></div></div>
+        </div>
+        <div class="skeleton skeleton-text" style="width:60%;justify-self:end;"></div>
+        <div class="skeleton skeleton-text" style="width:70%;justify-self:end;"></div>
+        <div class="skeleton skeleton-text" style="width:60%;justify-self:end;"></div>
+        <div class="skeleton skeleton-text" style="width:70%;justify-self:end;"></div>
+        <div class="skeleton skeleton-text" style="width:70%;justify-self:end;"></div>
+        <div class="skeleton skeleton-text" style="width:50%;justify-self:end;"></div>
+        <div></div>
+      </div>`).join('');
+  }
+}
+
 async function init() {
   // Default CSV import date picker to today
   const dateEl = document.getElementById('csvImportDate');
@@ -5579,6 +5718,7 @@ async function init() {
   loadState();
   healDuplicates();               // heal any dups that snuck into localStorage
   updateAdminDiagnostics();
+  showSkeletons();                // show placeholders until real data renders
 
   // Show auth gate immediately if Supabase is configured — before any async work.
   // This prevents the app from flashing in briefly before the gate appears.
