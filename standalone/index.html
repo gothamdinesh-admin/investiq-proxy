@@ -171,19 +171,26 @@
       .grid.grid-cols-1.lg\:grid-cols-3,
       .grid.grid-cols-1.lg\:grid-cols-2 { grid-template-columns: 1fr !important; }
 
-      /* Holdings table — show only essential columns, scroll horizontally */
-      #holdingsTableWrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      .table-header[style*="grid-template-columns"],
-      .table-row[style*="grid-template-columns"] {
+      /* Holdings tables — allow horizontal scroll rather than collapsing columns.
+         This is safer than force-overriding grid-template-columns with !important,
+         which used to hit the desktop Holdings table when the window was narrower
+         than 768px and produced the 'columns stacked vertically' bug. */
+      #holdingsTableWrap,
+      #holdingsDetailed,
+      #section-holdings .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      /* Only mobile-compress the Overview holdings table (uses #holdingsRows only).
+         Leave the detailed Holdings table alone — user can scroll horizontally. */
+      #section-overview .table-header[style*="grid-template-columns"],
+      #section-overview #holdingsRows .table-row[style*="grid-template-columns"] {
         grid-template-columns: 2fr 1fr 1fr 80px !important;
       }
-      /* Hide non-essential columns (3rd, 4th, 5th of 8) using nth-child */
-      .table-header > *:nth-child(3),
-      .table-header > *:nth-child(4),
-      .table-header > *:nth-child(5),
-      .table-row > *:nth-child(3),
-      .table-row > *:nth-child(4),
-      .table-row > *:nth-child(5) { display: none !important; }
+      /* Hide non-essential columns in Overview only */
+      #section-overview .table-header > *:nth-child(3),
+      #section-overview .table-header > *:nth-child(4),
+      #section-overview .table-header > *:nth-child(5),
+      #section-overview #holdingsRows .table-row > *:nth-child(3),
+      #section-overview #holdingsRows .table-row > *:nth-child(4),
+      #section-overview #holdingsRows .table-row > *:nth-child(5) { display: none !important; }
 
       /* Mobile holdings overview: use dedicated card layout instead of table hacks */
       #section-overview .card.mb-6 { overflow: hidden; }
@@ -2183,23 +2190,24 @@ function loadState() {
 }
 
 // Self-healing duplicate check — runs on load + after any sync.
-// Detects accidental duplication (same symbol+platform appearing as multiple
-// rows in state.portfolio) and fixes in-place, then logs + saves the fix.
-// Returns the number of duplicates that were merged.
+// TWO passes:
+//   Pass 1: merge duplicate HOLDINGS (same symbol+platform appearing twice+)
+//   Pass 2: within each holding, collapse duplicate LOTS (same qty+price even
+//           if dates differ by < 7 days — catches the pre-fix cloud state
+//           where daily sync accumulated near-identical lots with different
+//           auto-assigned dates, which was the root cause of value doubling).
 function healDuplicates(silent = false) {
   if (!state.portfolio?.length) return 0;
   const seen = new Map();
   let healed = 0;
+  let lotsRemoved = 0;
   const issues = [];
 
+  // ─── Pass 1: merge duplicate holdings ───
   for (const h of state.portfolio) {
     const key = `${(h.symbol||'').toUpperCase().trim()}::${(h.platform||'').toLowerCase().trim()}`;
     if (!key || key === '::') continue;
-    if (!seen.has(key)) {
-      seen.set(key, h);
-      continue;
-    }
-    // Duplicate detected → merge lots using signature-based dedup
+    if (!seen.has(key)) { seen.set(key, h); continue; }
     const prev = seen.get(key);
     const existingSigs = new Set(
       (prev.lots || []).map(l =>
@@ -2213,17 +2221,51 @@ function healDuplicates(silent = false) {
     const droppedLots = (h.lots || []).length - newLots.length;
     if (newLots.length) prev.lots = [...(prev.lots||[]), ...newLots];
     healed++;
-    issues.push(`${key}: merged duplicate row (${newLots.length} new lot(s) kept, ${droppedLots} exact duplicate(s) dropped)`);
+    issues.push(`${key}: duplicate row merged (${newLots.length} new lot(s) kept, ${droppedLots} exact duplicate(s) dropped)`);
   }
 
-  if (healed > 0) {
+  // ─── Pass 2: within each holding, collapse near-duplicate lots ───
+  // Same (quantity rounded) + same (price rounded) → keep only the most
+  // recent lot. Catches pre-fix cloud state where every import added a new
+  // "sync adjustment" lot with today's date.
+  const SEVEN_DAYS_MS = 7*24*60*60*1000;
+  for (const h of seen.values()) {
+    if (!h.lots || h.lots.length < 2) continue;
+    // Group lots by (qty, price) signature — date excluded so near-dupes cluster
+    const groups = new Map();
+    for (const lot of h.lots) {
+      const qty = (+lot.quantity || 0).toFixed(4);
+      const price = (+lot.price || 0).toFixed(4);
+      const g = `${qty}::${price}`;
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(lot);
+    }
+    const cleanedLots = [];
+    let removedHere = 0;
+    for (const [g, lots] of groups.entries()) {
+      if (lots.length === 1) { cleanedLots.push(lots[0]); continue; }
+      // Multiple lots with identical qty+price → probably pre-fix duplicates.
+      // Keep the newest one only.
+      lots.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+      cleanedLots.push(lots[0]);
+      removedHere += lots.length - 1;
+      const key = `${(h.symbol||'').toUpperCase()}::${(h.platform||'').toLowerCase()}`;
+      issues.push(`${key}: collapsed ${lots.length} near-duplicate lots (qty=${lots[0].quantity}, price=${lots[0].price}) → kept newest (${lots[0].date})`);
+    }
+    if (removedHere > 0) {
+      h.lots = cleanedLots;
+      lotsRemoved += removedHere;
+    }
+  }
+
+  if (healed > 0 || lotsRemoved > 0) {
     state.portfolio = [...seen.values()];
     if (!silent) {
-      console.warn(`[self-heal] 🩹 Fixed ${healed} duplicate holding${healed>1?'s':''}:\n  • ${issues.join('\n  • ')}`);
+      console.warn(`[self-heal] 🩹 Fixed ${healed} duplicate holding${healed!==1?'s':''} + collapsed ${lotsRemoved} near-duplicate lot${lotsRemoved!==1?'s':''}:\n  • ${issues.join('\n  • ')}`);
     }
     try { saveState(); } catch(e) {}
   }
-  return healed;
+  return healed + lotsRemoved;
 }
 
 function saveState() {
