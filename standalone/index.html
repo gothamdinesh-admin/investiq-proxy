@@ -3438,10 +3438,17 @@ function formatMarkdown(text) {
 //   haiku  → fast, structured, data-crunching tasks
 //   sonnet → balanced reasoning, market analysis
 //   opus   → deep synthesis, strategic advice
+// ─── AGENT DEFINITIONS ───
+// model:       used when aiProvider='claude' (routed via our proxy)
+// modelOpenAI: used when aiProvider='openai-compatible' (LM Studio / Ollama).
+//              LM Studio ignores this string and uses whichever model is loaded,
+//              but we keep it as a placeholder so the request is well-formed.
+//              Override in admin settings if using OpenRouter / Together etc.
 const AGENT_DEFS = {
   portfolio: {
     label: '📊 Portfolio Health',
-    model: 'claude-haiku-4-5',          // fast scorer — pure data analysis
+    model: 'claude-haiku-4-5',
+    modelOpenAI: 'local-model',
     maxTokens: 800,
     system: `You are a portfolio health specialist. Analyze the provided portfolio data for:
 1. Diversification quality (asset types, sectors, geographies)
@@ -3453,7 +3460,8 @@ Then give 3-4 specific bullet observations about these actual holdings. Be conci
   },
   market: {
     label: '🌍 Market Impact',
-    model: 'claude-sonnet-4-5',         // needs real market knowledge + reasoning
+    model: 'claude-sonnet-4-5',
+    modelOpenAI: 'local-model',
     maxTokens: 800,
     system: `You are a global macro analyst. Given the portfolio and current market data:
 1. Identify the top 3 global market factors affecting THIS specific portfolio right now
@@ -3464,7 +3472,8 @@ Reference real market dynamics. Be specific to the actual tickers listed. Under 
   },
   opportunity: {
     label: '🔭 Opportunity Scout',
-    model: 'claude-sonnet-4-5',         // creative gap analysis needs reasoning
+    model: 'claude-sonnet-4-5',
+    modelOpenAI: 'local-model',
     maxTokens: 800,
     system: `You are a strategic investment opportunity analyst. Based on the portfolio:
 1. Identify 2-3 specific gaps — sectors, geographies, or asset classes underrepresented
@@ -3475,7 +3484,8 @@ Be concrete. Suggest real tickers where possible. Consider the investor is NZ-ba
   },
   advisor: {
     label: '💼 Senior Advisor',
-    model: 'claude-opus-4-5',           // synthesis + strategy → best model
+    model: 'claude-opus-4-5',
+    modelOpenAI: 'local-model',
     maxTokens: 1200,
     system: `You are a senior personal financial advisor. Your specialist team has produced:
 - A Portfolio Health analysis
