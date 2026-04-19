@@ -5304,23 +5304,54 @@ async function adminTestProxy() {
 
 function adminHealDuplicates() {
   _adminClearOutput();
-  _adminLog('🩹 Scanning state.portfolio for duplicates…');
+  _adminLog('🩹 Scanning state.portfolio for duplicates…\n');
+
+  // Check BOTH passes — duplicate holdings AND duplicate lots within holdings
   const keys = new Map();
   state.portfolio.forEach(h => {
     const k = `${(h.symbol||'').toUpperCase()}::${(h.platform||'').toLowerCase()}`;
     keys.set(k, (keys.get(k)||0)+1);
   });
-  const dups = [...keys].filter(([,c]) => c > 1);
-  if (!dups.length) {
-    _adminLog(`✓ No duplicates found (${state.portfolio.length} holdings, all unique keys)`);
+  const dupHoldings = [...keys].filter(([,c]) => c > 1);
+
+  // Pass-2 preview: holdings where multiple lots share (qty, price)
+  const dupLots = [];
+  let suspiciousLotCount = 0;
+  state.portfolio.forEach(h => {
+    if (!h.lots || h.lots.length < 2) return;
+    const groups = new Map();
+    h.lots.forEach(l => {
+      const g = `${(+l.quantity||0).toFixed(4)}::${(+l.price||0).toFixed(4)}`;
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(l);
+    });
+    for (const [g, lots] of groups) {
+      if (lots.length > 1) {
+        const key = `${h.symbol}::${h.platform}`;
+        dupLots.push({ key, group: g, count: lots.length, dates: lots.map(l=>l.date||'(no date)') });
+        suspiciousLotCount += lots.length - 1;
+      }
+    }
+  });
+
+  _adminLog(`Pass 1 — duplicate holdings: ${dupHoldings.length === 0 ? 'none' : dupHoldings.length + ' found'}`);
+  dupHoldings.forEach(([k,c]) => _adminLog(`  • ${k} × ${c}`));
+  _adminLog(`\nPass 2 — near-duplicate lots within holdings: ${dupLots.length === 0 ? 'none' : dupLots.length + ' clusters, ' + suspiciousLotCount + ' suspicious lot(s)'}`);
+  dupLots.slice(0, 15).forEach(d => {
+    _adminLog(`  • ${d.key}: ${d.count} lots with qty+price "${d.group}" (dates: ${d.dates.join(', ')})`);
+  });
+  if (dupLots.length > 15) _adminLog(`  … and ${dupLots.length - 15} more`);
+
+  if (!dupHoldings.length && !dupLots.length) {
+    _adminLog(`\n✓ Clean! ${state.portfolio.length} holdings, no duplicates at any level.`);
     return;
   }
-  _adminLog(`Found ${dups.length} duplicate key(s):`);
-  dups.forEach(([k,c]) => _adminLog(`  • ${k} × ${c}`));
-  const healed = healDuplicates(true);
-  _adminLog(`\n✓ Healed ${healed} duplicate entries. Portfolio now has ${state.portfolio.length} unique holdings.`);
+
+  _adminLog(`\n→ Running heal (collapsing duplicates)…`);
+  const healed = healDuplicates(false);
+  _adminLog(`✓ Healed ${healed} total issues. Portfolio now has ${state.portfolio.length} unique holdings.`);
   _adminLog('→ Saving corrected state to cloud…');
-  saveToSupabase().then(() => { _adminLog('✓ Pushed to Supabase'); renderAll(); });
+  saveToSupabase().then(() => { _adminLog('✓ Pushed to Supabase'); renderAll(); updateTicker(); });
 }
 
 async function adminForceReload() {
