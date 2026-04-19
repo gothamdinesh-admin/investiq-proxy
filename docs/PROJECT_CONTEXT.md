@@ -123,9 +123,9 @@ All values are FX-converted into `state.settings.currency` (default NZD).
 
 ---
 
-## 5. What's implemented (as of 2026-04-18)
+## 5. What's implemented (as of 2026-04-18, late-night build)
 
-- [x] Standalone dashboard on Netlify with dark UI, 5 sections (Overview/Holdings/Performance/Market/Insights)
+- [x] Standalone dashboard on Netlify with dark UI, 8 sections (Overview/Holdings/Performance/Market/Insights/Watchlist/NZ Tax/Admin)
 - [x] Python proxy deployed to Render (`claude_proxy.py`) — auto keep-alive ping every 14 min to prevent sleep
 - [x] Live Yahoo Finance prices via `yfinance` bulk download
 - [x] NZD as default base currency, FX auto-conversion via USDNZD=X etc.
@@ -139,8 +139,18 @@ All values are FX-converted into `state.settings.currency` (default NZD).
 - [x] Admin panel — nav link visible only to `is_admin` users; shows all users, holdings count, role toggles, delete
 - [x] Multi-agent AI: portfolio (Haiku) + market (Sonnet) + opportunity (Sonnet) in parallel, then advisor (Opus) synthesiser
 - [x] JSON backup/restore for portability
-- [x] Ticker bar — slowed to 120s + pause on hover
+- [x] Portfolio Pulse strip (replaced scrolling market ticker — shows YOUR top movers)
 - [x] Proxy status dot in header (green = online, red = down)
+- [x] Admin badge visible in header
+- [x] Watchlist feature — track tickers without owning
+- [x] NZ FIF tax check with FDR method estimate
+- [x] Onboarding wizard for new signups (4 paths: CSV / manual / demo / skip)
+- [x] Demo data loader (5 sample NZ-investor holdings)
+- [x] Self-healing duplicate check on init + admin diagnostic tools
+- [x] Cache staleness guard (local-newer-than-cloud protection)
+- [x] Defensive dedup in saveToSupabase — never writes dup keys to cloud
+- [x] LM Studio / OpenAI-compatible AI provider support (admin-configurable)
+- [x] Snapshot-on-import with custom date for historical backfill
 
 ## 6. What's pending / known issues
 
