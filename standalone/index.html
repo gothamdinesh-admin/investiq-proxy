@@ -348,6 +348,12 @@
     .overview-mobile-stat-value { font-size: 13px; color: #c8d6ef; font-weight: 600; }
     .overview-mobile-actions { display: flex; gap: 8px; }
 
+    /* Sortable column headers */
+    .sortable { cursor: pointer; user-select: none; transition: color 0.15s; }
+    .sortable:hover { color: #818cf8 !important; }
+    .sort-icon { font-size: 9px; opacity: 0.5; margin-left: 4px; }
+    .sortable.active .sort-icon { opacity: 1; color: #818cf8; }
+
     /* Toast notifications */
     @keyframes toastIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     @keyframes toastOut { to { transform: translateX(400px); opacity: 0; } }
@@ -794,9 +800,25 @@
           </button>
         </div>
       </div>
+      <!-- Search / filter bar -->
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center gap-2 flex-1" style="background:#0f1729;border:1px solid #1e2d4a;border-radius:8px;padding:6px 12px;">
+          <i class="fas fa-search" style="color:#4a6080;font-size:12px;"></i>
+          <input type="text" id="holdingsSearch" placeholder="Search tickers, names, platforms, types…" oninput="renderAll()" style="background:none;border:none;outline:none;color:#c8d6ef;font-size:13px;width:100%;">
+          <button id="holdingsSearchClear" onclick="document.getElementById('holdingsSearch').value='';renderAll();" style="background:none;border:none;color:#4a6080;cursor:pointer;display:none;" title="Clear"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="text-xs neutral" id="holdingsFilterCount" style="min-width:80px;text-align:right;"></div>
+      </div>
       <div class="card">
-        <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;">
-          <span>Asset</span><span class="text-right">Units</span><span class="text-right">Avg Cost</span><span class="text-right">Invested</span><span class="text-right">Current Price</span><span class="text-right">Mkt Value</span><span class="text-right">P&L</span><span class="text-right">Actions</span>
+        <div class="table-header" id="holdingsDetailedHeader" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;">
+          <span class="sortable" onclick="sortHoldings('symbol')">Asset <i class="fas fa-sort sort-icon" data-col="symbol"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('quantity')">Units <i class="fas fa-sort sort-icon" data-col="quantity"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('avgBuyPrice')">Avg Cost <i class="fas fa-sort sort-icon" data-col="avgBuyPrice"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('costBasis')">Invested <i class="fas fa-sort sort-icon" data-col="costBasis"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('currentPrice')">Current Price <i class="fas fa-sort sort-icon" data-col="currentPrice"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('currentValue')">Mkt Value <i class="fas fa-sort sort-icon" data-col="currentValue"></i></span>
+          <span class="text-right sortable" onclick="sortHoldings('gainPct')">P&L <i class="fas fa-sort sort-icon" data-col="gainPct"></i></span>
+          <span class="text-right">Actions</span>
         </div>
         <div id="holdingsDetailed"></div>
       </div>
@@ -4457,13 +4479,69 @@ function renderEmptyHoldings() {
   </div>`;
 }
 
+// Sort state (session-only, not persisted)
+let _sortColumn = null;
+let _sortDir = 'desc'; // 'asc' or 'desc'
+
+function sortHoldings(col) {
+  if (_sortColumn === col) {
+    _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _sortColumn = col;
+    _sortDir = col === 'symbol' ? 'asc' : 'desc';
+  }
+  // Update sort icons
+  document.querySelectorAll('.sort-icon').forEach(i => {
+    i.className = 'fas fa-sort sort-icon';
+    i.parentElement?.classList.remove('active');
+  });
+  const activeIcon = document.querySelector(`.sort-icon[data-col="${col}"]`);
+  if (activeIcon) {
+    activeIcon.className = _sortDir === 'asc' ? 'fas fa-sort-up sort-icon' : 'fas fa-sort-down sort-icon';
+    activeIcon.parentElement?.classList.add('active');
+  }
+  renderAll();
+}
+
+function applyHoldingsFilter(holdings) {
+  const q = (document.getElementById('holdingsSearch')?.value || '').trim().toLowerCase();
+  const clearBtn = document.getElementById('holdingsSearchClear');
+  if (clearBtn) clearBtn.style.display = q ? '' : 'none';
+  let filtered = holdings;
+  if (q) {
+    filtered = holdings.filter(h => {
+      return (h.symbol||'').toLowerCase().includes(q)
+          || (h.name||'').toLowerCase().includes(q)
+          || (h.platform||'').toLowerCase().includes(q)
+          || (h.type||'').toLowerCase().includes(q)
+          || (h.sector||'').toLowerCase().includes(q)
+          || (h.country||'').toLowerCase().includes(q);
+    });
+  }
+  // Apply sort
+  if (_sortColumn) {
+    const col = _sortColumn, dir = _sortDir === 'asc' ? 1 : -1;
+    filtered = [...filtered].sort((a, b) => {
+      const av = a[col], bv = b[col];
+      if (typeof av === 'string' || typeof bv === 'string') {
+        return String(av||'').localeCompare(String(bv||'')) * dir;
+      }
+      return ((av||0) - (bv||0)) * dir;
+    });
+  }
+  const countEl = document.getElementById('holdingsFilterCount');
+  if (countEl) countEl.textContent = q ? `${filtered.length} of ${holdings.length}` : `${holdings.length} holdings`;
+  return filtered;
+}
+
 function renderDetailedHoldings(holdings, totalValue) {
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
   const el = document.getElementById('holdingsDetailed');
+  holdings = applyHoldingsFilter(holdings);
   if (!holdings.length) {
     el.innerHTML = state.portfolio.length
-      ? '<div class="p-6 text-center neutral text-sm">No holdings match your filters.</div>'
+      ? '<div class="p-6 text-center neutral text-sm">No holdings match your search.</div>'
       : renderEmptyHoldings();
     return;
   }
