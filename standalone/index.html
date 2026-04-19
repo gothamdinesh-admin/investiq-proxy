@@ -348,6 +348,41 @@
     .overview-mobile-stat-value { font-size: 13px; color: #c8d6ef; font-weight: 600; }
     .overview-mobile-actions { display: flex; gap: 8px; }
 
+    /* Toast notifications */
+    @keyframes toastIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toastOut { to { transform: translateX(400px); opacity: 0; } }
+    .toast {
+      pointer-events: auto;
+      min-width: 280px;
+      max-width: 420px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #0f1729;
+      border: 1px solid #1e2d4a;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      animation: toastIn 0.3s cubic-bezier(0.2,0.9,0.4,1);
+      font-size: 13px;
+      color: #c8d6ef;
+      line-height: 1.5;
+    }
+    .toast.closing { animation: toastOut 0.25s forwards; }
+    .toast-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; margin-top: 1px; }
+    .toast-body { flex: 1; min-width: 0; }
+    .toast-title { font-weight: 600; margin-bottom: 2px; }
+    .toast-close { background: none; border: none; color: #4a6080; cursor: pointer; font-size: 16px; padding: 0 0 0 8px; line-height: 1; }
+    .toast-close:hover { color: #c8d6ef; }
+    .toast-success { border-left: 3px solid #34d399; }
+    .toast-success .toast-icon { background: rgba(52,211,153,0.2); color: #34d399; }
+    .toast-error { border-left: 3px solid #f87171; }
+    .toast-error .toast-icon { background: rgba(248,113,113,0.2); color: #f87171; }
+    .toast-info { border-left: 3px solid #818cf8; }
+    .toast-info .toast-icon { background: rgba(129,140,248,0.2); color: #818cf8; }
+    .toast-warning { border-left: 3px solid #fbbf24; }
+    .toast-warning .toast-icon { background: rgba(251,191,36,0.2); color: #fbbf24; }
+
     .table-row { display: grid; align-items: center; padding: 10px 16px; border-bottom: 1px solid #1a2540; transition: background 0.15s; cursor: pointer; }
     .table-row:hover { background: rgba(30,45,74,0.4); }
     .table-row:last-child { border-bottom: none; }
@@ -359,6 +394,9 @@
   </style>
 </head>
 <body class="dark">
+
+<!-- TOAST CONTAINER — for non-blocking notifications (replaces alert()) -->
+<div id="toastContainer" style="position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 40px);"></div>
 
 <!-- AUTH GATE — shown when Supabase is configured but user is not signed in -->
 <div id="authGate" style="display:none;position:fixed;inset:0;z-index:9999;background:#080d1a;flex-direction:column;align-items:center;justify-content:center;">
@@ -1616,6 +1654,58 @@ function proxyHeaders(extra = {}) {
   return h;
 }
 
+// ===== TOAST NOTIFICATIONS =====
+// Non-blocking alternative to alert(). Use toast.success/error/info/warning.
+// Auto-dismisses after `duration` ms. Click × to dismiss early.
+const toast = (() => {
+  const ICONS = {
+    success: '<i class="fas fa-check"></i>',
+    error:   '<i class="fas fa-times"></i>',
+    info:    '<i class="fas fa-info"></i>',
+    warning: '<i class="fas fa-exclamation"></i>'
+  };
+  function show(type, messageOrObj, duration) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return null;
+    let title = '', message = '';
+    if (typeof messageOrObj === 'string') {
+      message = messageOrObj;
+    } else if (messageOrObj) {
+      title = messageOrObj.title || '';
+      message = messageOrObj.message || '';
+      duration = messageOrObj.duration ?? duration;
+    }
+    const d = duration ?? (type === 'error' ? 6000 : 4000);
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.innerHTML = `
+      <div class="toast-icon">${ICONS[type] || ''}</div>
+      <div class="toast-body">
+        ${title ? `<div class="toast-title">${_escape(title)}</div>` : ''}
+        <div style="white-space:pre-line;">${_escape(message)}</div>
+      </div>
+      <button class="toast-close" aria-label="Dismiss">&times;</button>
+    `;
+    const close = () => {
+      el.classList.add('closing');
+      setTimeout(() => el.remove(), 250);
+    };
+    el.querySelector('.toast-close').onclick = close;
+    container.appendChild(el);
+    if (d > 0) setTimeout(close, d);
+    return el;
+  }
+  function _escape(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  return {
+    success: (msg, d) => show('success', msg, d),
+    error:   (msg, d) => show('error',   msg, d),
+    info:    (msg, d) => show('info',    msg, d),
+    warning: (msg, d) => show('warning', msg, d)
+  };
+})();
+
 // ===== CONFIG =====
 const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', AED:'د.إ', SGD:'S$', AUD:'A$' };
 const ASSET_COLORS = {
@@ -2362,7 +2452,7 @@ function loadEtoroHoldings() {
   state.portfolio = consolidatePortfolio(state.portfolio);
   saveState();
   renderAll();
-  alert(`✓ Loaded ${added} eToro holdings${skipped ? ` (${skipped} already existed)` : ''}.\n\nFetching live prices & NZD rates now...`);
+  toast.success({ title: 'eToro import complete', message: `Loaded ${added} holdings${skipped ? ` (${skipped} already existed)` : ''}. Fetching live prices…` });
   // Fetch market data (FX rates) first, then portfolio prices
   refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
 }
@@ -2422,13 +2512,13 @@ async function _importCSVImpl(event) {
   try {
     text = await file.text();
   } catch(e) {
-    alert('Could not read file: ' + e.message); return;
+    toast.error('Could not read file: ' + e.message); return;
   }
 
   // Strip BOM, normalise line endings
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const lines = text.trim().split('\n').filter(l => l.trim());
-  if (lines.length < 2) { alert('CSV is empty or has only a header row.'); return; }
+  if (lines.length < 2) { toast.error('CSV is empty or has only a header row.'); return; }
 
   const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
   const col = h => headers.indexOf(h);
@@ -2459,7 +2549,7 @@ async function _importCSVImpl(event) {
   const iNote = col('notes') >= 0 ? col('notes') : col('note');
 
   if (iSym === -1) {
-    alert(`CSV needs a "symbol" column.\nFound: ${headers.join(', ')}`); return;
+    toast.error({ title: 'CSV missing "symbol" column', message: 'Found: ' + headers.join(', ') }); return;
   }
 
   const typeMap = {
@@ -2478,7 +2568,7 @@ async function _importCSVImpl(event) {
   let removedCount = 0;
   if (replaceAll) {
     if (!confirm(`"Replace all" is checked.\n\nThis will DELETE all ${state.portfolio.length} existing holdings across all platforms, then import from this CSV.\n\nContinue?`)) {
-      alert('Import cancelled.'); return;
+      toast.info('Import cancelled.'); return;
     }
     removedCount = state.portfolio.length;
     state.portfolio = [];
@@ -2555,7 +2645,7 @@ async function _importCSVImpl(event) {
   }
 
   if (updated === 0 && newCreated === 0 && skipped === 0) {
-    alert('No data rows found. Check your CSV has data below the header row.'); return;
+    toast.warning('No data rows found. Check your CSV has data below the header row.'); return;
   }
 
   saveState();
@@ -2571,7 +2661,7 @@ async function _importCSVImpl(event) {
   const snapshotDate = (document.getElementById('csvImportDate')?.value || '').trim()
     || new Date().toISOString().slice(0,10);
 
-  alert(`✓ CSV import complete:\n\n• ${parts.join('\n• ')}\n\nSnapshot date: ${snapshotDate}\nFetching live prices…`);
+  toast.success({ title: 'CSV import complete', message: `${parts.join(' · ')}\nSnapshot: ${snapshotDate} · Fetching prices…`, duration: 6000 });
 
   // Fetch live prices, then force a snapshot using the chosen date
   refreshMarketData()
@@ -3802,7 +3892,7 @@ function deleteLot(holdingId, lotIdx) {
   const h = state.portfolio.find(x => x.id === holdingId);
   if (!h) return;
   const basis = getHoldingBasis(h);
-  if (basis.lots.length <= 1) { alert('Cannot delete the only purchase lot. Delete the holding instead.'); return; }
+  if (basis.lots.length <= 1) { toast.warning('Cannot delete the only purchase lot. Delete the holding instead.'); return; }
   basis.lots.splice(lotIdx, 1);
   h.lots = basis.lots;
   saveState();
@@ -3974,7 +4064,7 @@ async function importBackup(event) {
   try {
     const text = await file.text();
     const backup = JSON.parse(text);
-    if (!backup.portfolio) { alert('Invalid backup file.'); return; }
+    if (!backup.portfolio) { toast.error('Invalid backup file.'); return; }
     if (!confirm(`Restore backup from ${backup.exportedAt?.split('T')[0] || 'unknown date'}?\n\nThis will REPLACE your current ${state.portfolio.length} holdings with ${backup.portfolio.length} holdings from the backup.\n\nYour Claude API key will be kept.`)) return;
     const apiKey = state.settings.claudeApiKey;
     state.portfolio = backup.portfolio || [];
@@ -3982,16 +4072,16 @@ async function importBackup(event) {
     state.agentResults = backup.agentResults || null;
     saveState();
     renderAll();
-    alert(`✓ Restored ${state.portfolio.length} holdings from backup.`);
+    toast.success(`Restored ${state.portfolio.length} holdings from backup.`);
     refreshMarketData().then(() => refreshPortfolioPrices()).then(() => renderAll());
   } catch(e) {
-    alert('Failed to read backup: ' + e.message);
+    toast.error('Failed to read backup: ' + e.message);
   }
 }
 
 // ===== IMPORT / EXPORT =====
 function exportCSV() {
-  if (!state.portfolio.length) { alert('No holdings to export.'); return; }
+  if (!state.portfolio.length) { toast.warning('No holdings to export.'); return; }
   // Export one row per purchase lot — re-importing preserves full cost history
   const headers = ['symbol','name','type','platform','quantity','purchasePrice','purchaseDate','currency','sector','country','notes'];
   const esc = v => `"${(v||'').toString().replace(/"/g,'""')}"`;
@@ -5018,7 +5108,7 @@ function loadDemoData() {
   }));
   saveState();
   renderAll();
-  alert('✓ Loaded 5 sample holdings. Refreshing live prices…');
+  toast.success('Loaded 5 sample holdings. Refreshing live prices…');
   refreshMarketData().then(() => refreshPortfolioPrices()).then(() => { renderAll(); updateTicker(); });
 }
 
