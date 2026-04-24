@@ -859,6 +859,25 @@
         <div style="height:280px;display:none;" id="snapshotChartWrap"><canvas id="snapshotChart"></canvas></div>
       </div>
 
+      <!-- Historical holdings (time-travel view) -->
+      <div class="card p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="section-title"><i class="fas fa-clock" style="color:#fbbf24;"></i> Holdings at a specific date</div>
+            <div class="text-xs neutral mt-1">Browse your portfolio as it looked on any past snapshot date.</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="snapshotDateSelect" class="input" style="font-size:12px;padding:6px 8px;min-width:180px;" onchange="viewSnapshotByDate()">
+              <option value="">— Select a snapshot date —</option>
+            </select>
+            <button onclick="refreshSnapshotDropdown()" class="btn btn-sm btn-secondary" title="Reload dates"><i class="fas fa-sync-alt"></i></button>
+          </div>
+        </div>
+        <div id="snapshotHoldingsView">
+          <div class="text-center py-6 neutral text-sm">Pick a date above to see which holdings you had then and their values.</div>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div class="card p-5">
           <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:#818cf8;"></i> By Asset Type</div>
@@ -2089,6 +2108,26 @@ async function recordDailySnapshot(opts = {}) {
       byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
     });
 
+    // Store a compact per-holding payload so we can display the exact
+    // portfolio state as of that date later.
+    const holdingsPayload = metrics.holdings.map(h => ({
+      symbol: h.symbol,
+      name:   h.name || '',
+      type:   h.type || '',
+      platform: h.platform || '',
+      currency: h.currency || 'USD',
+      sector: h.sector || '',
+      country: h.country || '',
+      quantity: +h.quantity.toFixed(8),
+      avgBuyPrice: +h.avgBuyPrice.toFixed(6),   // in base currency
+      currentPrice: h.currentPrice != null ? +h.currentPrice.toFixed(6) : null,
+      currentValue: +h.currentValue.toFixed(2),
+      costBasis: +h.costBasis.toFixed(2),
+      gain: +h.gain.toFixed(2),
+      gainPct: +h.gainPct.toFixed(4),
+      weight: +h.weight.toFixed(4)
+    }));
+
     const { error } = await _supabase.from('investiq_snapshots').upsert({
       user_id:        _supaUser.id,
       snapshot_date:  date,
@@ -2098,12 +2137,132 @@ async function recordDailySnapshot(opts = {}) {
       total_gain_pct: Number(metrics.totalGainPct.toFixed(4)),
       holdings_count: metrics.holdings.length,
       currency:       state.settings.currency || 'NZD',
-      breakdown:      { byType, byPlatform, source: opts.source || 'auto' }
+      breakdown:      { byType, byPlatform, source: opts.source || 'auto', holdings: holdingsPayload }
     }, { onConflict: 'user_id,snapshot_date' });
     if (error) { console.warn('[snapshot] error:', error.message); return; }
     console.log(`✓ Snapshot recorded (${date}, source=${opts.source||'auto'}, ${metrics.holdings.length} holdings, $${metrics.totalValue.toFixed(2)})`);
   } catch(e) {
     console.warn('[snapshot] exception:', e.message);
+  }
+}
+
+// Load all snapshot dates into the historical-view dropdown
+async function refreshSnapshotDropdown() {
+  if (!_supabase || !_supaUser) return;
+  const sel = document.getElementById('snapshotDateSelect');
+  if (!sel) return;
+  try {
+    const { data } = await _supabase
+      .from('investiq_snapshots')
+      .select('snapshot_date, total_value, holdings_count, currency')
+      .eq('user_id', _supaUser.id)
+      .order('snapshot_date', { ascending: false });
+    if (!data || !data.length) {
+      sel.innerHTML = '<option value="">— No snapshots yet —</option>';
+      return;
+    }
+    const sym = (c) => CURRENCY_SYMBOLS[c || 'NZD'] || 'NZ$';
+    sel.innerHTML = '<option value="">— Select a snapshot date —</option>' +
+      data.map(s => `<option value="${s.snapshot_date}">${s.snapshot_date} · ${s.holdings_count} holdings · ${sym(s.currency)}${Number(s.total_value).toLocaleString()}</option>`).join('');
+  } catch(e) {
+    console.warn('[snapshot-dropdown] error:', e.message);
+    sel.innerHTML = '<option value="">— Error loading snapshots —</option>';
+  }
+}
+
+async function viewSnapshotByDate() {
+  const sel = document.getElementById('snapshotDateSelect');
+  const view = document.getElementById('snapshotHoldingsView');
+  if (!sel || !view) return;
+  const date = sel.value;
+  if (!date) {
+    view.innerHTML = '<div class="text-center py-6 neutral text-sm">Pick a date above to see which holdings you had then.</div>';
+    return;
+  }
+  if (!_supabase || !_supaUser) return;
+  view.innerHTML = '<div class="text-center py-6 neutral text-sm"><div class="spinner" style="display:inline-block;margin-right:6px;"></div>Loading snapshot for ' + date + '…</div>';
+  try {
+    const { data, error } = await _supabase
+      .from('investiq_snapshots')
+      .select('*')
+      .eq('user_id', _supaUser.id)
+      .eq('snapshot_date', date)
+      .maybeSingle();
+    if (error || !data) {
+      view.innerHTML = `<div class="text-center py-6" style="color:#f87171;">Snapshot not found for ${date}.</div>`;
+      return;
+    }
+    const cur = data.currency || 'NZD';
+    const sym = CURRENCY_SYMBOLS[cur] || 'NZ$';
+    const holdings = (data.breakdown && data.breakdown.holdings) || [];
+
+    // Summary header
+    const gainClass = data.total_gain >= 0 ? 'pos' : 'neg';
+    const gainSign  = data.total_gain >= 0 ? '+' : '';
+    const summary = `
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+        <div class="metric-card">
+          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">As of</div>
+          <div class="text-xl font-bold mono mt-1">${date}</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Portfolio Value</div>
+          <div class="text-xl font-bold mono mt-1">${sym}${Number(data.total_value).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Cost Basis</div>
+          <div class="text-xl font-bold mono mt-1">${sym}${Number(data.total_cost).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Gain / Loss</div>
+          <div class="text-xl font-bold mono mt-1 ${gainClass}">${gainSign}${sym}${Number(Math.abs(data.total_gain)).toLocaleString('en-NZ',{maximumFractionDigits:2})} (${gainSign}${Number(data.total_gain_pct).toFixed(2)}%)</div>
+        </div>
+      </div>`;
+
+    if (!holdings.length) {
+      view.innerHTML = summary + `
+        <div class="text-center py-6 neutral text-sm">
+          This snapshot was saved before per-holding detail was supported.<br>
+          Only totals are available for this date — future snapshots will include full holdings breakdown.
+        </div>`;
+      return;
+    }
+
+    // Holdings table for the snapshot
+    const sorted = [...holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+    const rows = sorted.map(h => {
+      const gainCls = h.gain >= 0 ? 'pos' : 'neg';
+      const gainSig = h.gain >= 0 ? '+' : '';
+      return `
+        <div class="table-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;cursor:default;">
+          <div style="min-width:0;overflow:hidden;">
+            <div class="font-semibold text-sm">${h.symbol}</div>
+            <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.name || h.platform} · ${h.type}</div>
+          </div>
+          <div class="text-right mono text-sm">${Number(h.quantity).toFixed(4)}</div>
+          <div class="text-right mono text-sm">${sym}${Number(h.avgBuyPrice).toFixed(2)}</div>
+          <div class="text-right mono text-sm" style="color:#94a3b8;">${sym}${Number(h.costBasis).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-right mono text-sm">${h.currentPrice != null ? sym + Number(h.currentPrice).toFixed(2) : '–'}</div>
+          <div class="text-right mono text-sm font-semibold">${sym}${Number(h.currentValue).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-right"><span class="badge-${h.gain>=0?'pos':'neg'}">${gainSig}${Number(h.gainPct).toFixed(2)}%</span></div>
+        </div>`;
+    }).join('');
+
+    view.innerHTML = summary + `
+      <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;">
+        <span>Asset</span>
+        <span class="text-right">Units</span>
+        <span class="text-right">Avg Cost</span>
+        <span class="text-right">Invested</span>
+        <span class="text-right">Price</span>
+        <span class="text-right">Mkt Value</span>
+        <span class="text-right">P&L</span>
+      </div>
+      <div>${rows}</div>
+      <div class="text-xs neutral mt-3 text-right">${holdings.length} holdings · source: ${data.breakdown?.source || 'auto'}</div>`;
+  } catch(e) {
+    view.innerHTML = `<div class="text-center py-6" style="color:#f87171;">Error loading snapshot: ${e.message}</div>`;
+    console.error('[snapshot-view]', e);
   }
 }
 
@@ -4402,7 +4561,7 @@ function _showSectionCore(name, el) {
   currentSection = name;
   if (name === 'market') renderMarketSection();
   if (name === 'admin') loadAdminData();
-  if (name === 'performance') loadSnapshotChart(90);
+  if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { renderWatchlist(); refreshWatchlist(); }
   if (name === 'tax') refreshFIF();
 }
