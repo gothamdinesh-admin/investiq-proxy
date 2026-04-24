@@ -5546,14 +5546,20 @@ async function checkAdminStatus() {
     _isAdmin = isOwnerAdminEmail(_supaUser?.email);
     _adminSource = _isAdmin ? 'email-fallback' : 'none';
   }
-  const adminLink = document.getElementById('adminNavLink');
-  if (adminLink) adminLink.style.display = _isAdmin ? '' : 'none';
-  const mobileAdminTab = document.getElementById('mobileAdminTab');
-  if (mobileAdminTab) mobileAdminTab.style.display = _isAdmin ? 'flex' : 'none';
-  // Show the ADMIN badge in the header
+  updateAdminVisibility();
+}
+
+// Central function used everywhere to sync admin-only UI with _isAdmin state.
+// Must be called AFTER _isAdmin is determined (e.g. after checkAdminStatus
+// completes), not before.
+function updateAdminVisibility() {
+  const adminLink  = document.getElementById('adminNavLink');
+  const mobTab     = document.getElementById('mobileAdminTab');
   const adminBadge = document.getElementById('adminBadge');
+  if (adminLink)  adminLink.style.display  = _isAdmin ? '' : 'none';
+  if (mobTab)     mobTab.style.display     = _isAdmin ? 'flex' : 'none';
   if (adminBadge) adminBadge.style.display = _isAdmin ? 'inline-flex' : 'none';
-  // If Settings modal is currently open, refresh so admin section shows/hides
+  // If Settings modal is open, refresh so admin section shows/hides correctly
   const settingsModal = document.getElementById('settingsModal');
   if (settingsModal?.classList.contains('open')) populateSettingsForm();
   updateAdminDiagnostics();
