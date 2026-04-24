@@ -1694,7 +1694,7 @@ function proxyHeaders(extra = {}) {
 
 // ===== TOAST NOTIFICATIONS =====
 // Non-blocking alternative to alert(). Use toast.success/error/info/warning.
-// Auto-dismisses after `duration` ms. Click × to dismiss early.
+// Auto-dismisses after duration ms. Click × to dismiss early.
 const toast = (() => {
   const ICONS = {
     success: '<i class="fas fa-check"></i>',
@@ -1885,7 +1885,7 @@ async function submitGateAuth() {
     result = await signUp(email, password);
   }
 
-  if (btn) { btn.disabled=false; btn.innerHTML=`<i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">${_gateMode==='signin'?'Sign In':'Create Account'}</span>`; }
+  if (btn) { btn.disabled=false; btn.innerHTML = `<i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">${_gateMode==='signin'?'Sign In':'Create Account'}</span>`; }
 
   if (result.error) {
     if (errEl) { errEl.textContent = result.error; errEl.style.display = 'block'; }
@@ -2206,7 +2206,7 @@ async function submitAuth() {
     result = await signUp(email, password);
   }
 
-  if (btn) { btn.disabled=false; btn.innerHTML=`<i class="fas fa-sign-in-alt mr-2"></i><span id="authSubmitLabel">${_authMode==='signin'?'Sign In':'Create Account'}</span>`; }
+  if (btn) { btn.disabled=false; btn.innerHTML = `<i class="fas fa-sign-in-alt mr-2"></i><span id="authSubmitLabel">${_authMode==='signin'?'Sign In':'Create Account'}</span>`; }
 
   if (result.error) {
     if (errEl) { errEl.textContent = result.error; errEl.style.display = 'block'; }
@@ -2671,7 +2671,7 @@ async function _importCSVImpl(event) {
         (h.symbol || '').toUpperCase().trim() === symbol
       );
       if (existing) {
-        console.log(`[csv-import] symbol-only fallback: ${symbol} matched existing on platform "${existing.platform}" (CSV: "${platform}")`);
+        console.log([csv-import] symbol-only fallback: ${symbol} matched existing on platform "${existing.platform}" (CSV: "${platform}"));
       }
     }
 
@@ -2709,17 +2709,17 @@ async function _importCSVImpl(event) {
   saveState();
   renderAll();
   const parts = [];
-  if (updated)    parts.push(`${updated} existing holdings updated`);
-  if (newCreated) parts.push(`${newCreated} new holdings created`);
-  if (removedCount) parts.push(`${removedCount} cleared before re-import`);
-  if (skipped)    parts.push(`${skipped} rows skipped`);
-  console.log(`[csv-import] ✓ ${parts.join(' · ')}`);
+  if (updated)    parts.push(${updated} existing holdings updated);
+  if (newCreated) parts.push(${newCreated} new holdings created);
+  if (removedCount) parts.push(${removedCount} cleared before re-import);
+  if (skipped)    parts.push(${skipped} rows skipped);
+  console.log([csv-import] ✓ ${parts.join(' · ')});
 
   // Snapshot date captured from the date picker next to the import button
   const snapshotDate = (document.getElementById('csvImportDate')?.value || '').trim()
     || new Date().toISOString().slice(0,10);
 
-  toast.success({ title: 'CSV import complete', message: `${parts.join(' · ')}\nSnapshot: ${snapshotDate} · Fetching prices…`, duration: 6000 });
+  toast.success({ title: 'CSV import complete', message: ${parts.join(' · ')}\nSnapshot: ${snapshotDate} · Fetching prices…, duration: 6000 });
 
   // Fetch live prices, then force a snapshot using the chosen date
   refreshMarketData()
@@ -2787,7 +2787,7 @@ function fmtChange(num) {
   if (!num && num !== 0) return '<span class="neutral">–</span>';
   const cls = num >= 0 ? 'pos' : 'neg';
   const sign = num >= 0 ? '+' : '-';
-  return `<span class="${cls}">${sign}${fmtCurrency(num)} (${sign}${fmt(Math.abs(num / (state.portfolio.reduce((s,h) => s + h.quantity*(h.purchasePrice||0),0) || 1)*100))}%)</span>`;
+  return <span class="${cls}">${sign}${fmtCurrency(num)} (${sign}${fmt(Math.abs(num / (state.portfolio.reduce((s,h) => s + h.quantity*(h.purchasePrice||0),0) || 1)*100))}%)</span>;
 }
 
 function getTagClass(type) {
@@ -2799,10 +2799,10 @@ function getFxRate(fromCurrency, toCurrency) {
   if (!fromCurrency || fromCurrency === toCurrency) return 1;
   const fx = state.marketData?.fx || {};
   // Direct: e.g. USD/NZD
-  const direct = `${fromCurrency}/${toCurrency}`;
+  const direct = ${fromCurrency}/${toCurrency};
   if (fx[direct]?.price) return fx[direct].price;
   // Inverse: e.g. NZD/USD → 1/rate
-  const inverse = `${toCurrency}/${fromCurrency}`;
+  const inverse = ${toCurrency}/${fromCurrency};
   if (fx[inverse]?.price) return 1 / fx[inverse].price;
   // Via USD if neither is USD
   if (fromCurrency !== 'USD' && toCurrency !== 'USD') {
@@ -2887,7 +2887,7 @@ async function fetchYahooQuotes(symbols) {
   // Try local proxy first (most reliable, no CORS issues)
   const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
   try {
-    const res = await fetch(`${localProxy}/api/market?symbols=${encodeURIComponent(symbols.join(','))}`, { headers: proxyHeaders(), signal: AbortSignal.timeout(8000) });
+    const res = await fetch(${localProxy}/api/market?symbols=${encodeURIComponent(symbols.join(','))}, { headers: proxyHeaders(), signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const data = await res.json();
       // Proxy returns {sym: {price, change, changePct, name}}
@@ -2897,7 +2897,7 @@ async function fetchYahooQuotes(symbols) {
 
   // Fall back to public CORS proxies
   const joined = symbols.join(',');
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,longName,shortName`;
+  const url = https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(joined)}&fields=regularMarketPrice,regularMarketChangePercent,regularMarketChange,longName,shortName;
   for (const proxy of CORS_PROXIES) {
     try {
       const res = await fetch(proxy + encodeURIComponent(url), { signal: AbortSignal.timeout(8000) });
@@ -2922,7 +2922,7 @@ async function fetchYahooQuotes(symbols) {
 async function refreshMarketData() {
   const localProxy = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
   try {
-    const res = await fetch(`${localProxy}/api/market`, { headers: proxyHeaders(), signal: AbortSignal.timeout(10000) });
+    const res = await fetch(${localProxy}/api/market, { headers: proxyHeaders(), signal: AbortSignal.timeout(10000) });
     if (res.ok) {
       const data = await res.json();
       if (data.indices) {
@@ -3066,12 +3066,12 @@ function renderSidebar(metrics) {
   const usdNzdRate = state.marketData?.fx?.['USD/NZD']?.price;
   const fxEl = document.getElementById('sidebarFxRate');
   if (fxEl) {
-    fxEl.textContent = usdNzdRate ? `USD/NZD: ${usdNzdRate.toFixed(4)}` : '';
+    fxEl.textContent = usdNzdRate ? USD/NZD: ${usdNzdRate.toFixed(4)} : '';
   }
 
   const retEl = document.getElementById('sidebarReturn');
   const sign = metrics.totalGain >= 0 ? '+' : '-';
-  retEl.innerHTML = `<span class="${metrics.totalGain >= 0 ? 'pos' : 'neg'}">${sign}${sym}${fmt(Math.abs(metrics.totalGain))} (${sign}${fmt(Math.abs(metrics.totalGainPct))}%)</span>`;
+  retEl.innerHTML = <span class="${metrics.totalGain >= 0 ? 'pos' : 'neg'}">${sign}${sym}${fmt(Math.abs(metrics.totalGain))} (${sign}${fmt(Math.abs(metrics.totalGainPct))}%)</span>;
 
   document.getElementById('statHoldings').textContent = metrics.holdings.length;
   document.getElementById('statPlatforms').textContent = new Set(metrics.holdings.map(h=>h.platform)).size;
@@ -3086,14 +3086,14 @@ function renderSidebar(metrics) {
   if (sorted.length) {
     const best = sorted[0];
     const worst = sorted[sorted.length-1];
-    document.getElementById('statBest').textContent = `${best.symbol} (+${fmt(best.gainPct)}%)`;
+    document.getElementById('statBest').textContent = ${best.symbol} (+${fmt(best.gainPct)}%);
     const worstCls = worst.gainPct < 0 ? 'neg' : 'neutral';
     const worstSign = worst.gainPct >= 0 ? '+' : '';
-    document.getElementById('statWorst').innerHTML = `<span class="${worstCls}">${worst.symbol} (${worstSign}${fmt(worst.gainPct)}%)</span>`;
+    document.getElementById('statWorst').innerHTML = <span class="${worstCls}">${worst.symbol} (${worstSign}${fmt(worst.gainPct)}%)</span>;
   } else if (metrics.holdings.length) {
     // All holdings are in the suspicious range — data needs review
-    document.getElementById('statBest').innerHTML = `<span style="color:#fbbf24;">Data issues</span>`;
-    document.getElementById('statWorst').innerHTML = `<span style="color:#fbbf24;">review tickers</span>`;
+    document.getElementById('statBest').innerHTML = <span style="color:#fbbf24;">Data issues</span>;
+    document.getElementById('statWorst').innerHTML = <span style="color:#fbbf24;">review tickers</span>;
   }
   // Attach suspicious list to state so admin tools can surface them
   state._suspiciousHoldings = suspicious;
@@ -3102,7 +3102,7 @@ function renderSidebar(metrics) {
 function renderSummaryCards(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
   document.getElementById('totalValue').textContent = sym + fmt(metrics.totalValue);
-  document.getElementById('totalCost').textContent = `Cost: ${sym}${fmt(metrics.totalCost)}`;
+  document.getElementById('totalCost').textContent = Cost: ${sym}${fmt(metrics.totalCost)};
 
   const retEl = document.getElementById('totalReturn');
   const sign = metrics.totalGain >= 0 ? '+' : '';
@@ -3263,7 +3263,7 @@ function renderAllocChart(metrics) {
       options: {
         cutout: '68%', responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); return ` ${lbl}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)`; } }
+          callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); return  ${lbl}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%); } }
         }}
       }
     });
@@ -3389,19 +3389,19 @@ function renderRiskAnalysis(metrics) {
   const cryptoWeight = metrics.holdings.filter(h => h.type === 'crypto').reduce((s,h) => s+h.weight, 0);
 
   const risks = [];
-  if (maxWeight > 30) risks.push({ level:'high', text:`<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — high concentration risk` });
-  else if (maxWeight > 20) risks.push({ level:'medium', text:`<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — moderate concentration` });
-  else risks.push({ level:'low', text:`No single asset exceeds 20% — good concentration management` });
+  if (maxWeight > 30) risks.push({ level:'high', text:<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — high concentration risk });
+  else if (maxWeight > 20) risks.push({ level:'medium', text:<b>${topHolding.symbol}</b> is ${fmt(maxWeight)}% of portfolio — moderate concentration });
+  else risks.push({ level:'low', text:No single asset exceeds 20% — good concentration management });
 
-  if (typeCount < 2) risks.push({ level:'high', text:`Portfolio holds only ${typeCount} asset type — high correlation risk` });
-  else if (typeCount < 3) risks.push({ level:'medium', text:`${typeCount} asset types — consider more diversification` });
-  else risks.push({ level:'low', text:`${typeCount} asset types across portfolio — good diversification` });
+  if (typeCount < 2) risks.push({ level:'high', text:Portfolio holds only ${typeCount} asset type — high correlation risk });
+  else if (typeCount < 3) risks.push({ level:'medium', text:${typeCount} asset types — consider more diversification });
+  else risks.push({ level:'low', text:${typeCount} asset types across portfolio — good diversification });
 
-  if (cryptoWeight > 20) risks.push({ level:'high', text:`${fmt(cryptoWeight)}% in crypto — very high volatility exposure` });
-  else if (cryptoWeight > 10) risks.push({ level:'medium', text:`${fmt(cryptoWeight)}% in crypto — significant volatility exposure` });
+  if (cryptoWeight > 20) risks.push({ level:'high', text:${fmt(cryptoWeight)}% in crypto — very high volatility exposure });
+  else if (cryptoWeight > 10) risks.push({ level:'medium', text:${fmt(cryptoWeight)}% in crypto — significant volatility exposure });
 
   const platforms = new Set(metrics.holdings.map(h => h.platform)).size;
-  if (platforms === 1) risks.push({ level:'medium', text:`All holdings on 1 platform — single platform risk` });
+  if (platforms === 1) risks.push({ level:'medium', text:All holdings on 1 platform — single platform risk });
 
   const colorMap = { high:'#f87171', medium:'#fbbf24', low:'#34d399' };
   const iconMap = { high:'fa-exclamation-circle', medium:'fa-exclamation-triangle', low:'fa-check-circle' };
@@ -3431,23 +3431,23 @@ function renderQuickInsights(metrics) {
   const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
   if (sorted.length) {
     const best = sorted[0];
-    insights.push(`<i class="fas fa-arrow-up pos mr-2"></i>${best.symbol} is your top performer at <b class="pos">+${fmt(best.gainPct)}%</b>`);
+    insights.push(<i class="fas fa-arrow-up pos mr-2"></i>${best.symbol} is your top performer at <b class="pos">+${fmt(best.gainPct)}%</b>);
     if (sorted.length > 1) {
       const worst = sorted[sorted.length-1];
       if (worst.gainPct < 0)
-        insights.push(`<i class="fas fa-arrow-down neg mr-2"></i>${worst.symbol} is underperforming at <b class="neg">${fmt(worst.gainPct)}%</b>`);
+        insights.push(<i class="fas fa-arrow-down neg mr-2"></i>${worst.symbol} is underperforming at <b class="neg">${fmt(worst.gainPct)}%</b>);
     }
   }
 
   const divScore = calcDiversificationScore(metrics);
   if (divScore !== null && divScore < 50)
-    insights.push(`<i class="fas fa-exclamation-triangle" style="color:#fbbf24;" class="mr-2"></i>Diversification score is ${divScore}/100. Consider adding more asset types.`);
+    insights.push(<i class="fas fa-exclamation-triangle" style="color:#fbbf24;" class="mr-2"></i>Diversification score is ${divScore}/100. Consider adding more asset types.);
 
   const platforms = new Set(metrics.holdings.map(h => h.platform)).size;
-  if (platforms === 1) insights.push(`<i class="fas fa-building neutral mr-2"></i>All holdings on one platform — consider spreading risk.`);
+  if (platforms === 1) insights.push(<i class="fas fa-building neutral mr-2"></i>All holdings on one platform — consider spreading risk.);
 
   el.innerHTML = insights.length
-    ? insights.map(i => `<div class="text-sm py-1.5" style="border-bottom:1px solid #1e2d4a;">${i}</div>`).join('')
+    ? insights.map(i => <div class="text-sm py-1.5" style="border-bottom:1px solid #1e2d4a;">${i}</div>).join('')
     : '<div class="neutral text-sm">Run AI Agents for personalized insights.</div>';
 }
 
@@ -3492,7 +3492,7 @@ function updateTicker() {
 
   // No holdings → prompt to add
   if (!state.portfolio.length) {
-    strip.innerHTML = `<span class="neutral">No holdings yet — import a CSV or add your first investment to see your daily pulse.</span>`;
+    strip.innerHTML = <span class="neutral">No holdings yet — import a CSV or add your first investment to see your daily pulse.</span>;
     return;
   }
 
@@ -3501,7 +3501,7 @@ function updateTicker() {
 
   // If live data hasn't landed yet
   if (!withLive.length) {
-    strip.innerHTML = `<span class="neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching today's moves for your ${metrics.holdings.length} holdings…</span>`;
+    strip.innerHTML = <span class="neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching today's moves for your ${metrics.holdings.length} holdings…</span>;
     return;
   }
 
@@ -3536,8 +3536,8 @@ function updateTicker() {
       <span style="color:${portColor};font-size:11px;">(${portSign}${dayChangePct.toFixed(2)}%)</span>
     </span>
 
-    ${topGainers.length ? `<span class="flex items-center gap-3">${chunk('▲ Top', topGainers, '#34d399')}</span>` : ''}
-    ${topLosers.length  ? `<span class="flex items-center gap-3">${chunk('▼ Lag', topLosers, '#f87171')}</span>` : ''}
+    ${topGainers.length ? <span class="flex items-center gap-3">${chunk('▲ Top', topGainers, '#34d399')}</span> : ''}
+    ${topLosers.length  ? <span class="flex items-center gap-3">${chunk('▼ Lag', topLosers, '#f87171')}</span> : ''}
 
     <span style="margin-left:auto;color:#4a6080;font-size:11px;">
       <i class="fas fa-circle" style="color:#34d399;font-size:6px;margin-right:4px;animation:pulse-border 2s infinite;"></i>
@@ -3757,12 +3757,12 @@ async function callClaude(agentKey, userMessage) {
       });
       if (!res.ok) {
         const err = await res.text();
-        throw new Error(`[${res.status}] ${err || 'LM Studio/OpenAI-compat call failed'}`);
+        throw new Error([${res.status}] ${err || 'LM Studio/OpenAI-compat call failed'});
       }
       const data = await res.json();
       return data.choices?.[0]?.message?.content || 'No response from local model.';
     } catch(e) {
-      throw new Error(`${agentKey} (local ${def.model}): ${e.message}`);
+      throw new Error(${agentKey} (local ${def.model}): ${e.message});
     }
   }
 
@@ -3797,21 +3797,21 @@ async function callClaude(agentKey, userMessage) {
       try {
         const errJson = JSON.parse(errText);
         errMsg = errJson.error?.message || errJson.message || errText;
-      } catch { errMsg = errText || `HTTP ${res.status}`; }
-      lastError = `[${res.status}] ${errMsg}`;
-      console.error(`[${agentKey}] ${url} →`, lastError);
+      } catch { errMsg = errText || HTTP ${res.status}; }
+      lastError = [${res.status}] ${errMsg};
+      console.error([${agentKey}] ${url} →, lastError);
       // 400 (bad model / bad request) and 401 (auth) — no point retrying on direct API
       if (res.status === 400 || res.status === 401) {
-        throw new Error(`${agentKey} (${def.model}): ${errMsg}`);
+        throw new Error(${agentKey} (${def.model}): ${errMsg});
       }
     } catch (e) {
       if (e.message?.includes(def.model) || e.message?.includes('API key')) throw e;
       lastError = e.message;
-      console.warn(`[${agentKey}] ${url} threw:`, e.message);
+      console.warn([${agentKey}] ${url} threw:, e.message);
       continue;
     }
   }
-  throw new Error(`${agentKey} (${def.model}): ${lastError || 'unreachable'}`);
+  throw new Error(${agentKey} (${def.model}): ${lastError || 'unreachable'});
 }
 
 function setAgentState(agentKey, state2, text='') {
@@ -3874,7 +3874,7 @@ async function runAgents() {
   };
 
   const marketContext = document.getElementById('marketContext').value;
-  const baseMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Data:\n${JSON.stringify(marketSummary, null, 2)}${marketContext ? '\n\nAdditional Context:\n' + marketContext : ''}`;
+  const baseMsg = Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Data:\n${JSON.stringify(marketSummary, null, 2)}${marketContext ? '\n\nAdditional Context:\n' + marketContext : ''};
 
   try {
     // ── Phase 1: run portfolio, market, opportunity IN PARALLEL ──────────────
@@ -3897,7 +3897,7 @@ async function runAgents() {
 
     // ── Phase 2: advisor synthesises all three outputs ────────────────────────
     setAgentState('advisor', 'running');
-    const advisorMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health Agent (${AGENT_DEFS.portfolio.model}):\n${healthAnalysis}\n\n🌍 Market Impact Agent (${AGENT_DEFS.market.model}):\n${marketAnalysis}\n\n🔭 Opportunity Scout Agent (${AGENT_DEFS.opportunity.model}):\n${opportunities}`;
+    const advisorMsg = Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health Agent (${AGENT_DEFS.portfolio.model}):\n${healthAnalysis}\n\n🌍 Market Impact Agent (${AGENT_DEFS.market.model}):\n${marketAnalysis}\n\n🔭 Opportunity Scout Agent (${AGENT_DEFS.opportunity.model}):\n${opportunities};
     const finalAdvice = await callClaude('advisor', advisorMsg);
     setAgentState('advisor', 'done', finalAdvice);
 
@@ -3969,7 +3969,7 @@ function editHolding(id) {
       </div>`
     ).join('');
     document.getElementById('avgCostDisplay').textContent =
-      `Total: ${basis.quantity.toFixed(4)} units  |  Avg cost: ${sym}${basis.avgBuyPrice.toFixed(4)} / unit`;
+      Total: ${basis.quantity.toFixed(4)} units  |  Avg cost: ${sym}${basis.avgBuyPrice.toFixed(4)} / unit;
   } else {
     lotsSection.style.display = 'none';
   }
@@ -4121,11 +4121,11 @@ function viewHolding(id) {
       <div><span class="neutral">Current Value</span><div class="font-semibold mono mt-1">${sym}${fmt(curVal)}</div></div>
       <div><span class="neutral">Total P&L</span><div class="font-semibold mono mt-1 ${gainTotal >= 0 ? 'pos' : 'neg'}">${signT}${sym}${fmt(Math.abs(gainTotal))}</div></div>
       <div><span class="neutral">Return %</span><div class="font-semibold mono mt-1 ${gainPctTotal >= 0 ? 'pos' : 'neg'}">${signT}${fmt(Math.abs(gainPctTotal))}%</div></div>
-      ${h.dayChangePct != null ? `<div class="col-span-2"><span class="neutral">Today</span><div class="font-semibold mono mt-1 ${h.dayChangePct>=0?'pos':'neg'}">${h.dayChangePct>=0?'+':''}${fmt(h.dayChangePct)}% &nbsp; (${h.dayChangePct>=0?'+':''}${sym}${fmt(Math.abs((h.dayChange||0)*fx*quantity))})</div></div>` : ''}
+      ${h.dayChangePct != null ? <div class="col-span-2"><span class="neutral">Today</span><div class="font-semibold mono mt-1 ${h.dayChangePct>=0?'pos':'neg'}">${h.dayChangePct>=0?'+':''}${fmt(h.dayChangePct)}% &nbsp; (${h.dayChangePct>=0?'+':''}${sym}${fmt(Math.abs((h.dayChange||0)*fx*quantity))})</div></div> : ''}
       ${lotsHTML}
-      ${h.sector ? `<div><span class="neutral">Sector</span><div class="font-semibold mt-1">${h.sector}</div></div>` : ''}
-      ${h.country ? `<div><span class="neutral">Region</span><div class="font-semibold mt-1">${h.country}</div></div>` : ''}
-      ${h.notes ? `<div class="col-span-2"><span class="neutral">Notes</span><div class="mt-1 text-xs" style="color:#94a3b8;">${h.notes}</div></div>` : ''}
+      ${h.sector ? <div><span class="neutral">Sector</span><div class="font-semibold mt-1">${h.sector}</div></div> : ''}
+      ${h.country ? <div><span class="neutral">Region</span><div class="font-semibold mt-1">${h.country}</div></div> : ''}
+      ${h.notes ? <div class="col-span-2"><span class="neutral">Notes</span><div class="mt-1 text-xs" style="color:#94a3b8;">${h.notes}</div></div> : ''}
     </div>`;
 
   document.getElementById('viewEditBtn').onclick = () => editHolding(id);
@@ -4146,7 +4146,7 @@ function exportBackup() {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `investiq-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = investiq-backup-${new Date().toISOString().split('T')[0]}.json;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -4159,14 +4159,14 @@ async function importBackup(event) {
     const text = await file.text();
     const backup = JSON.parse(text);
     if (!backup.portfolio) { toast.error('Invalid backup file.'); return; }
-    if (!confirm(`Restore backup from ${backup.exportedAt?.split('T')[0] || 'unknown date'}?\n\nThis will REPLACE your current ${state.portfolio.length} holdings with ${backup.portfolio.length} holdings from the backup.\n\nYour Claude API key will be kept.`)) return;
+    if (!confirm(Restore backup from ${backup.exportedAt?.split('T')[0] || 'unknown date'}?\n\nThis will REPLACE your current ${state.portfolio.length} holdings with ${backup.portfolio.length} holdings from the backup.\n\nYour Claude API key will be kept.)) return;
     const apiKey = state.settings.claudeApiKey;
     state.portfolio = backup.portfolio || [];
     state.settings = { ...state.settings, ...(backup.settings||{}), claudeApiKey: apiKey };
     state.agentResults = backup.agentResults || null;
     saveState();
     renderAll();
-    toast.success(`Restored ${state.portfolio.length} holdings from backup.`);
+    toast.success(Restored ${state.portfolio.length} holdings from backup.);
     refreshMarketData().then(() => refreshPortfolioPrices()).then(() => renderAll());
   } catch(e) {
     toast.error('Failed to read backup: ' + e.message);
@@ -4178,7 +4178,7 @@ function exportCSV() {
   if (!state.portfolio.length) { toast.warning('No holdings to export.'); return; }
   // Export one row per purchase lot — re-importing preserves full cost history
   const headers = ['symbol','name','type','platform','quantity','purchasePrice','purchaseDate','currency','sector','country','notes'];
-  const esc = v => `"${(v||'').toString().replace(/"/g,'""')}"`;
+  const esc = v => "${(v||'').toString().replace(/"/g,'""')}";
   const rows = [];
   state.portfolio.forEach(h => {
     const basis = getHoldingBasis(h);
@@ -4430,7 +4430,7 @@ async function loadSnapshotChart(days = 90) {
       plugins: {
         legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
         tooltip: {
-          callbacks: { label: (c) => `${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()}` }
+          callbacks: { label: (c) => ${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()} }
         }
       },
       scales: {
@@ -4502,7 +4502,7 @@ function populatePlatformFilter() {
   const current = sel.value;
   const platforms = [...new Set(state.portfolio.map(h => h.platform).filter(Boolean))].sort();
   sel.innerHTML = '<option value="">All Platforms</option>' +
-    platforms.map(p => `<option value="${p}" ${p===current?'selected':''}>${p}</option>`).join('');
+    platforms.map(p => <option value="${p}" ${p===current?'selected':''}>${p}</option>).join('');
 }
 
 function filterHoldings() {
@@ -4567,7 +4567,7 @@ function sortHoldings(col) {
     i.className = 'fas fa-sort sort-icon';
     i.parentElement?.classList.remove('active');
   });
-  const activeIcon = document.querySelector(`.sort-icon[data-col="${col}"]`);
+  const activeIcon = document.querySelector(.sort-icon[data-col="${col}"]);
   if (activeIcon) {
     activeIcon.className = _sortDir === 'asc' ? 'fas fa-sort-up sort-icon' : 'fas fa-sort-down sort-icon';
     activeIcon.parentElement?.classList.add('active');
@@ -4602,7 +4602,7 @@ function applyHoldingsFilter(holdings) {
     });
   }
   const countEl = document.getElementById('holdingsFilterCount');
-  if (countEl) countEl.textContent = q ? `${filtered.length} of ${holdings.length}` : `${holdings.length} holdings`;
+  if (countEl) countEl.textContent = q ? ${filtered.length} of ${holdings.length} : ${holdings.length} holdings;
   return filtered;
 }
 
@@ -4624,11 +4624,11 @@ function renderDetailedHoldings(holdings, totalValue) {
     const dayColor= dayPct >= 0 ? '#34d399' : '#f87171';
     const daySign = dayPct >= 0 ? '+' : '';
     const liveTag = haslive
-      ? `<span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>`
+      ? <span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>
       : '<span style="font-size:10px;color:#4a6080;margin-left:4px;">live pending</span>';
     // Build a rich tooltip with lot breakdown + FX info
     const lotsInfo = (h.lots && h.lots.length)
-      ? h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${l.price ? sym+fmt(l.price*h.fxRate) : '?'} ${l.date ? '('+l.date+')' : ''}`).join('\n')
+      ? h.lots.map(l =>   ${(+l.quantity).toFixed(4)} @ ${l.price ? sym+fmt(l.price*h.fxRate) : '?'} ${l.date ? '('+l.date+')' : ''}).join('\n')
       : '  (no lot data)';
     const nativeSym = CURRENCY_SYMBOLS[h.currency||'USD'] || '$';
     const tipText = `${h.symbol} — ${h.name || h.platform}
@@ -4639,7 +4639,7 @@ Market value: ${sym}${fmt(h.currentValue)}
 P&L: ${h.gain>=0?'+':''}${sym}${fmt(Math.abs(h.gain))} (${h.gain>=0?'+':''}${fmt(h.gainPct)}%)
 
 Lots (native ${h.currency || 'USD'}):
-${h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${nativeSym}${(+l.price).toFixed(4)}${l.date ? ' ('+l.date+')' : ''}`).join('\n')}
+${h.lots.map(l =>   ${(+l.quantity).toFixed(4)} @ ${nativeSym}${(+l.price).toFixed(4)}${l.date ? ' ('+l.date+')' : ''}).join('\n')}
 
 FX rate ${h.currency || 'USD'} → ${state.settings.currency || 'NZD'}: ${(h.fxRate||1).toFixed(4)}
 ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct.toFixed(2)+'%' : ''}`;
@@ -4661,7 +4661,7 @@ ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct
       <div class="text-right mono text-sm font-semibold">${sym}${fmt(h.currentValue)}</div>
       <div class="text-right">
         <span class="${h.gain >= 0 ? 'badge-pos' : 'badge-neg'}">${h.gain >= 0 ? '+' : ''}${fmt(h.gainPct)}%</span>
-        ${haslive ? `<div class="text-xs" style="color:${dayColor};">${daySign}${sym}${Math.abs(dayAmt).toFixed(2)} today</div>` : ''}
+        ${haslive ? <div class="text-xs" style="color:${dayColor};">${daySign}${sym}${Math.abs(dayAmt).toFixed(2)} today</div> : ''}
       </div>
       <div class="text-right" onclick="event.stopPropagation()">
         <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
@@ -4728,7 +4728,7 @@ function renderHoldingsByPlatform(holdings, totalValue) {
                 <div style="width:30px;height:30px;border-radius:6px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};">${(h.symbol||'?').slice(0,3)}</div>
                 <div>
                   <div class="font-semibold text-sm">${h.symbol}</div>
-                  ${haslive ? `<div style="font-size:10px;color:${dayColor};">${daySign}${dayPct.toFixed(2)}% today</div>` : '<div style="font-size:10px;color:#4a6080;">live pending</div>'}
+                  ${haslive ? <div style="font-size:10px;color:${dayColor};">${daySign}${dayPct.toFixed(2)}% today</div> : '<div style="font-size:10px;color:#4a6080;">live pending</div>'}
                 </div>
               </div>
               <div class="text-right mono text-sm">${h.quantity.toFixed(4)}</div>
@@ -4849,7 +4849,7 @@ function importEtoro(e) {
     if (added === 0) {
       showPlatformStatus('etoroStatus', '⚠ No positions found — try Account Statement CSV', true);
     } else {
-      showPlatformStatus('etoroStatus', `✓ Imported ${added} positions`);
+      showPlatformStatus('etoroStatus', ✓ Imported ${added} positions);
       saveState(); renderAll();
       setTimeout(() => refreshPortfolioPrices().then(renderAll), 500);
     }
@@ -4902,7 +4902,7 @@ function importSharesies(e) {
     if (added === 0) {
       showPlatformStatus('sharesiesStatus', '⚠ No holdings found — export Portfolio CSV from Sharesies', true);
     } else {
-      showPlatformStatus('sharesiesStatus', `✓ Imported ${added} holdings`);
+      showPlatformStatus('sharesiesStatus', ✓ Imported ${added} holdings);
       saveState(); renderAll();
       setTimeout(() => refreshPortfolioPrices().then(renderAll), 500);
     }
@@ -4955,7 +4955,7 @@ function importHarbour(e) {
     if (added === 0) {
       showPlatformStatus('harbourStatus', '⚠ No holdings found — contact Harbour for CSV format', true);
     } else {
-      showPlatformStatus('harbourStatus', `✓ Imported ${added} funds`);
+      showPlatformStatus('harbourStatus', ✓ Imported ${added} funds);
       saveState(); renderAll();
     }
   });
@@ -4984,7 +4984,7 @@ async function syncAkahu() {
   showPlatformStatus('akahuStatus', 'Connecting to Akahu...');
 
   const headers = {
-    'Authorization': `Bearer ${userToken}`,
+    'Authorization': Bearer ${userToken},
     'X-Akahu-App-Token': appToken,
     'Content-Type': 'application/json'
   };
@@ -4995,7 +4995,7 @@ async function syncAkahu() {
   const proxyBase = (state.settings.proxyUrl || 'http://localhost:8080').replace(/\/$/, '');
 
   try {
-    const res = await fetch(`${proxyBase}/api/akahu`, {
+    const res = await fetch(${proxyBase}/api/akahu, {
       method: 'POST',
       headers: proxyHeaders(),
       body: JSON.stringify({ appToken, userToken }),
@@ -5004,7 +5004,7 @@ async function syncAkahu() {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `Server error ${res.status}`);
+      throw new Error(err.error || Server error ${res.status});
     }
 
     const data = await res.json();
@@ -5023,7 +5023,7 @@ async function syncAkahu() {
     });
 
     saveState(); renderAll();
-    showPlatformStatus('akahuStatus', `✓ ${added} added, ${updated} updated (${data.accountCount} accounts)`);
+    showPlatformStatus('akahuStatus', ✓ ${added} added, ${updated} updated (${data.accountCount} accounts));
 
   } catch (err) {
     const msg = err.message || 'Connection failed';
@@ -5085,16 +5085,16 @@ function refreshFIF() {
 
   document.getElementById('fifCostBasis').textContent = 'NZ$' + totalCost.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
   document.getElementById('fifThresholdHint').innerHTML = inFIFZone
-    ? `<span style="color:#f87171;">NZ$${(totalCost - FIF_THRESHOLD_NZD).toLocaleString('en-NZ', {maximumFractionDigits:0})} over threshold</span>`
-    : `<span style="color:#34d399;">NZ$${(FIF_THRESHOLD_NZD - totalCost).toLocaleString('en-NZ', {maximumFractionDigits:0})} under threshold</span>`;
+    ? <span style="color:#f87171;">NZ$${(totalCost - FIF_THRESHOLD_NZD).toLocaleString('en-NZ', {maximumFractionDigits:0})} over threshold</span>
+    : <span style="color:#34d399;">NZ$${(FIF_THRESHOLD_NZD - totalCost).toLocaleString('en-NZ', {maximumFractionDigits:0})} under threshold</span>;
 
   const statusEl = document.getElementById('fifStatus');
   const hintEl   = document.getElementById('fifStatusHint');
   if (inFIFZone) {
-    statusEl.innerHTML = `<span style="color:#f87171;">⚠ FIF applies</span>`;
+    statusEl.innerHTML = <span style="color:#f87171;">⚠ FIF applies</span>;
     hintEl.textContent = 'Overseas cost basis exceeds NZ$50,000 — file IR3 with FIF income';
   } else {
-    statusEl.innerHTML = `<span style="color:#34d399;">✓ De-minimis exempt</span>`;
+    statusEl.innerHTML = <span style="color:#34d399;">✓ De-minimis exempt</span>;
     hintEl.textContent = 'Under threshold — normal dividends / distributions taxation only';
   }
 
@@ -5102,7 +5102,7 @@ function refreshFIF() {
 
   const tableEl = document.getElementById('fifHoldingsTable');
   if (!rows.length) {
-    tableEl.innerHTML = `<div class="text-sm neutral p-4 text-center">No overseas holdings found. All your holdings appear to be NZ-based (exempt) or missing country info.</div>`;
+    tableEl.innerHTML = <div class="text-sm neutral p-4 text-center">No overseas holdings found. All your holdings appear to be NZ-based (exempt) or missing country info.</div>;
     return;
   }
   rows.sort((a,b) => b.costNZD - a.costNZD);
@@ -5167,7 +5167,7 @@ async function refreshWatchlist() {
   const proxy = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   if (!proxy) { console.warn('[watchlist] no proxy URL'); return; }
   try {
-    const res = await fetch(`${proxy}/api/market?symbols=${encodeURIComponent(symbols)}`, {
+    const res = await fetch(${proxy}/api/market?symbols=${encodeURIComponent(symbols)}, {
       headers: proxyHeaders(), signal: AbortSignal.timeout(20000)
     });
     if (!res.ok) throw new Error('Market fetch failed: ' + res.status);
@@ -5444,7 +5444,7 @@ async function loadAdminData() {
 
     renderAdminTable(_adminUsers);
   } catch(e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center p-4" style="color:#f87171;">Error: ${e.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = <tr><td colspan="6" class="text-center p-4" style="color:#f87171;">Error: ${e.message}</td></tr>;
   }
 }
 
@@ -5465,11 +5465,11 @@ function renderAdminTable(users) {
     const joined   = u.created_at ? new Date(u.created_at).toLocaleDateString() : '—';
     const lastSeen = u.last_seen  ? timeSince(new Date(u.last_seen))            : 'Never';
     const roleBadge = u.is_admin
-      ? `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Admin</span>`
-      : `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(148,163,184,0.1);color:#64748b;border:1px solid #1e2d4a;">User</span>`;
+      ? <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Admin</span>
+      : <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(148,163,184,0.1);color:#64748b;border:1px solid #1e2d4a;">User</span>;
     const holdingsBadge = u.holdingCount > 0
-      ? `<span style="color:#34d399;">${u.holdingCount} holdings</span>`
-      : `<span class="neutral">None</span>`;
+      ? <span style="color:#34d399;">${u.holdingCount} holdings</span>
+      : <span class="neutral">None</span>;
     const isSelf = u.id === _supaUser?.id;
     return `<tr style="border-bottom:1px solid #0f1729;" onmouseover="this.style.background='#0f1729'" onmouseout="this.style.background=''">
       <td class="p-3" style="color:#c8d6ef;">${u.email || '—'}${isSelf ? ' <span class="text-xs" style="color:#6366f1;">(you)</span>' : ''}</td>
@@ -5479,9 +5479,9 @@ function renderAdminTable(users) {
       <td class="p-3">${roleBadge}</td>
       <td class="p-3">
         <div class="flex gap-2">
-          ${!u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Make Admin</button>` : ''}
-          ${u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">Remove Admin</button>` : ''}
-          ${!isSelf ? `<button onclick="adminDeleteUser('${u.id}','${u.email}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button>` : ''}
+          ${!u.is_admin && !isSelf ? <button onclick="adminToggleAdmin('${u.id}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Make Admin</button> : ''}
+          ${u.is_admin && !isSelf ? <button onclick="adminToggleAdmin('${u.id}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">Remove Admin</button> : ''}
+          ${!isSelf ? <button onclick="adminDeleteUser('${u.id}','${u.email}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button> : ''}
         </div>
       </td>
     </tr>`;
@@ -5514,8 +5514,8 @@ async function adminTestSupabase() {
       .select('user_id, updated_at')
       .eq('user_id', _supaUser.id)
       .maybeSingle();
-    if (e1) return _adminLog(`✗ Read failed: ${e1.message}`);
-    _adminLog(`✓ Read OK (${Date.now()-t0}ms). Row exists: ${!!r1}`);
+    if (e1) return _adminLog(✗ Read failed: ${e1.message});
+    _adminLog(✓ Read OK (${Date.now()-t0}ms). Row exists: ${!!r1});
 
     _adminLog('→ SELECT profiles for current user…');
     const { data: r2, error: e2 } = await _supabase
@@ -5523,13 +5523,13 @@ async function adminTestSupabase() {
       .select('id, email, is_admin, last_seen')
       .eq('id', _supaUser.id)
       .maybeSingle();
-    if (e2) return _adminLog(`✗ Profile read failed: ${e2.message}`);
-    _adminLog(`✓ Profile: ${r2?.email} · is_admin=${r2?.is_admin} · last_seen=${r2?.last_seen}`);
+    if (e2) return _adminLog(✗ Profile read failed: ${e2.message});
+    _adminLog(✓ Profile: ${r2?.email} · is_admin=${r2?.is_admin} · last_seen=${r2?.last_seen});
 
     _adminLog('→ Testing is_admin() RPC…');
     const { data: r3, error: e3 } = await _supabase.rpc('is_admin');
-    if (e3) return _adminLog(`✗ is_admin() RPC failed: ${e3.message}`);
-    _adminLog(`✓ is_admin() returned: ${r3}`);
+    if (e3) return _adminLog(✗ is_admin() RPC failed: ${e3.message});
+    _adminLog(✓ is_admin() returned: ${r3});
 
     _adminLog('→ Testing snapshot write…');
     const testDate = new Date().toISOString().slice(0,10);
@@ -5538,25 +5538,25 @@ async function adminTestSupabase() {
       total_value: 0, total_cost: 0, total_gain: 0, total_gain_pct: 0,
       holdings_count: 0, currency: 'NZD', breakdown: { source: 'admin-test' }
     }, { onConflict: 'user_id,snapshot_date' });
-    if (e4) return _adminLog(`✗ Snapshot write failed: ${e4.message}`);
+    if (e4) return _adminLog(✗ Snapshot write failed: ${e4.message});
     _adminLog('✓ Snapshot write OK');
 
     _adminLog('\n🎉 All Supabase tests passed. RLS is correctly configured.');
-  } catch(e) { _adminLog(`✗ Exception: ${e.message}`); }
+  } catch(e) { _adminLog(✗ Exception: ${e.message}); }
 }
 
 async function adminTestProxy() {
   _adminClearOutput();
   const proxy = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   if (!proxy) return _adminLog('✗ No proxy URL set');
-  _adminLog(`🔍 Pinging ${proxy}/health …`);
+  _adminLog(🔍 Pinging ${proxy}/health …);
   const t0 = Date.now();
   try {
     const res = await fetch(proxy + '/health', { signal: AbortSignal.timeout(15000) });
     const j = await res.json().catch(() => null);
-    _adminLog(`✓ ${res.status} (${Date.now()-t0}ms): ${JSON.stringify(j)}`);
+    _adminLog(✓ ${res.status} (${Date.now()-t0}ms): ${JSON.stringify(j)});
   } catch(e) {
-    _adminLog(`✗ Proxy unreachable: ${e.message}`);
+    _adminLog(✗ Proxy unreachable: ${e.message});
     _adminLog('  (Render free tier sleeps after 15 min — the next request wakes it)');
   }
 }
@@ -5580,35 +5580,35 @@ function adminHealDuplicates() {
     if (!h.lots || h.lots.length < 2) return;
     const groups = new Map();
     h.lots.forEach(l => {
-      const g = `${(+l.quantity||0).toFixed(4)}::${(+l.price||0).toFixed(4)}`;
+      const g = ${(+l.quantity||0).toFixed(4)}::${(+l.price||0).toFixed(4)};
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(l);
     });
     for (const [g, lots] of groups) {
       if (lots.length > 1) {
-        const key = `${h.symbol}::${h.platform}`;
+        const key = ${h.symbol}::${h.platform};
         dupLots.push({ key, group: g, count: lots.length, dates: lots.map(l=>l.date||'(no date)') });
         suspiciousLotCount += lots.length - 1;
       }
     }
   });
 
-  _adminLog(`Pass 1 — duplicate holdings: ${dupHoldings.length === 0 ? 'none' : dupHoldings.length + ' found'}`);
-  dupHoldings.forEach(([k,c]) => _adminLog(`  • ${k} × ${c}`));
-  _adminLog(`\nPass 2 — near-duplicate lots within holdings: ${dupLots.length === 0 ? 'none' : dupLots.length + ' clusters, ' + suspiciousLotCount + ' suspicious lot(s)'}`);
+  _adminLog(Pass 1 — duplicate holdings: ${dupHoldings.length === 0 ? 'none' : dupHoldings.length + ' found'});
+  dupHoldings.forEach(([k,c]) => _adminLog(  • ${k} × ${c}));
+  _adminLog(\nPass 2 — near-duplicate lots within holdings: ${dupLots.length === 0 ? 'none' : dupLots.length + ' clusters, ' + suspiciousLotCount + ' suspicious lot(s)'});
   dupLots.slice(0, 15).forEach(d => {
-    _adminLog(`  • ${d.key}: ${d.count} lots with qty+price "${d.group}" (dates: ${d.dates.join(', ')})`);
+    _adminLog(  • ${d.key}: ${d.count} lots with qty+price "${d.group}" (dates: ${d.dates.join(', ')}));
   });
-  if (dupLots.length > 15) _adminLog(`  … and ${dupLots.length - 15} more`);
+  if (dupLots.length > 15) _adminLog(  … and ${dupLots.length - 15} more);
 
   if (!dupHoldings.length && !dupLots.length) {
-    _adminLog(`\n✓ Clean! ${state.portfolio.length} holdings, no duplicates at any level.`);
+    _adminLog(\n✓ Clean! ${state.portfolio.length} holdings, no duplicates at any level.);
     return;
   }
 
-  _adminLog(`\n→ Running heal (collapsing duplicates)…`);
+  _adminLog(\n→ Running heal (collapsing duplicates)…);
   const healed = healDuplicates(false);
-  _adminLog(`✓ Healed ${healed} total issues. Portfolio now has ${state.portfolio.length} unique holdings.`);
+  _adminLog(✓ Healed ${healed} total issues. Portfolio now has ${state.portfolio.length} unique holdings.);
   _adminLog('→ Saving corrected state to cloud…');
   saveToSupabase().then(() => { _adminLog('✓ Pushed to Supabase'); renderAll(); updateTicker(); });
 }
@@ -5622,7 +5622,7 @@ async function adminForceReload() {
   const ok = await loadFromSupabase();
   healDuplicates();
   renderAll();
-  _adminLog(ok ? `✓ Reloaded. ${state.portfolio.length} holdings.` : '✗ Reload failed — see console.');
+  _adminLog(ok ? ✓ Reloaded. ${state.portfolio.length} holdings. : '✗ Reload failed — see console.');
 }
 
 function adminFixTickers() {
@@ -5643,8 +5643,8 @@ function adminFixTickers() {
     _adminLog('✓ All tickers already use Yahoo-compatible symbols.');
     return;
   }
-  _adminLog(`Fixed ${changes.length} ticker(s):`);
-  changes.forEach(c => _adminLog(`  • ${c.from}  →  ${c.to}`));
+  _adminLog(Fixed ${changes.length} ticker(s):);
+  changes.forEach(c => _adminLog(  • ${c.from}  →  ${c.to}));
   saveState();
   _adminLog('\n→ Refreshing prices with corrected tickers…');
   refreshPortfolioPrices().then(() => {
@@ -5658,24 +5658,24 @@ async function adminClearCloudRow() {
   _adminClearOutput();
   _adminLog('🗑 Deleting cloud portfolio row…');
   const { error } = await _supabase.from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
-  if (error) return _adminLog(`✗ Delete failed: ${error.message}`);
+  if (error) return _adminLog(✗ Delete failed: ${error.message});
   _adminLog('✓ Cloud row deleted. Your local data is intact. Next save will push it back up fresh.');
 }
 
 async function adminToggleAdmin(userId, makeAdmin) {
   if (!_supabase) return;
-  if (!confirm(`${makeAdmin ? 'Grant' : 'Remove'} admin access for this user?`)) return;
+  if (!confirm(${makeAdmin ? 'Grant' : 'Remove'} admin access for this user?)) return;
   await _supabase.from('profiles').update({ is_admin: makeAdmin }).eq('id', userId);
   loadAdminData();
 }
 
 async function adminDeleteUser(userId, email) {
-  if (!confirm(`Permanently delete user ${email} and all their data? This cannot be undone.`)) return;
+  if (!confirm(Permanently delete user ${email} and all their data? This cannot be undone.)) return;
   // Delete portfolio data first (cascade handles profiles)
   await _supabase.from('investiq_portfolios').delete().eq('user_id', userId);
   await _supabase.from('profiles').delete().eq('id', userId);
   // Note: deleting from auth.users requires service role key — tell admin to do it in Supabase dashboard
-  alert(`Portfolio data deleted. To fully remove the auth account, go to Supabase → Authentication → Users and delete ${email} there.`);
+  alert(Portfolio data deleted. To fully remove the auth account, go to Supabase → Authentication → Users and delete ${email} there.);
   loadAdminData();
 }
 
