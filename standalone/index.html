@@ -823,7 +823,7 @@
         <div class="text-xs neutral" id="holdingsFilterCount" style="min-width:80px;text-align:right;"></div>
       </div>
       <div class="card">
-        <div class="table-header" id="holdingsDetailedHeader" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;">
+        <div class="table-header" id="holdingsDetailedHeader" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 140px;display:grid;">
           <span class="sortable" onclick="sortHoldings('symbol')">Asset <i class="fas fa-sort sort-icon" data-col="symbol"></i></span>
           <span class="text-right sortable" onclick="sortHoldings('quantity')">Units <i class="fas fa-sort sort-icon" data-col="quantity"></i></span>
           <span class="text-right sortable" onclick="sortHoldings('avgBuyPrice')">Avg Cost <i class="fas fa-sort sort-icon" data-col="avgBuyPrice"></i></span>
@@ -2497,6 +2497,34 @@ function loadState() {
 //           if dates differ by < 7 days — catches the pre-fix cloud state
 //           where daily sync accumulated near-identical lots with different
 //           auto-assigned dates, which was the root cause of value doubling).
+// Run on EVERY load (localStorage + cloud) so stale ticker aliases never come back.
+// Catches the case where cloud has an old `BTC` row that somehow survived an
+// earlier cleanup — auto-converts to `BTC-USD` and merges with any existing
+// BTC-USD entry. Returns true if anything changed.
+function autoNormalizeTickers(silent = true) {
+  if (!state.portfolio?.length) return false;
+  let changed = 0;
+  state.portfolio.forEach(h => {
+    const newSym = normaliseSymbol(h.symbol, h.type);
+    if (newSym !== h.symbol) {
+      if (!silent) console.log(`[auto-normalize] ${h.symbol} → ${newSym}`);
+      h.symbol = newSym;
+      h.currentPrice = null; // force re-fetch with corrected ticker
+      h.dayChange = null;
+      h.dayChangePct = null;
+      changed++;
+    }
+  });
+  if (changed > 0) {
+    if (!silent) console.warn(`[auto-normalize] ${changed} ticker(s) auto-corrected on load`);
+    // Heal collisions caused by the rename (e.g. BTC + existing BTC-USD)
+    healDuplicates(silent);
+    // Persist correction back to localStorage + cloud so it sticks
+    try { saveState(); } catch(e) {}
+  }
+  return changed > 0;
+}
+
 function healDuplicates(silent = false) {
   if (!state.portfolio?.length) return 0;
   const seen = new Map();
@@ -3027,18 +3055,31 @@ function getMetrics() {
     const gain         = currentValue - costBasis;
     const gainPct      = costBasis > 0 ? (gain / costBasis) * 100 : 0;
     const dayChange    = h.dayChange ? quantity * h.dayChange * fx : null;
-    return { ...h, quantity, avgBuyPrice, buyPrice: avgBuyPrice, currentPrice, currentValue, costBasis, gain, gainPct, dayChange, fxRate: fx, lots: basis.lots };
+    return {
+      ...h,
+      quantity, avgBuyPrice, buyPrice: avgBuyPrice, currentPrice,
+      currentValue, costBasis, gain, gainPct, dayChange,
+      fxRate: fx, lots: basis.lots,
+      ignored: !!h.ignored
+    };
   });
 
-  const totalValue = holdings.reduce((s,h) => s + h.currentValue, 0);
-  const totalCost = holdings.reduce((s,h) => s + h.costBasis, 0);
-  const totalGain = totalValue - totalCost;
+  // Exclude ignored holdings from portfolio totals (but still return them
+  // so they remain visible in the Holdings table, just dimmed).
+  const active = holdings.filter(h => !h.ignored);
+  const totalValue = active.reduce((s,h) => s + h.currentValue, 0);
+  const totalCost  = active.reduce((s,h) => s + h.costBasis, 0);
+  const totalGain  = totalValue - totalCost;
   const totalGainPct = totalCost > 0 ? (totalGain / totalCost) * 100 : 0;
-  const totalDayChange = holdings.reduce((s,h) => s + (h.dayChange||0), 0);
+  const totalDayChange = active.reduce((s,h) => s + (h.dayChange||0), 0);
+  const ignoredValue   = holdings.filter(h => h.ignored).reduce((s,h) => s + h.currentValue, 0);
 
-  holdings.forEach(h => h.weight = totalValue > 0 ? (h.currentValue / totalValue) * 100 : 0);
+  // Weight is calculated against ACTIVE value (not including ignored)
+  holdings.forEach(h => {
+    h.weight = (!h.ignored && totalValue > 0) ? (h.currentValue / totalValue) * 100 : 0;
+  });
 
-  return { holdings, totalValue, totalCost, totalGain, totalGainPct, totalDayChange };
+  return { holdings, totalValue, totalCost, totalGain, totalGainPct, totalDayChange, ignoredValue, ignoredCount: holdings.length - active.length };
 }
 
 function calcDiversificationScore(metrics) {
@@ -3286,7 +3327,10 @@ function renderSidebar(metrics) {
 function renderSummaryCards(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
   document.getElementById('totalValue').textContent = sym + fmt(metrics.totalValue);
-  document.getElementById('totalCost').textContent = `Cost: ${sym}${fmt(metrics.totalCost)}`;
+  const ignoredNote = metrics.ignoredCount
+    ? ` · <span style="color:#fbbf24;" title="${metrics.ignoredCount} ignored holding${metrics.ignoredCount>1?'s':''} worth ${sym}${fmt(metrics.ignoredValue)} excluded from totals">${metrics.ignoredCount} ignored</span>`
+    : '';
+  document.getElementById('totalCost').innerHTML = `Cost: ${sym}${fmt(metrics.totalCost)}${ignoredNote}`;
 
   const retEl = document.getElementById('totalReturn');
   const sign = metrics.totalGain >= 0 ? '+' : '';
@@ -4255,6 +4299,21 @@ function deleteHolding(id) {
   renderAll();
 }
 
+// Toggle a holding between active (counts in totals) and ignored (still
+// visible in table, excluded from portfolio value / return / weight).
+// Useful for cash accounts, dormant positions, or holdings you want to
+// track visually but not treat as part of your active investment portfolio.
+function toggleIgnoreHolding(id) {
+  const h = state.portfolio.find(x => x.id === id);
+  if (!h) return;
+  h.ignored = !h.ignored;
+  saveState();
+  renderAll();
+  toast.info(h.ignored
+    ? `${h.symbol} ignored — kept visible but excluded from totals`
+    : `${h.symbol} re-activated — back in portfolio totals`);
+}
+
 function viewHolding(id) {
   const h = state.portfolio.find(x => x.id === id);
   if (!h) return;
@@ -4827,14 +4886,21 @@ ${h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${nativeSym}${(+l.price).toFi
 
 FX rate ${h.currency || 'USD'} → ${state.settings.currency || 'NZD'}: ${(h.fxRate||1).toFixed(4)}
 ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct.toFixed(2)+'%' : ''}`;
+    const rowOpacity = h.ignored ? 'opacity:0.5;' : '';
+    const ignoredBadge = h.ignored
+      ? `<span style="font-size:9px;color:#fbbf24;margin-left:6px;padding:1px 6px;border-radius:9999px;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.3);letter-spacing:0.3px;text-transform:uppercase;" title="Excluded from portfolio totals"><i class="fas fa-eye-slash" style="font-size:8px;margin-right:2px;"></i>ignored</span>`
+      : '';
+    const toggleBtn = h.ignored
+      ? `<button onclick="toggleIgnoreHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Re-activate (include in totals)" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);"><i class="fas fa-eye"></i></button>`
+      : `<button onclick="toggleIgnoreHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Ignore (keep visible but exclude from totals)"><i class="fas fa-eye-slash"></i></button>`;
     return `
-    <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive ? dayColor : '#1e2d4a'};" onclick="viewHolding('${h.id}')" title="${tipText.replace(/"/g,'&quot;')}">
+    <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 140px;display:grid;border-left:3px solid ${h.ignored ? '#fbbf24' : (haslive ? dayColor : '#1e2d4a')};${rowOpacity}" onclick="viewHolding('${h.id}')" title="${tipText.replace(/"/g,'&quot;')}">
       <div class="flex items-center gap-3" style="min-width:0;">
         <div style="width:32px;height:32px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">
           ${(h.symbol||'?').slice(0,3)}
         </div>
         <div style="min-width:0;overflow:hidden;">
-          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.symbol} <span class="text-xs neutral">${h.platform}</span></div>
+          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.symbol} <span class="text-xs neutral">${h.platform}</span>${ignoredBadge}</div>
           <div style="display:flex;align-items:center;">${liveTag}</div>
         </div>
       </div>
@@ -4848,6 +4914,7 @@ ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct
         ${haslive ? `<div class="text-xs" style="color:${dayColor};">${daySign}${sym}${Math.abs(dayAmt).toFixed(2)} today</div>` : ''}
       </div>
       <div class="text-right" onclick="event.stopPropagation()">
+        ${toggleBtn}
         <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
         <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
       </div>
@@ -5916,6 +5983,7 @@ async function init() {
   if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
 
   loadState();
+  autoNormalizeTickers(false);    // auto-fix BTC/ETH aliases from localStorage
   healDuplicates();               // heal any dups that snuck into localStorage
   updateAdminDiagnostics();
   showSkeletons();                // show placeholders until real data renders
@@ -5954,6 +6022,7 @@ async function init() {
         updateAuthUI();
         const loaded = await loadFromSupabase();
         if (loaded) {
+          autoNormalizeTickers(false); // auto-fix BTC/ETH aliases from cloud
           healDuplicates();       // heal any dups that came from cloud
           renderAll();
         }
