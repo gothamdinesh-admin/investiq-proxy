@@ -539,6 +539,7 @@
   <div class="flex items-center gap-3">
     <span id="lastUpdated" class="text-xs neutral">Not yet updated</span>
     <div id="supaUserBadge" style="display:none;align-items:center;gap:8px;">
+      <button id="syncIndicator" onclick="forceSyncFromCloud()" class="text-xs" style="display:none;background:rgba(52,211,153,0.1);color:#34d399;border:1px solid rgba(52,211,153,0.25);padding:3px 8px;border-radius:9999px;cursor:pointer;font-size:10px;letter-spacing:0.3px;" title="Click to force-pull latest from cloud">Not synced</button>
       <span id="adminBadge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:10px;font-weight:600;border:1px solid rgba(251,191,36,0.3);letter-spacing:0.5px;text-transform:uppercase;">
         <i class="fas fa-shield-alt" style="font-size:9px;"></i>Admin
       </span>
@@ -2067,6 +2068,7 @@ async function saveToSupabase() {
       state.settings.updatedAt = nowIso;
       localStorage.setItem('investiq_updated_at', nowIso);
       console.log(`✓ Saved to Supabase (${dedupedPortfolio.length} unique holdings, ${nowIso})`);
+      updateSyncIndicator();
     }
   } catch(e) { console.warn('Supabase save error:', e); }
 }
@@ -2284,13 +2286,30 @@ async function signIn(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
   const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: error.message };
+
+  // SECURITY: clear ANY stale data from a previous session on this device
+  // (e.g. shared computer, browser profile reused). The cloud is the source
+  // of truth — local state will be repopulated from loadFromSupabase below.
+  clearLocalUserData({ keepSettings: true });
+
   _supaUser = data.user;
   await checkAdminStatus();
   // Touch last_seen
   _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
   updateAuthUI();
+
+  // Force a hard sync from cloud — bypass the local-newer guard since we
+  // just wiped local data above. Cloud is authoritative on fresh login.
+  delete state.settings.updatedAt;
+  localStorage.removeItem('investiq_updated_at');
   const loaded = await loadFromSupabase();
-  if (loaded) { renderAll(); if (state.agentResults) renderInsightsSection(state.agentResults); }
+  if (loaded) {
+    autoNormalizeTickers(true);
+    healDuplicates(true);
+    renderAll();
+    if (state.agentResults) renderInsightsSection(state.agentResults);
+  }
+  updateSyncIndicator();
   return { ok: true };
 }
 
@@ -2313,9 +2332,95 @@ async function signUp(email, password) {
 }
 
 async function signOut() {
+  // First flush any pending cloud writes so we don't lose unsaved changes
+  if (_savePending) {
+    clearTimeout(_savePending);
+    _savePending = null;
+    if (_supabase && _supaUser) {
+      try { await saveToSupabase(); } catch(e) { console.warn('[signOut] flush failed:', e); }
+    }
+  }
+  // Then sign out from Supabase
   if (_supabase) await _supabase.auth.signOut();
   _supaUser = null;
+  _isAdmin = false;
+  // Clear local cache so next user on this device starts fresh
+  clearLocalUserData({ keepSettings: true });
   updateAuthUI();
+  renderAll();
+  updateSyncIndicator();
+  toast.info('Signed out · local cache cleared');
+}
+
+// Wipe in-memory state.portfolio + state.agentResults + cached snapshot
+// timestamps and the localStorage entry. Optionally preserves user-level
+// platform settings (Supabase URL, proxy URL, theme prefs) so the gate
+// can still load on next visit.
+function clearLocalUserData({ keepSettings = true } = {}) {
+  state.portfolio = [];
+  state.agentResults = null;
+  if (!keepSettings) {
+    state.settings = { name: 'My Portfolio', currency: 'NZD', claudeApiKey: '',
+                       proxyUrl: PLATFORM_CONFIG.proxyUrl,
+                       supabaseUrl: PLATFORM_CONFIG.supabaseUrl,
+                       supabaseKey: PLATFORM_CONFIG.supabaseKey };
+  } else {
+    // Just drop the per-user data fields, keep platform creds
+    delete state.settings.updatedAt;
+    delete state.settings.watchlist;
+    delete state.settings.onboardingComplete;
+  }
+  try {
+    localStorage.removeItem('investiq_v2');
+    localStorage.removeItem('investiq_updated_at');
+  } catch(e) {}
+  // Re-persist what we kept
+  try { localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: [], settings: state.settings, agentResults: null })); } catch(e) {}
+}
+
+// Manual force-sync from cloud (admin diagnostic + user-facing button)
+async function forceSyncFromCloud() {
+  if (!_supabase || !_supaUser) {
+    toast.warning('Not signed in — nothing to sync from'); return;
+  }
+  toast.info('Pulling latest from cloud…', 2000);
+  // Flush any pending writes first so we don't clobber unsaved local changes
+  if (_savePending) {
+    clearTimeout(_savePending);
+    _savePending = null;
+    await saveToSupabase().catch(() => {});
+  }
+  // Bypass the local-newer guard
+  delete state.settings.updatedAt;
+  localStorage.removeItem('investiq_updated_at');
+  const ok = await loadFromSupabase();
+  if (ok) {
+    autoNormalizeTickers(true);
+    healDuplicates(true);
+    renderAll();
+    updateSyncIndicator();
+    toast.success(`Synced — ${state.portfolio.length} holdings loaded from cloud`);
+  } else {
+    toast.error('Sync failed — see console');
+  }
+}
+
+// Update a small "last synced" indicator in the header
+function updateSyncIndicator() {
+  const el = document.getElementById('syncIndicator');
+  if (!el) return;
+  if (!_supaUser) { el.style.display = 'none'; return; }
+  const ts = state.settings?.updatedAt || localStorage.getItem('investiq_updated_at');
+  if (!ts) { el.textContent = 'Not synced'; el.title = ''; el.style.display = ''; return; }
+  const d = new Date(ts);
+  const seconds = Math.floor((Date.now() - d.getTime()) / 1000);
+  const human = seconds < 60 ? 'Just now'
+              : seconds < 3600 ? Math.floor(seconds/60) + 'm ago'
+              : seconds < 86400 ? Math.floor(seconds/3600) + 'h ago'
+              : Math.floor(seconds/86400) + 'd ago';
+  el.textContent = '☁ ' + human;
+  el.title = 'Last cloud sync: ' + d.toLocaleString();
+  el.style.display = '';
 }
 
 // Auth modal helpers
@@ -6061,6 +6166,8 @@ async function init() {
 
   // Auto-refresh every 5 minutes
   setInterval(() => refreshAll(), 5 * 60 * 1000);
+  // Refresh "X minutes ago" sync indicator every 60s
+  setInterval(updateSyncIndicator, 60 * 1000);
 
   // Keep-alive ping every 14 min so Render free tier never sleeps
   proxyHealthCheck();
