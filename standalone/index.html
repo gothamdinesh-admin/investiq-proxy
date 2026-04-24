@@ -1809,7 +1809,17 @@ function updateAuthUI() {
   const signInBadge = document.getElementById('supaSignInBadge');
   const gate        = document.getElementById('authGate');
   const accountLink = document.getElementById('accountNavLink');
+  const adminBadge  = document.getElementById('adminBadge');
+  const adminLink   = document.getElementById('adminNavLink');
+  const mobAdminTab = document.getElementById('mobileAdminTab');
   const hasSupaConfig = !!(state.settings.supabaseUrl?.trim() && state.settings.supabaseKey?.trim());
+
+  // ALWAYS hide admin-only UI here. updateAdminVisibility() will re-show them
+  // ONLY if checkAdminStatus() confirms admin. Prevents stale badge from a
+  // previous admin session flashing in for non-admin users.
+  if (adminBadge)  adminBadge.style.display = 'none';
+  if (adminLink)   adminLink.style.display  = 'none';
+  if (mobAdminTab) mobAdminTab.style.display = 'none';
 
   if (_supaUser) {
     // Logged in — show email badge, hide gate, show account nav link + sidebar strip
@@ -1817,18 +1827,22 @@ function updateAuthUI() {
     if (signInBadge) signInBadge.style.display = 'none';
     if (gate)       gate.style.display = 'none';
     if (accountLink) accountLink.style.display = '';
+    // If we already know admin state (re-render after checkAdminStatus), re-apply it
+    if (_isAdmin) updateAdminVisibility();
   } else if (hasSupaConfig) {
     // Supabase configured but not logged in — show gate
     if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'block';
     if (gate)       gate.style.display = 'flex';
     if (accountLink) accountLink.style.display = 'none';
+    _isAdmin = false; // reset admin flag on any sign-out / gate show
   } else {
     // No Supabase config — local mode, no gate
     if (badge)      badge.style.display = 'none';
     if (signInBadge) signInBadge.style.display = 'none';
     if (gate)       gate.style.display = 'none';
     if (accountLink) accountLink.style.display = 'none';
+    _isAdmin = false;
   }
 }
 
@@ -2830,11 +2844,22 @@ function getHoldingBasis(h) {
 }
 
 // ===== PORTFOLIO CALCULATIONS =====
+// London Stock Exchange tickers (AZN.L, CPI.L, etc) are quoted by Yahoo in PENCE
+// not pounds, so a raw × GBP/NZD rate gives a number 100× too big.
+// Detect LSE symbols and convert pence → pounds before FX.
+function isPenceQuoted(symbol) {
+  if (!symbol) return false;
+  const upper = symbol.toUpperCase();
+  return upper.endsWith('.L') || upper.endsWith('.IL');
+}
+
 function getMetrics() {
   const base = state.settings.currency || 'NZD';
   const holdings = state.portfolio.map(h => {
     const basis = getHoldingBasis(h);
-    const fx = getFxRate(h.currency || 'USD', base);
+    // LSE stocks quoted in pence — divide by 100 to get pounds before FX
+    const penceAdj = isPenceQuoted(h.symbol) ? 0.01 : 1;
+    const fx = getFxRate(h.currency || 'USD', base) * penceAdj;
     const currentPrice = (h.currentPrice ?? basis.avgBuyPrice) * fx;
     const avgBuyPrice  = basis.avgBuyPrice * fx;
     const quantity     = basis.quantity;
@@ -5643,13 +5668,23 @@ function adminFixTickers() {
     _adminLog('✓ All tickers already use Yahoo-compatible symbols.');
     return;
   }
-  _adminLog(`Fixed ${changes.length} ticker(s):`);
+  _adminLog(`Renamed ${changes.length} ticker(s):`);
   changes.forEach(c => _adminLog(`  • ${c.from}  →  ${c.to}`));
+
+  // CRITICAL: after renaming, keys may collide (e.g. renamed BTC → BTC-USD
+  // but a holding already existed with BTC-USD). healDuplicates merges these.
+  const healed = healDuplicates(true);
+  if (healed) _adminLog(`\n✓ Merged ${healed} key collision(s) created by the rename.`);
+
   saveState();
-  _adminLog('\n→ Refreshing prices with corrected tickers…');
-  refreshPortfolioPrices().then(() => {
+  // Force a synchronous push to cloud so Force-Reload immediately after
+  // doesn't pull stale data.
+  saveToSupabase().then(() => {
+    _adminLog('\n→ Refreshing prices with corrected tickers…');
+    return refreshPortfolioPrices();
+  }).then(() => {
     renderAll();
-    _adminLog('✓ Prices refreshed. Totals should now be correct.');
+    _adminLog(`✓ Done. Portfolio now has ${state.portfolio.length} holdings.`);
   });
 }
 
