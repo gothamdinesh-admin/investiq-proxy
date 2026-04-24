@@ -49,7 +49,7 @@ The recent barrage of fixes needs user verification before building more on top.
 - [ ] **Transaction history / audit log** — every add/edit/delete logged with timestamp + user + old/new values. Needed for tax prep and debugging. Est: half day.
 - [ ] **Bulk edit holdings** — select multiple rows, apply same change (currency, sector, platform, delete). Est: 2 hours.
 - [ ] **Manual price override per holding** — lets user set price when Yahoo returns garbage (e.g. delisted or tiny-cap tickers). Est: 1 hour.
-- [ ] **"Ignore this holding" toggle** — for dormant cash accounts, holdings being tracked but not owned, etc. Est: 30 min.
+- [x] **"Ignore this holding" toggle** — DONE 2026-04-19. Row button + view modal button + Hide-ignored filter + Total Value subtitle. Excludes from totals.
 - [ ] **Ticker autocomplete on Add Holding** — search Yahoo as user types. Est: 2 hours.
 - [ ] **Holdings grouping toggle** — by platform / by sector / by country / by asset type. Already partially there for platform. Est: 2 hours.
 - [ ] **Per-holding notes/tags** — freeform + taggable ("long-term", "speculative", "dividend", etc). Est: 2 hours.
@@ -134,6 +134,11 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 - [x] Defensive dedup in saveToSupabase (never writes duplicate keys)
 - [x] Cache staleness guard (local-newer-than-cloud → push local up)
 - [x] Holdings at a specific date (snapshot time-travel view)
+- [x] **Auto-normalize tickers on EVERY load** (BTC won't keep coming back from cloud)
+- [x] **updateAdminVisibility() function** (was missing — fixed admin panel disappearance)
+- [x] **Cache hygiene on signOut/signIn** (multi-user safe — no data leak between sessions)
+- [x] **Manual force-sync button** + sync indicator pill in header (☁ Just now / 5m ago)
+- [x] **Ignore holding toggle** (row + view modal + Hide-ignored filter + count subtitle)
 
 ### Features shipped
 - [x] Supabase auth + login gate + admin panel with role bootstrap
