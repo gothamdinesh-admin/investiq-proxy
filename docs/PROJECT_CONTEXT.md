@@ -1,7 +1,10 @@
 # InvestIQ — Project Context
 
-_Last updated: 2026-04-18_
+_Last updated: 2026-04-19_
 _Read this first in any new session. Tells you what exists, why, and what's next._
+
+**Hosting now on paid tiers:** Supabase Pro · Render Starter · Netlify Pro
+(unlocks: Edge Functions, scheduled jobs, Vault, Storage, no cold starts, forms)
 
 ---
 
@@ -49,14 +52,14 @@ Goals:
 ```
 
 ### Why each piece exists
-| Piece | Why |
-|---|---|
-| Netlify | Free HTML hosting → real URL, not `file://` |
-| Render (Python proxy) | Browser CORS blocks direct Claude/Yahoo calls → proxy sits in the middle |
-| Supabase | Per-user auth + cross-device data sync + RLS for privacy |
-| Anthropic | The AI brain for the 4 agents |
-| Yahoo Finance (yfinance) | Free live prices for stocks/ETFs/crypto/FX |
-| Akahu | NZ open banking — connects ANZ/BNZ/Sharesies (optional, user hasn't configured yet) |
+| Piece | Plan | Why |
+|---|---|---|
+| Netlify | **Pro** | HTML hosting → real URL, not `file://`. Pro unlocks Forms, Edge Functions, deploy previews. |
+| Render (Python proxy) | **Starter ($7/mo)** | Browser CORS blocks direct Claude/Yahoo calls. Starter = no cold starts. |
+| Supabase | **Pro ($25/mo)** | Auth + per-user sync + RLS. Pro unlocks Edge Functions, scheduled jobs, Vault, Storage. |
+| Anthropic | pay-per-use | AI brain for the 4 agents |
+| Yahoo Finance (yfinance) | free | Live prices for stocks / ETFs / crypto / FX |
+| Akahu | free tier | NZ open banking — `/accounts` works, `/holdings` paywalled. Not configured. |
 
 ---
 
@@ -123,44 +126,81 @@ All values are FX-converted into `state.settings.currency` (default NZD).
 
 ---
 
-## 5. What's implemented (as of 2026-04-18, late-night build)
+## 5. What's implemented (as of 2026-04-19)
 
-- [x] Standalone dashboard on Netlify with dark UI, 8 sections (Overview/Holdings/Performance/Market/Insights/Watchlist/NZ Tax/Admin)
-- [x] Python proxy deployed to Render (`claude_proxy.py`) — auto keep-alive ping every 14 min to prevent sleep
+### Core portfolio
+- [x] Standalone dashboard on Netlify Pro with dark UI, 8 sections: Overview, Holdings, Performance, Market, AI Insights, Watchlist, NZ Tax (FIF), Admin
+- [x] Python proxy on Render Starter (no cold starts, PROXY_SECRET auth)
 - [x] Live Yahoo Finance prices via `yfinance` bulk download
-- [x] NZD as default base currency, FX auto-conversion via USDNZD=X etc.
-- [x] CSV import with multi-column aliasing (eToro "Open Rate", `invested` ÷ qty fallback)
-- [x] CSV template download with commented examples showing weighted avg cost
-- [x] Two import modes: "Add lots" (new purchases) vs "Sync (update)" (daily update)
+- [x] NZD default base currency, FX auto-conversion (USDNZD=X, AUDNZD=X, GBPNZD=X, USDAUD=X)
+- [x] **LSE pence normalisation** — .L / .IL tickers auto-divided by 100 so AZN.L etc. show realistic returns
 - [x] Weighted average cost basis via `lots[]` array per holding
-- [x] Per-holding columns in table: Units / Avg Cost / **Invested** / Current Price / Mkt Value / P&L
-- [x] Supabase auth + cloud sync + login gate (blocks app until signed in if Supabase is configured)
+- [x] Per-holding columns: Units / Avg Cost / Invested / Current Price / Mkt Value / P&L
+
+### Import & data quality
+- [x] Single-mode CSV import with smart merge (case-insensitive platform, symbol-only fallback)
+- [x] Snapshot date picker on import (backfill historical states)
+- [x] "Replace all" checkbox for clean-slate imports
+- [x] CSV template with weighted-avg-cost examples
+- [x] eToro column aliasing ("open rate", invested÷qty fallback)
+- [x] Crypto ticker alias auto-fix (BTC → BTC-USD, ETH → ETH-USD, +18 more)
+- [x] Admin "Fix Crypto Tickers" with collision merge (no more duplicate symbols)
+- [x] Self-healing duplicate check on init (two-pass: holdings + lots within holdings)
+- [x] Defensive dedup in saveToSupabase (never writes duplicate keys)
+- [x] Cache staleness guard (local-newer-than-cloud → push local, not reverse)
+
+### Cloud & auth
+- [x] Supabase Pro auth + cloud sync + login gate
 - [x] Per-user data isolation via Row Level Security
-- [x] Admin panel — nav link visible only to `is_admin` users; shows all users, holdings count, role toggles, delete
-- [x] Multi-agent AI: portfolio (Haiku) + market (Sonnet) + opportunity (Sonnet) in parallel, then advisor (Opus) synthesiser
-- [x] JSON backup/restore for portability
-- [x] Portfolio Pulse strip (replaced scrolling market ticker — shows YOUR top movers)
-- [x] Proxy status dot in header (green = online, red = down)
-- [x] Admin badge visible in header
-- [x] Watchlist feature — track tickers without owning
-- [x] NZ FIF tax check with FDR method estimate
-- [x] Onboarding wizard for new signups (4 paths: CSV / manual / demo / skip)
+- [x] Platform-managed credentials (regular users never configure anything)
+- [x] Admin panel — nav link visible only to `is_admin` users
+- [x] Admin badge race fix (non-admins never see ADMIN pill flash)
+- [x] Admin diagnostic tools: Test Supabase R/W, Test Proxy, Scan & Fix Duplicates, Fix Crypto Tickers, Force Reload, Reset Cloud Portfolio
+- [x] Bootstrap logic: first signup auto-promoted to admin
+
+### AI agents
+- [x] Multi-agent: portfolio (Haiku) + market (Sonnet) + opportunity (Sonnet) in parallel, then advisor (Opus) synthesiser
+- [x] LM Studio / OpenAI-compatible provider infrastructure (ready, not yet tested)
+
+### UX polish
+- [x] Toast notifications replacing alert() popups
+- [x] Sortable columns + search/filter on Holdings table
+- [x] Portfolio Pulse strip (your top movers, not a market ticker)
+- [x] Skeleton loaders on first paint
+- [x] Rich hover tooltips on holdings (lots, FX, native currency)
+- [x] Portfolio score visible without running agents (diversification calc)
+- [x] Sanity cap on "Best Performer" (excludes holdings with >500% gain)
+- [x] Proxy status dot in header (green/red indicator)
+- [x] Onboarding wizard for new signups (CSV / Manual / Demo / Skip)
 - [x] Demo data loader (5 sample NZ-investor holdings)
-- [x] Self-healing duplicate check on init + admin diagnostic tools
-- [x] Cache staleness guard (local-newer-than-cloud protection)
-- [x] Defensive dedup in saveToSupabase — never writes dup keys to cloud
-- [x] LM Studio / OpenAI-compatible AI provider support (admin-configurable)
-- [x] Snapshot-on-import with custom date for historical backfill
+
+### NZ-specific
+- [x] NZ FIF tax check with FDR 5% method estimate
+- [x] NZ$50k de-minimis threshold detection
+- [x] FMA-compliant vocabulary (see GUARDRAILS.md)
+
+### Snapshots & history
+- [x] Daily portfolio snapshots to Supabase with full per-holding payload
+- [x] Performance chart with time-range toggles (30d / 90d / 1y / All)
+- [x] **Holdings at a specific date** — pick any snapshot date → see exact holdings then with units, cost, value, P&L
+- [x] Snapshot-on-import with custom date
+
+### Infrastructure
+- [x] git → GitHub → Netlify + Render auto-deploy (both paid tiers now)
+- [x] Supabase tables: profiles, investiq_portfolios, investiq_snapshots
+- [x] `is_admin()` SECURITY DEFINER function (fixes recursion)
+- [x] JSON backup/restore for portability
+- [x] Watchlist (track tickers without owning)
 
 ## 6. What's pending / known issues
 
-- [ ] Akahu tokens not configured by user → ANZ/BNZ/Sharesies sync inactive
-- [ ] Render free tier still cold-starts on very first request of the day (keep-alive fires every 14 min, but initial boot after weekend may be slow)
-- [ ] FMA regulatory wording — agents should use "analysis/observation", never "recommendation/advice" (see GUARDRAILS.md)
-- [ ] Next.js app (unused) still in repo — can be deleted
-- [ ] No rate limiting in proxy — fine for single user, must add before commercialising
-- [ ] No export/email report functionality
-- [ ] Mobile layout not optimised
+See `docs/TODO.md` for the full prioritised list. Top 5 blockers / opens:
+
+- [ ] **P0 verification:** user needs to confirm LSE pence fix, crypto dedup, admin badge gating are all working live
+- [ ] **Dividend tracking** (P1 NZ-specific moat) — biggest unshipped feature
+- [ ] **Holding detail page** (P1 killer UX) — 1y chart, lot history, per-holding AI
+- [ ] **Migrate proxy to Supabase Edge Functions** (P5, paid-plan unlock) — kills Render dependency
+- [ ] **Weekly email digest** (P1, paid-plan unlock) — Supabase scheduled function
 
 ---
 
