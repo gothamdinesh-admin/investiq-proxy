@@ -821,6 +821,10 @@
           <input type="text" id="holdingsSearch" placeholder="Search tickers, names, platforms, types…" oninput="renderAll()" style="background:none;border:none;outline:none;color:#c8d6ef;font-size:13px;width:100%;">
           <button id="holdingsSearchClear" onclick="document.getElementById('holdingsSearch').value='';renderAll();" style="background:none;border:none;color:#4a6080;cursor:pointer;display:none;" title="Clear"><i class="fas fa-times"></i></button>
         </div>
+        <label class="flex items-center gap-1 text-xs neutral" style="cursor:pointer;white-space:nowrap;" title="Hide holdings you've marked as ignored">
+          <input type="checkbox" id="holdingsHideIgnored" style="cursor:pointer;" onchange="renderAll()">
+          <span>Hide ignored</span>
+        </label>
         <div class="text-xs neutral" id="holdingsFilterCount" style="min-width:80px;text-align:right;"></div>
       </div>
       <div class="card">
@@ -1668,6 +1672,7 @@
     <div id="viewModalContent"></div>
     <div class="flex gap-3 mt-5">
       <button id="viewEditBtn" class="btn btn-primary flex-1">Edit</button>
+      <button id="viewIgnoreBtn" class="btn btn-secondary"></button>
       <button id="viewDeleteBtn" class="btn btn-danger">Delete</button>
       <button onclick="closeModal('viewModal')" class="btn btn-secondary">Close</button>
     </div>
@@ -4478,6 +4483,15 @@ function viewHolding(id) {
 
   document.getElementById('viewEditBtn').onclick = () => editHolding(id);
   document.getElementById('viewDeleteBtn').onclick = () => deleteHolding(id);
+  const ignoreBtn = document.getElementById('viewIgnoreBtn');
+  if (ignoreBtn) {
+    ignoreBtn.innerHTML = h.ignored
+      ? '<i class="fas fa-eye mr-1"></i>Re-activate'
+      : '<i class="fas fa-eye-slash mr-1"></i>Ignore';
+    ignoreBtn.style.background = h.ignored ? 'rgba(52,211,153,0.15)' : '';
+    ignoreBtn.style.color = h.ignored ? '#34d399' : '';
+    ignoreBtn.onclick = () => { toggleIgnoreHolding(id); closeModal('viewModal'); };
+  }
   openModal('viewModal');
 }
 
@@ -4925,11 +4939,15 @@ function sortHoldings(col) {
 
 function applyHoldingsFilter(holdings) {
   const q = (document.getElementById('holdingsSearch')?.value || '').trim().toLowerCase();
+  const hideIgnored = document.getElementById('holdingsHideIgnored')?.checked || false;
   const clearBtn = document.getElementById('holdingsSearchClear');
   if (clearBtn) clearBtn.style.display = q ? '' : 'none';
   let filtered = holdings;
+  if (hideIgnored) {
+    filtered = filtered.filter(h => !h.ignored);
+  }
   if (q) {
-    filtered = holdings.filter(h => {
+    filtered = filtered.filter(h => {
       return (h.symbol||'').toLowerCase().includes(q)
           || (h.name||'').toLowerCase().includes(q)
           || (h.platform||'').toLowerCase().includes(q)
@@ -4950,7 +4968,8 @@ function applyHoldingsFilter(holdings) {
     });
   }
   const countEl = document.getElementById('holdingsFilterCount');
-  if (countEl) countEl.textContent = q ? `${filtered.length} of ${holdings.length}` : `${holdings.length} holdings`;
+  const totalLabel = q || hideIgnored ? `${filtered.length} of ${holdings.length}` : `${holdings.length} holdings`;
+  if (countEl) countEl.textContent = totalLabel;
   return filtered;
 }
 
