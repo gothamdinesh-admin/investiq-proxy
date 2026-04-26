@@ -74,6 +74,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._fetch_prices(symbols.split(","))
             else:
                 self._fetch_market()
+
+        elif parsed.path == "/api/news":
+            symbols = params.get("symbols", [None])[0]
+            limit_per = int(params.get("limit", ["3"])[0])
+            self._fetch_news(symbols.split(",") if symbols else [], limit_per)
+
         else:
             self._json(404, {"error": "Not found"})
 
@@ -322,6 +328,56 @@ class ProxyHandler(BaseHTTPRequestHandler):
         cache_set(cache_key, result, ttl_seconds=60)
         self._json(200, result)
         print(f"  ✓ Prices fetched: {list(result.keys())}")
+
+    def _fetch_news(self, symbols, limit_per=3):
+        # Yahoo Finance news per ticker — cached 30 min so we don't hammer the API
+        symbols = [s.strip() for s in symbols if s.strip()]
+        if not symbols:
+            return self._json(400, {"error": "symbols param required"})
+        cache_key = f"news:{','.join(sorted(symbols))}:{limit_per}"
+        cached = cache_get(cache_key)
+        if cached:
+            return self._json(200, cached)
+        try:
+            import yfinance as yf
+            articles = []
+            seen = set()  # dedupe by URL
+            for sym in symbols[:30]:  # cap at 30 symbols to keep request bounded
+                try:
+                    t = yf.Ticker(sym)
+                    items = t.news or []
+                    for item in items[:limit_per]:
+                        # yfinance news shape: {uuid, title, publisher, link, providerPublishTime, type, ...}
+                        # Newer versions wrap in {content: {...}} — handle both
+                        c = item.get('content', item)
+                        url = c.get('canonicalUrl', {}).get('url') if isinstance(c.get('canonicalUrl'), dict) else c.get('link', '')
+                        if not url or url in seen:
+                            continue
+                        seen.add(url)
+                        ts = c.get('pubDate') or c.get('providerPublishTime')
+                        if isinstance(ts, (int, float)):
+                            ts = datetime.utcfromtimestamp(ts).isoformat() + "Z"
+                        articles.append({
+                            "symbol":    sym,
+                            "title":     c.get('title', '') or '',
+                            "publisher": (c.get('provider') or {}).get('displayName') if isinstance(c.get('provider'), dict) else c.get('publisher', ''),
+                            "url":       url,
+                            "thumbnail": (c.get('thumbnail') or {}).get('resolutions', [{}])[0].get('url') if isinstance(c.get('thumbnail'), dict) else None,
+                            "published": ts,
+                            "summary":   c.get('summary', '') or c.get('description', '') or ''
+                        })
+                except Exception as ex:
+                    print(f"  ℹ news fetch failed for {sym}: {ex}")
+            # Sort newest first
+            articles.sort(key=lambda a: a.get('published') or '', reverse=True)
+            result = {"articles": articles, "count": len(articles), "symbols": symbols}
+            cache_set(cache_key, result, ttl_seconds=1800)  # 30 min
+            self._json(200, result)
+            print(f"  ✓ News fetched: {len(articles)} articles for {len(symbols)} symbols")
+        except ImportError:
+            self._json(500, {"error": "yfinance not installed on proxy"})
+        except Exception as ex:
+            self._json(500, {"error": str(ex)})
 
     def _yahoo_quotes(self, symbols):
         try:

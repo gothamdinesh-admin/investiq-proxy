@@ -605,6 +605,7 @@
       <div class="nav-link" onclick="showSection('market',this)"><i class="fas fa-globe"></i> Market</div>
       <div class="nav-link" onclick="showSection('insights',this)"><i class="fas fa-brain"></i> AI Insights</div>
       <div class="nav-link" onclick="showSection('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
+      <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
@@ -965,6 +966,30 @@
           <span>Symbol</span><span class="text-right">Price</span><span class="text-right">Day %</span><span class="text-right">Added</span><span class="text-right">Actions</span>
         </div>
         <div id="watchlistRows"></div>
+      </div>
+    </div>
+
+    <!-- NEWS SECTION — headlines for tickers in your portfolio + watchlist -->
+    <div id="section-news" style="display:none;">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-newspaper" style="color:#818cf8;"></i> News for Your Holdings
+          </h2>
+          <div class="text-xs neutral mt-1">Latest headlines for the tickers in your portfolio + watchlist. Refreshed every 30 min, cached server-side.</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="newsScopeFilter" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="loadNews()">
+            <option value="all">All my tickers</option>
+            <option value="portfolio">Portfolio only</option>
+            <option value="watchlist">Watchlist only</option>
+            <option value="movers">Today's movers (>2%)</option>
+          </select>
+          <button onclick="loadNews(true)" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+        </div>
+      </div>
+      <div id="newsContent">
+        <div class="text-center py-10 neutral text-sm">Loading news…</div>
       </div>
     </div>
 
@@ -4792,7 +4817,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','tax','admin'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','admin'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -4804,6 +4829,7 @@ function _showSectionCore(name, el) {
   if (name === 'admin') { loadAdminData(); loadActivityLog(); }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { renderWatchlist(); refreshWatchlist(); }
+  if (name === 'news') loadNews();
   if (name === 'tax') refreshFIF();
 }
 
@@ -5596,6 +5622,113 @@ function removeFromWatchlist(sym) {
   state.settings.watchlist = state.settings.watchlist.filter(w => w.symbol !== sym);
   saveState();
   renderWatchlist();
+}
+
+// ===== NEWS FEED =====
+// Fetches recent news from the proxy /api/news endpoint (Yahoo Finance via yfinance).
+// Cached client-side for 5 min on top of the server's 30-min cache.
+let _newsCache = null;
+let _newsCacheTime = 0;
+
+function getNewsScopeSymbols() {
+  const scope = document.getElementById('newsScopeFilter')?.value || 'all';
+  const portfolioSymbols = state.portfolio.filter(h => !h.ignored).map(h => h.symbol);
+  const watchlistSymbols = (state.settings.watchlist || []).map(w => w.symbol);
+  if (scope === 'portfolio') return portfolioSymbols;
+  if (scope === 'watchlist') return watchlistSymbols;
+  if (scope === 'movers') {
+    const metrics = getMetrics();
+    return metrics.holdings
+      .filter(h => Math.abs(h.dayChangePct || 0) >= 2)
+      .map(h => h.symbol);
+  }
+  return [...new Set([...portfolioSymbols, ...watchlistSymbols])];
+}
+
+async function loadNews(forceRefresh = false) {
+  const wrap = document.getElementById('newsContent');
+  if (!wrap) return;
+  const symbols = getNewsScopeSymbols();
+  if (!symbols.length) {
+    wrap.innerHTML = `<div class="card p-8 text-center neutral text-sm">
+      <i class="fas fa-newspaper text-3xl mb-3 block" style="opacity:0.3;"></i>
+      No matching tickers in this scope. Try a different filter or add holdings/watchlist items first.
+    </div>`;
+    return;
+  }
+  // 5-min client-side cache key
+  const cacheKey = symbols.sort().join(',');
+  if (!forceRefresh && _newsCache?.key === cacheKey && (Date.now() - _newsCacheTime < 5*60*1000)) {
+    renderNews(_newsCache.articles, symbols.length);
+    return;
+  }
+  wrap.innerHTML = `<div class="card p-8 text-center neutral text-sm">
+    <div class="spinner" style="display:inline-block;margin-right:8px;"></div>Fetching headlines for ${symbols.length} ticker${symbols.length>1?'s':''}…
+  </div>`;
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  if (!proxyBase) {
+    wrap.innerHTML = '<div class="card p-8 text-center" style="color:#f87171;">No proxy URL configured.</div>';
+    return;
+  }
+  try {
+    const url = `${proxyBase}/api/news?symbols=${encodeURIComponent(symbols.join(','))}&limit=3`;
+    const res = await fetch(url, { headers: proxyHeaders(), signal: AbortSignal.timeout(30000) });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`[${res.status}] ${err}`);
+    }
+    const data = await res.json();
+    _newsCache = { key: cacheKey, articles: data.articles || [] };
+    _newsCacheTime = Date.now();
+    renderNews(data.articles || [], symbols.length);
+  } catch(e) {
+    wrap.innerHTML = `<div class="card p-8 text-center" style="color:#f87171;">
+      <i class="fas fa-exclamation-triangle text-2xl mb-2 block"></i>
+      Could not load news: ${_escape(e.message)}
+      <div class="text-xs neutral mt-3">If your proxy is on Render Starter, this should work. Free tier may not have /api/news endpoint deployed yet.</div>
+    </div>`;
+  }
+}
+
+function renderNews(articles, totalSymbols) {
+  const wrap = document.getElementById('newsContent');
+  if (!wrap) return;
+  if (!articles.length) {
+    wrap.innerHTML = `<div class="card p-8 text-center neutral text-sm">
+      <i class="fas fa-newspaper text-3xl mb-3 block" style="opacity:0.3;"></i>
+      No recent news for these tickers. Yahoo Finance may not have coverage for some symbols (LSE, HK, etc).
+    </div>`;
+    return;
+  }
+  const fmtTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const sec = Math.floor((Date.now() - d.getTime())/1000);
+    if (sec < 60) return 'Just now';
+    if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+    if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+    return Math.floor(sec/86400) + 'd ago';
+  };
+  const cards = articles.map(a => `
+    <a href="${_escape(a.url)}" target="_blank" rel="noopener" class="card p-4" style="display:flex;gap:14px;text-decoration:none;color:inherit;transition:border-color 0.15s;cursor:pointer;border:1px solid #1e2d4a;" onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#1e2d4a'">
+      ${a.thumbnail ? `<img src="${_escape(a.thumbnail)}" alt="" style="width:120px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#0a1120;" onerror="this.style.display='none'">` : ''}
+      <div style="flex:1;min-width:0;">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(129,140,248,0.12);color:#818cf8;border:1px solid rgba(129,140,248,0.25);font-weight:600;">${_escape(a.symbol)}</span>
+          <span class="text-xs neutral">${_escape(a.publisher || '')}</span>
+          <span class="text-xs neutral" style="margin-left:auto;">${fmtTime(a.published)}</span>
+        </div>
+        <div class="font-semibold text-sm mb-1" style="color:#c8d6ef;line-height:1.4;">${_escape(a.title)}</div>
+        ${a.summary ? `<div class="text-xs neutral" style="line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${_escape(a.summary)}</div>` : ''}
+      </div>
+    </a>`).join('');
+  wrap.innerHTML = `
+    <div class="text-xs neutral mb-3">${articles.length} headline${articles.length>1?'s':''} across ${totalSymbols} ticker${totalSymbols>1?'s':''} · cached 30 min server-side</div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${cards}</div>`;
+}
+
+function _escape(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 async function refreshWatchlist() {
