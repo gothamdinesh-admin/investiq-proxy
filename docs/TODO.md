@@ -74,7 +74,8 @@ The recent barrage of fixes needs user verification before building more on top.
 - [ ] **AI chat interface** — natural-language portfolio Q&A ("what's my tech exposure?", "should I rebalance?"). Uses existing Claude setup with conversation history. Est: half day.
 - [ ] **Custom agent creation** — admin can define new agent types with custom prompts. Est: 2 hours.
 - [ ] **AI-written rebalancing plan** — "you're 65% tech, target 40% — sell X shares of NVDA, buy Y of VT." Complements the Opportunity Scout agent. Est: 3 hours.
-- [ ] **News summarisation filtered to your holdings** — daily briefing, Claude Haiku reads headlines and filters relevant ones. Est: half day (needs news API).
+- [x] **News feed for your holdings** — DONE 2026-04-19. New `/api/news` proxy endpoint (yfinance), News tab with scope filter (all / portfolio / watchlist / movers >2%), card layout with thumbnails, server-cached 30 min.
+- [ ] **News summarisation with Claude Haiku** — next step: feed the headlines through Haiku for a 3-bullet daily briefing. Est: 1 hour on top of existing news feed.
 - [ ] **Prompt caching** — cache the agent system prompts + portfolio context. Cuts AI cost 50-80%. Est: 1 hour.
 
 ---
@@ -89,7 +90,7 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 - [ ] **Netlify Forms for feedback** — in-app "Report a bug" / "Feature request" form → hits Netlify Forms endpoint → you get email. Est: 30 min.
 - [ ] **Deploy previews per PR** — Netlify Pro gives this free. Just enable in settings. Est: 5 min.
 - [ ] **Rate limiting on proxy** — per-user token bucket, prevents abuse when site goes public. Est: 2 hours.
-- [ ] **Audit log for admin actions** — log who made who admin, who deleted what. Compliance prep. Est: 2 hours.
+- [x] **Audit log** — DONE 2026-04-19. New `investiq_activity_log` table, logs login/signup/logout/csv_import/holding_*/agent_run with details. Admin Panel has Activity Log card with type filter.
 
 ---
 
