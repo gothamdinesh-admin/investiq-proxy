@@ -1149,6 +1149,36 @@
         </div>
       </div>
 
+      <!-- Activity Log -->
+      <div class="card mb-6" style="overflow:hidden;">
+        <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid #1e2d4a;">
+          <div>
+            <div class="font-semibold text-sm flex items-center gap-2">
+              <i class="fas fa-history" style="color:#34d399;"></i>
+              Activity Log
+            </div>
+            <div class="text-xs neutral mt-1">Recent logins, imports, agent runs, holdings changes across all users.</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="auditFilter" class="input" style="font-size:11px;padding:4px 8px;width:auto;" onchange="loadActivityLog()">
+              <option value="">All events</option>
+              <option value="login">Logins</option>
+              <option value="signup">Signups</option>
+              <option value="logout">Logouts</option>
+              <option value="csv_import">CSV imports</option>
+              <option value="holding_add">Holdings added</option>
+              <option value="holding_edit">Holdings edited</option>
+              <option value="holding_delete">Holdings deleted</option>
+              <option value="agent_run">AI agent runs</option>
+            </select>
+            <button onclick="loadActivityLog()" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+          </div>
+        </div>
+        <div id="activityLogTable" style="max-height:400px;overflow-y:auto;">
+          <div class="text-center p-6 neutral text-sm">Click Refresh to load activity log…</div>
+        </div>
+      </div>
+
       <!-- User table -->
       <div class="card" style="overflow:hidden;">
         <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
@@ -1948,6 +1978,27 @@ const LOCAL_ONLY_SETTINGS = [
   'proxySecret'      // Never leak
 ];
 
+// ═══════════════════════════════════════════════════════════════════════
+// AUDIT LOG — fires off non-blocking inserts to investiq_activity_log
+// for every meaningful user action. Best-effort: never throws, never
+// blocks the calling code, errors only console.warn'd.
+// ═══════════════════════════════════════════════════════════════════════
+function logActivity(eventType, details) {
+  try {
+    if (!_supabase || !_supaUser) return;
+    const payload = {
+      user_id:    _supaUser.id,
+      event_type: eventType,
+      details:    details || null,
+      user_agent: (navigator.userAgent || '').slice(0, 200)
+    };
+    // Fire-and-forget — don't await
+    _supabase.from('investiq_activity_log').insert(payload).then(({ error }) => {
+      if (error) console.warn('[audit]', eventType, error.message);
+    });
+  } catch(e) { /* swallow */ }
+}
+
 async function loadFromSupabase() {
   if (!_supabase || !_supaUser) return false;
   try {
@@ -2299,6 +2350,7 @@ async function signIn(email, password) {
 
   _supaUser = data.user;
   await checkAdminStatus();
+  logActivity('login', { email: _supaUser.email, isAdmin: _isAdmin });
   // Touch last_seen
   _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
   updateAuthUI();
@@ -2332,7 +2384,10 @@ async function signUp(email, password) {
   if (error) return { error: error.message };
   _supaUser = data.user;
   updateAuthUI();
-  if (_supaUser) await saveToSupabase();
+  if (_supaUser) {
+    logActivity('signup', { email: _supaUser.email, emailConfirm: !data.session });
+    await saveToSupabase();
+  }
   return { ok: true, emailConfirm: !data.session };
 }
 
@@ -2345,6 +2400,8 @@ async function signOut() {
       try { await saveToSupabase(); } catch(e) { console.warn('[signOut] flush failed:', e); }
     }
   }
+  // Audit BEFORE we lose _supaUser
+  logActivity('logout', { email: _supaUser?.email });
   // Then sign out from Supabase
   if (_supabase) await _supabase.auth.signOut();
   _supaUser = null;
@@ -3031,6 +3088,7 @@ async function _importCSVImpl(event) {
     || new Date().toISOString().slice(0,10);
 
   toast.success({ title: 'CSV import complete', message: `${parts.join(' · ')}\nSnapshot: ${snapshotDate} · Fetching prices…`, duration: 6000 });
+  logActivity('csv_import', { updated, newCreated, removedCount, skipped, snapshotDate, replaceAll });
 
   // Fetch live prices, then force a snapshot using the chosen date
   refreshMarketData()
@@ -4244,10 +4302,12 @@ async function runAgents() {
     saveState();
     renderInsightsSection(state.agentResults);
     renderQuickInsights(metrics);
+    logActivity('agent_run', { holdingsCount: metrics.holdings.length, portfolioScore: state.agentResults.portfolioScore });
 
   } catch(e) {
     document.getElementById('agentError').style.display = 'block';
     document.getElementById('agentError').textContent = 'Agent error: ' + e.message;
+    logActivity('agent_run_failed', { error: e.message?.slice(0,200) });
     ['portfolio','market','opportunity','advisor'].forEach(k => {
       if (document.getElementById('agent-'+k)?.className.includes('running'))
         setAgentState(k, 'error');
@@ -4402,11 +4462,13 @@ function saveHolding(e) {
 }
 
 function deleteHolding(id) {
+  const h = state.portfolio.find(x => x.id === id);
   if (!confirm('Delete this holding? This cannot be undone.')) return;
-  state.portfolio = state.portfolio.filter(h => h.id !== id);
+  state.portfolio = state.portfolio.filter(x => x.id !== id);
   saveState();
   closeModal('viewModal');
   renderAll();
+  if (h) logActivity('holding_delete', { symbol: h.symbol, platform: h.platform });
 }
 
 // Toggle a holding between active (counts in totals) and ignored (still
@@ -4422,6 +4484,7 @@ function toggleIgnoreHolding(id) {
   toast.info(h.ignored
     ? `${h.symbol} ignored — kept visible but excluded from totals`
     : `${h.symbol} re-activated — back in portfolio totals`);
+  logActivity(h.ignored ? 'holding_ignore' : 'holding_unignore', { symbol: h.symbol, platform: h.platform });
 }
 
 function viewHolding(id) {
@@ -4738,7 +4801,7 @@ function _showSectionCore(name, el) {
   if (active) active.classList.add('active');
   currentSection = name;
   if (name === 'market') renderMarketSection();
-  if (name === 'admin') loadAdminData();
+  if (name === 'admin') { loadAdminData(); loadActivityLog(); }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { renderWatchlist(); refreshWatchlist(); }
   if (name === 'tax') refreshFIF();
@@ -6004,6 +6067,74 @@ async function adminForceReload() {
   healDuplicates();
   renderAll();
   _adminLog(ok ? `✓ Reloaded. ${state.portfolio.length} holdings.` : '✗ Reload failed — see console.');
+}
+
+// Activity log viewer for admins (and 'my activity' for regular users later)
+const ACTIVITY_ICONS = {
+  login: 'fa-sign-in-alt', signup: 'fa-user-plus', logout: 'fa-sign-out-alt',
+  csv_import: 'fa-file-import', holding_add: 'fa-plus-circle',
+  holding_edit: 'fa-edit', holding_delete: 'fa-trash',
+  holding_ignore: 'fa-eye-slash', holding_unignore: 'fa-eye',
+  agent_run: 'fa-robot', agent_run_failed: 'fa-exclamation-triangle',
+  settings_change: 'fa-cog', admin_action: 'fa-shield-alt'
+};
+const ACTIVITY_COLORS = {
+  login: '#34d399', signup: '#34d399', logout: '#94a3b8',
+  csv_import: '#818cf8', holding_add: '#34d399', holding_edit: '#fbbf24',
+  holding_delete: '#f87171', holding_ignore: '#fbbf24', holding_unignore: '#34d399',
+  agent_run: '#818cf8', agent_run_failed: '#f87171',
+  settings_change: '#94a3b8', admin_action: '#fbbf24'
+};
+
+async function loadActivityLog() {
+  if (!_isAdmin || !_supabase) return;
+  const tbody = document.getElementById('activityLogTable');
+  if (!tbody) return;
+  tbody.innerHTML = '<div class="text-center p-6 neutral text-sm"><div class="spinner" style="display:inline-block;margin-right:6px;"></div>Loading activity…</div>';
+  const filter = document.getElementById('auditFilter')?.value || '';
+  try {
+    let q = _supabase.from('investiq_activity_log')
+      .select('id, user_id, event_type, details, user_agent, created_at')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (filter) q = q.eq('event_type', filter);
+    const { data, error } = await q;
+    if (error) throw error;
+    if (!data || !data.length) {
+      tbody.innerHTML = '<div class="text-center p-6 neutral text-sm">No activity recorded yet.</div>';
+      return;
+    }
+    // Build user_id → email map from already-loaded admin user list
+    const userMap = {};
+    (_adminUsers || []).forEach(u => { userMap[u.id] = u.email; });
+    tbody.innerHTML = data.map(row => {
+      const icon  = ACTIVITY_ICONS[row.event_type] || 'fa-circle';
+      const color = ACTIVITY_COLORS[row.event_type] || '#94a3b8';
+      const email = userMap[row.user_id] || `<span style="color:#4a6080;">user ${row.user_id?.slice(0,8)}…</span>`;
+      const when  = new Date(row.created_at);
+      const ago   = timeSince(when);
+      const detailParts = [];
+      if (row.details) {
+        Object.entries(row.details).forEach(([k,v]) => {
+          if (v == null || v === '' || v === false) return;
+          detailParts.push(`${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+        });
+      }
+      const ua = (row.user_agent || '').match(/(Chrome|Firefox|Safari|Edge)\/[\d.]+/)?.[0] || '';
+      return `
+        <div style="display:grid;grid-template-columns:24px 1fr 200px 120px;gap:12px;padding:10px 16px;border-bottom:1px solid #1a2540;align-items:center;font-size:12px;">
+          <i class="fas ${icon}" style="color:${color};font-size:13px;text-align:center;"></i>
+          <div style="min-width:0;">
+            <div style="color:#c8d6ef;font-weight:500;text-transform:capitalize;">${row.event_type.replace(/_/g,' ')}</div>
+            ${detailParts.length ? `<div class="neutral mono" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${detailParts.join(' · ')}</div>` : ''}
+          </div>
+          <div style="color:#94a3b8;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${email}${ua ? ' <span style="color:#4a6080;">· '+ua+'</span>' : ''}</div>
+          <div class="neutral mono" style="text-align:right;font-size:10px;" title="${when.toLocaleString()}">${ago}</div>
+        </div>`;
+    }).join('');
+  } catch(e) {
+    tbody.innerHTML = `<div class="text-center p-6" style="color:#f87171;">Error: ${e.message}</div>`;
+  }
 }
 
 function adminFixTickers() {
