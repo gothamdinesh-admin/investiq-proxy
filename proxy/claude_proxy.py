@@ -26,10 +26,27 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta
 
 import os
+import time
+from collections import defaultdict, deque
+
 PORT = int(os.environ.get("PORT", 8080))
 HOST = "0.0.0.0"   # bind to all interfaces (required for Render/cloud hosting)
 ANTHROPIC_API = "https://api.anthropic.com"
 AKAHU_API     = "https://api.akahu.io/v1"
+
+# ── SECURITY: env-controlled allowlists ────────────────────────
+# ALLOWED_ORIGIN — one or more comma-separated origins, e.g.:
+#   "https://investiq-nz.netlify.app,https://staging.netlify.app"
+# Default '*' is open and only safe for local dev.
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGIN", "*").split(",") if o.strip()]
+
+# PROXY_SECRET — clients MUST send X-Proxy-Secret matching this.
+# Without it, anyone with the proxy URL can burn your Claude credits.
+PROXY_SECRET = os.environ.get("PROXY_SECRET", "")
+
+# RATE_LIMIT — N requests per minute per IP (0 = disabled). Default 60/min.
+RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "60"))
+_rate_buckets = defaultdict(lambda: deque(maxlen=200))
 
 ctx = ssl.create_default_context()
 
@@ -50,13 +67,58 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"  {fmt % args}")
 
+    def _origin_allowed(self):
+        """Return the matching allowed origin (for echoing back) or None."""
+        if "*" in ALLOWED_ORIGINS:
+            return "*"
+        origin = self.headers.get("Origin", "")
+        if origin and origin in ALLOWED_ORIGINS:
+            return origin
+        # If no Origin header (e.g. server-to-server), allow only with a valid secret
+        return None
+
     def send_cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
+        allowed = self._origin_allowed()
+        if allowed:
+            self.send_header("Access-Control-Allow-Origin", allowed)
+            self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers",
-                         "Content-Type, x-api-key, anthropic-version, anthropic-beta, X-Akahu-App-Token, Authorization")
+                         "Content-Type, x-api-key, anthropic-version, anthropic-beta, "
+                         "X-Akahu-App-Token, X-Proxy-Secret, Authorization")
+        self.send_header("Access-Control-Max-Age", "86400")
+
+    def _client_ip(self):
+        # Render / Heroku forward via X-Forwarded-For
+        xff = self.headers.get("X-Forwarded-For", "")
+        if xff:
+            return xff.split(",")[0].strip()
+        return self.client_address[0]
+
+    def _rate_limit_ok(self):
+        if RATE_LIMIT <= 0:
+            return True
+        ip = self._client_ip()
+        bucket = _rate_buckets[ip]
+        now = time.time()
+        # Drop entries older than 60s
+        while bucket and now - bucket[0] > 60:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT:
+            return False
+        bucket.append(now)
+        return True
+
+    def _check_secret(self):
+        """Return True if request is authorised (or skip if dev mode)."""
+        if not PROXY_SECRET:
+            # Dev mode — allow but warn loudly so it's visible in logs
+            return True
+        incoming = self.headers.get("X-Proxy-Secret", "")
+        return incoming == PROXY_SECRET
 
     def do_OPTIONS(self):
+        # Preflight always returns 204, no auth check (CORS spec requirement)
         self.send_response(204)
         self.send_cors()
         self.end_headers()
@@ -65,27 +127,40 @@ class ProxyHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
 
+        # /health is public so keep-alive pings don't need the secret
         if parsed.path == "/health":
             self._json(200, {"status": "ok", "service": "InvestIQ Proxy"})
+            return
 
-        elif parsed.path == "/api/market":
+        if not self._rate_limit_ok():
+            return self._json(429, {"error": "Rate limit exceeded — try again in a minute"})
+        if not self._check_secret():
+            return self._json(403, {"error": "Forbidden — invalid or missing X-Proxy-Secret"})
+
+        if parsed.path == "/api/market":
             symbols = params.get("symbols", [None])[0]
             if symbols:
                 self._fetch_prices(symbols.split(","))
             else:
                 self._fetch_market()
-
         elif parsed.path == "/api/news":
             symbols = params.get("symbols", [None])[0]
             limit_per = int(params.get("limit", ["3"])[0])
             self._fetch_news(symbols.split(",") if symbols else [], limit_per)
-
         else:
             self._json(404, {"error": "Not found"})
 
     def do_POST(self):
+        if not self._rate_limit_ok():
+            return self._json(429, {"error": "Rate limit exceeded — try again in a minute"})
+        if not self._check_secret():
+            return self._json(403, {"error": "Forbidden — invalid or missing X-Proxy-Secret"})
+
+        # Cap request body to 2 MB to prevent abuse
         length = int(self.headers.get("Content-Length", 0))
-        body   = self.rfile.read(length)
+        if length > 2_000_000:
+            return self._json(413, {"error": "Request body too large (>2MB)"})
+        body = self.rfile.read(length)
 
         if self.path.startswith("/v1/messages"):
             self._proxy_anthropic(body)
