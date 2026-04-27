@@ -1640,9 +1640,11 @@
           <label>☁️ Supabase URL</label>
           <input type="text" id="settingSupabaseUrl" class="input mb-2" placeholder="https://xxxx.supabase.co">
           <label>Supabase anon key</label>
-          <input type="password" id="settingSupabaseKey" class="input" placeholder="eyJ...">
+          <input type="password" id="settingSupabaseKey" class="input mb-2" placeholder="eyJ...">
+          <label>🔒 Proxy Secret <span class="text-xs" style="color:#4a6080;font-weight:normal;">(must match PROXY_SECRET env var on Render)</span></label>
+          <input type="password" id="settingProxySecret" class="input" placeholder="64-char hex string">
           <div class="text-xs mt-2" style="color:#4a6080;">
-            Platform defaults loaded from <code style="background:#141e33;padding:2px 6px;border-radius:4px;">PLATFORM_CONFIG</code> in the code.
+            Platform defaults loaded from <code style="background:#141e33;padding:2px 6px;border-radius:4px;">PLATFORM_CONFIG</code> in the code. Generate proxy secret with: <code>openssl rand -hex 32</code>
           </div>
         </div>
         <div style="border-top:1px dashed #1e2d4a;padding-top:16px;margin-top:4px;">
@@ -4883,6 +4885,8 @@ function populateSettingsForm() {
     if (proxy)  proxy.value  = state.settings.proxyUrl || '';
     if (supUrl) supUrl.value = state.settings.supabaseUrl || '';
     if (supKey) supKey.value = state.settings.supabaseKey || '';
+    const proxySecretEl = document.getElementById('settingProxySecret');
+    if (proxySecretEl) proxySecretEl.value = state.settings.proxySecret || '';
     const aiProv    = document.getElementById('settingAiProvider');
     const aiProvUrl = document.getElementById('settingAiProviderUrl');
     const aiProvKey = document.getElementById('settingAiProviderKey');
@@ -4976,6 +4980,8 @@ function saveSettings() {
     if (proxy)  state.settings.proxyUrl     = proxy.value.trim()  || PLATFORM_CONFIG.proxyUrl;
     if (supUrl) state.settings.supabaseUrl  = supUrl.value.trim() || PLATFORM_CONFIG.supabaseUrl;
     if (supKey) state.settings.supabaseKey  = supKey.value.trim() || PLATFORM_CONFIG.supabaseKey;
+    const proxySecretEl = document.getElementById('settingProxySecret');
+    if (proxySecretEl) state.settings.proxySecret = proxySecretEl.value.trim();
     if (aiProv)    state.settings.aiProvider    = aiProv.value;
     if (aiProvUrl) state.settings.aiProviderUrl = aiProvUrl.value.trim();
     if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
