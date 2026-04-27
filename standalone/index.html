@@ -469,53 +469,201 @@
 
 <!-- ONBOARDING MODAL — shown once after first signup, dismissed by picking a path -->
 <div class="modal-overlay" id="onboardingModal" onclick="event.stopPropagation()" style="background:rgba(8,13,26,0.95);">
-  <div class="modal" style="max-width:560px;">
-    <div class="text-center mb-6">
-      <div style="display:inline-flex;width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#6366f1,#818cf8);align-items:center;justify-content:center;margin-bottom:16px;">
-        <i class="fas fa-chart-line text-white" style="font-size:24px;"></i>
+  <div class="modal" style="max-width:680px;">
+
+    <!-- Step 1 — Welcome -->
+    <div id="onboardingStep1">
+      <div class="text-center mb-6">
+        <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#818cf8);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(99,102,241,0.3);">
+          <i class="fas fa-chart-line text-white" style="font-size:28px;"></i>
+        </div>
+        <h2 class="text-2xl font-bold gradient-text mb-2">Welcome to InvestIQ</h2>
+        <div class="text-sm neutral" style="max-width:480px;margin:0 auto;line-height:1.6;">Your personal portfolio dashboard — designed for NZ investors, but works anywhere. Track multiple platforms, see live prices, get AI insights, all in one place.</div>
       </div>
-      <h2 class="text-xl font-bold gradient-text">Welcome to InvestIQ</h2>
-      <div class="text-sm neutral mt-2">Let's get your portfolio set up — choose where your data lives first.</div>
+
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="card2 p-4">
+          <div class="onboarding-icon mb-2" style="width:36px;height:36px;background:rgba(129,140,248,0.15);color:#818cf8;font-size:14px;"><i class="fas fa-globe"></i></div>
+          <div class="font-semibold text-sm">Multi-platform</div>
+          <div class="text-xs neutral mt-1">eToro, Sharesies, Hatch, Harbour, ANZ, BNZ — one CSV format works everywhere.</div>
+        </div>
+        <div class="card2 p-4">
+          <div class="onboarding-icon mb-2" style="width:36px;height:36px;background:rgba(52,211,153,0.15);color:#34d399;font-size:14px;"><i class="fas fa-bolt"></i></div>
+          <div class="font-semibold text-sm">Live prices</div>
+          <div class="text-xs neutral mt-1">Auto-converted to NZD. Refreshes every 5 min, snapshot every day.</div>
+        </div>
+        <div class="card2 p-4">
+          <div class="onboarding-icon mb-2" style="width:36px;height:36px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:14px;"><i class="fas fa-robot"></i></div>
+          <div class="font-semibold text-sm">AI analysis</div>
+          <div class="text-xs neutral mt-1">4 specialised Claude agents review your portfolio. No advice — just analysis.</div>
+        </div>
+        <div class="card2 p-4">
+          <div class="onboarding-icon mb-2" style="width:36px;height:36px;background:rgba(167,139,250,0.15);color:#c4b5fd;font-size:14px;"><i class="fas fa-receipt"></i></div>
+          <div class="font-semibold text-sm">NZ tax aware</div>
+          <div class="text-xs neutral mt-1">FIF threshold check, FDR estimate, dividend tracking (coming).</div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <button onclick="onboardingPath('skip')" class="btn btn-sm btn-secondary" style="font-size:11px;">Skip tour</button>
+        <button onclick="setOnboardingStep(2)" class="btn btn-primary"><i class="fas fa-arrow-right ml-1 mr-2"></i>Next: pick a starting point</button>
+      </div>
     </div>
 
-    <div class="space-y-3">
-      <button onclick="onboardingPath('csv')" class="onboarding-card">
-        <div class="flex items-center gap-3">
-          <div class="onboarding-icon" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-file-csv"></i></div>
-          <div class="text-left flex-1">
-            <div class="font-semibold text-sm">Upload a CSV from eToro / Sharesies</div>
-            <div class="text-xs neutral mt-1">Export from your broker and upload — works with most platforms.</div>
-          </div>
-          <i class="fas fa-chevron-right neutral"></i>
-        </div>
-      </button>
+    <!-- Step 2 — Pick how to start -->
+    <div id="onboardingStep2" style="display:none;">
+      <div class="text-center mb-6">
+        <h2 class="text-xl font-bold mb-2">How do you want to start?</h2>
+        <div class="text-sm neutral">Pick whichever fits — you can always switch later.</div>
+      </div>
 
-      <button onclick="onboardingPath('manual')" class="onboarding-card">
-        <div class="flex items-center gap-3">
-          <div class="onboarding-icon" style="background:rgba(167,139,250,0.15);color:#c4b5fd;"><i class="fas fa-edit"></i></div>
-          <div class="text-left flex-1">
-            <div class="font-semibold text-sm">Add holdings manually</div>
-            <div class="text-xs neutral mt-1">One by one. Good for a small portfolio or testing the UI.</div>
+      <div class="space-y-3">
+        <button onclick="onboardingPath('csv')" class="onboarding-card">
+          <div class="flex items-center gap-3">
+            <div class="onboarding-icon" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-file-csv"></i></div>
+            <div class="text-left flex-1">
+              <div class="font-semibold text-sm">Upload a CSV from your broker <span class="text-xs" style="color:#34d399;font-weight:600;">— recommended</span></div>
+              <div class="text-xs neutral mt-1">Fastest. Export from eToro / Sharesies / Hatch and drop it in. We handle column variations automatically.</div>
+            </div>
+            <i class="fas fa-chevron-right neutral"></i>
           </div>
-          <i class="fas fa-chevron-right neutral"></i>
-        </div>
-      </button>
+        </button>
 
-      <button onclick="onboardingPath('demo')" class="onboarding-card">
-        <div class="flex items-center gap-3">
-          <div class="onboarding-icon" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-flask"></i></div>
-          <div class="text-left flex-1">
-            <div class="font-semibold text-sm">Explore with sample data</div>
-            <div class="text-xs neutral mt-1">See the dashboard in action before you add anything real.</div>
+        <button onclick="onboardingPath('manual')" class="onboarding-card">
+          <div class="flex items-center gap-3">
+            <div class="onboarding-icon" style="background:rgba(167,139,250,0.15);color:#c4b5fd;"><i class="fas fa-edit"></i></div>
+            <div class="text-left flex-1">
+              <div class="font-semibold text-sm">Add holdings one at a time</div>
+              <div class="text-xs neutral mt-1">Good for a small portfolio (under 10 holdings) or to test the UI quickly.</div>
+            </div>
+            <i class="fas fa-chevron-right neutral"></i>
           </div>
-          <i class="fas fa-chevron-right neutral"></i>
-        </div>
-      </button>
+        </button>
+
+        <button onclick="onboardingPath('demo')" class="onboarding-card">
+          <div class="flex items-center gap-3">
+            <div class="onboarding-icon" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-flask"></i></div>
+            <div class="text-left flex-1">
+              <div class="font-semibold text-sm">Try with sample data first</div>
+              <div class="text-xs neutral mt-1">Loads 5 example holdings (NZ + US + crypto) so you can explore every feature before adding your real portfolio.</div>
+            </div>
+            <i class="fas fa-chevron-right neutral"></i>
+          </div>
+        </button>
+      </div>
+
+      <div class="mt-6 flex items-center justify-between text-xs neutral">
+        <button onclick="setOnboardingStep(1)" class="btn btn-sm btn-secondary" style="font-size:11px;"><i class="fas fa-arrow-left mr-1"></i>Back</button>
+        <button onclick="onboardingPath('skip')" class="btn btn-sm btn-secondary" style="font-size:11px;">Skip</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HELP MODAL — opens via persistent (?) button -->
+<div class="modal-overlay" id="helpModal" onclick="closeModalBg(event,'helpModal')">
+  <div class="modal" style="max-width:720px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xl font-bold flex items-center gap-2">
+        <i class="fas fa-question-circle" style="color:#818cf8;"></i>Help & FAQ
+      </h2>
+      <button onclick="closeModal('helpModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
     </div>
 
-    <div class="mt-6 flex items-center justify-between text-xs neutral">
-      <span>You can change everything later in Settings.</span>
-      <button onclick="onboardingPath('skip')" class="btn btn-sm btn-secondary" style="font-size:11px;">Skip for now</button>
+    <div class="space-y-2" style="max-height:65vh;overflow-y:auto;">
+      <details class="card2 p-3 cursor-pointer" open>
+        <summary class="font-semibold text-sm">How do I import my eToro / Sharesies portfolio?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          <b>eToro:</b> Portfolio → ⋯ menu → Export → CSV<br>
+          <b>Sharesies:</b> Account → Investing activity → Download CSV<br>
+          <b>Hatch:</b> Account → Statements → CSV (or use Akahu sync if available)<br>
+          Then go to <b>Holdings</b> tab → <b>Upload CSV</b>. The importer auto-detects column names (works with "Open Rate", "purchasePrice", "buyPrice", etc).
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">What does "Snapshot date" mean on import?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          The date stamp recorded with this import. Defaults to today. Set it to a past date to backfill your performance history (e.g. import a CSV you exported 3 months ago and tag it with that date — your performance chart gets a data point there).
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">Why is my BTC / ETH price so low?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Yahoo Finance uses different ticker symbols for crypto. We auto-fix common ones on every load (BTC → BTC-USD, ETH → ETH-USD). If a price still looks wrong, run <b>Admin Panel → Fix Crypto Tickers</b> manually.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">Why does my UK stock (e.g. AZN.L) show a strange return?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          London Stock Exchange tickers (.L suffix) are quoted in pence, but most users enter purchase price in pounds. We auto-divide by 100 for any .L ticker. If your CSV had price in pence, you may need to multiply by 100 in your CSV before importing.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">What's "Ignore" on a holding?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Mark a holding as ignored to keep it visible but exclude it from totals (value, cost, return %, weight). Useful for cash accounts, dormant positions, or ANZ/BNZ bank balances synced via Akahu that shouldn't pollute your investment-return number.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">How does cloud sync work?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Your portfolio syncs to Supabase 2 seconds after any change. Open the app on another device, sign in, and your data appears. The pill at the top of the header shows the last sync time — click it to force-pull from cloud now.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">What do the AI agents do? Are they giving me financial advice?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Four specialised Claude agents analyse your portfolio in parallel:<br>
+          • <b>Portfolio Health</b> (Haiku) — diversification + concentration scoring<br>
+          • <b>Market Impact</b> (Sonnet) — global factors affecting your holdings<br>
+          • <b>Opportunity Scout</b> (Sonnet) — gaps and underweight sectors<br>
+          • <b>Senior Advisor</b> (Opus) — synthesises into a 5-point action plan<br>
+          <span style="color:#fbbf24;">This is analysis only, NOT personalised financial advice. Talk to a licensed adviser before making decisions.</span>
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">What is FIF and when does it apply?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          NZ's Foreign Investment Fund tax. If the original cost of your overseas (non-NZ) holdings exceeds NZ$50,000 at any point in the year, you owe FIF income tax. The <b>NZ Tax (FIF)</b> tab shows your current overseas cost basis and a Fair Dividend Rate (5%) estimate. Always confirm with an accountant before filing.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">Where's my data stored? Is it secure?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          • <b>Browser:</b> localStorage (encrypted at rest by your OS)<br>
+          • <b>Cloud:</b> Supabase Postgres with Row-Level Security — only you can read/write your own data<br>
+          • <b>API keys:</b> never sync to cloud, stay in your browser only<br>
+          • <b>Sessions:</b> auto-logout after 30 minutes of inactivity<br>
+          • <b>Proxy:</b> rate-limited and origin-locked
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">How do I see my activity history?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Every login, CSV import, holding change, and AI agent run is logged. Admins can see all users' activity in <b>Admin Panel → Activity Log</b>. Regular-user-facing audit view coming soon.
+        </div>
+      </details>
+
+      <details class="card2 p-3 cursor-pointer">
+        <summary class="font-semibold text-sm">How do I delete my account / data?</summary>
+        <div class="text-xs neutral mt-2" style="line-height:1.7;">
+          Settings → Danger Zone → <b>Clear All Data</b> wipes both browser AND cloud. To fully delete your auth account, ask an admin to remove you from Supabase Authentication.
+        </div>
+      </details>
+    </div>
+
+    <div class="mt-4 flex items-center justify-between text-xs neutral">
+      <span>Can't find what you need? <button onclick="restartOnboarding()" class="text-link" style="background:none;border:none;color:#818cf8;cursor:pointer;text-decoration:underline;padding:0;">Replay the welcome tour</button></span>
+      <button onclick="closeModal('helpModal')" class="btn btn-sm btn-secondary">Close</button>
     </div>
   </div>
 </div>
@@ -559,7 +707,10 @@
     <button onclick="openModal('agentsModal')" class="btn btn-sm" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);">
       <i class="fas fa-robot mr-1"></i> AI Agents
     </button>
-    <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary">
+    <button onclick="openModal('helpModal')" class="btn btn-sm btn-secondary" title="Help & FAQ">
+      <i class="fas fa-question-circle"></i>
+    </button>
+    <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Settings">
       <i class="fas fa-cog"></i>
     </button>
   </div>
@@ -5886,7 +6037,26 @@ function maybeShowOnboarding() {
     return;
   }
   const modal = document.getElementById('onboardingModal');
-  if (modal) modal.classList.add('open');
+  if (modal) {
+    setOnboardingStep(1);
+    modal.classList.add('open');
+  }
+}
+
+// Switch between welcome modal steps
+function setOnboardingStep(n) {
+  for (let i = 1; i <= 2; i++) {
+    const step = document.getElementById('onboardingStep' + i);
+    if (step) step.style.display = (i === n) ? '' : 'none';
+  }
+}
+
+// Replay the welcome tour from anywhere (Help modal link)
+function restartOnboarding() {
+  closeModal('helpModal');
+  state.settings.onboardingComplete = false;
+  setOnboardingStep(1);
+  document.getElementById('onboardingModal')?.classList.add('open');
 }
 
 function onboardingPath(path) {
