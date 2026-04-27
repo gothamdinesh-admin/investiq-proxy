@@ -2004,6 +2004,47 @@ const LOCAL_ONLY_SETTINGS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════
+// IDLE SESSION TIMEOUT — auto-logout after N minutes of no user activity.
+// Prevents lingering sessions on shared/lost devices.
+// ═══════════════════════════════════════════════════════════════════════
+const IDLE_LIMIT_MS = 30 * 60 * 1000;  // 30 min — generous for portfolio review
+const IDLE_WARNING_MS = 2 * 60 * 1000; // warn 2 min before
+let _lastActivity = Date.now();
+let _idleWarned = false;
+
+function recordActivity() {
+  _lastActivity = Date.now();
+  _idleWarned = false;
+  const w = document.getElementById('idleWarning');
+  if (w) w.style.display = 'none';
+}
+
+function checkIdle() {
+  if (!_supaUser) return; // only relevant when signed in
+  const idle = Date.now() - _lastActivity;
+  if (idle >= IDLE_LIMIT_MS) {
+    console.log('[idle] auto-signing out after', Math.round(idle/60000), 'min idle');
+    toast.warning('Signed out due to inactivity', 8000);
+    signOut();
+    return;
+  }
+  if (idle >= IDLE_LIMIT_MS - IDLE_WARNING_MS && !_idleWarned) {
+    _idleWarned = true;
+    const minsLeft = Math.ceil((IDLE_LIMIT_MS - idle) / 60000);
+    toast.warning({
+      title: 'Session timing out',
+      message: `You'll be signed out in ${minsLeft} min for security. Move your mouse to stay signed in.`,
+      duration: IDLE_WARNING_MS
+    });
+  }
+}
+
+// Reset idle timer on any meaningful user activity
+['click', 'keydown', 'scroll', 'mousemove'].forEach(ev =>
+  window.addEventListener(ev, recordActivity, { passive: true })
+);
+
+// ═══════════════════════════════════════════════════════════════════════
 // AUDIT LOG — fires off non-blocking inserts to investiq_activity_log
 // for every meaningful user action. Best-effort: never throws, never
 // blocks the calling code, errors only console.warn'd.
@@ -2958,6 +2999,19 @@ async function _importCSVImpl(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-imported
+
+  // Security: cap CSV at 5MB. A real portfolio CSV is < 100KB; anything
+  // bigger is either junk or hostile. Prevents DoS via huge file.
+  const MAX_CSV_BYTES = 5 * 1024 * 1024;
+  if (file.size > MAX_CSV_BYTES) {
+    toast.error({ title: 'CSV too large', message: `${(file.size/1024/1024).toFixed(1)} MB exceeds the 5 MB limit. A typical portfolio CSV is well under 100 KB.` });
+    return;
+  }
+  // Sanity: refuse non-CSV mime types where reliable
+  const validMimes = ['text/csv', 'application/vnd.ms-excel', 'application/octet-stream', 'text/plain', ''];
+  if (file.type && !validMimes.includes(file.type)) {
+    toast.warning(`File type "${file.type}" doesn't look like CSV — trying anyway.`);
+  }
 
   let text;
   try {
@@ -4725,6 +4779,19 @@ async function proxyHealthCheck() {
   updateAdminDiagnostics();
 }
 
+// URL validation helper — returns null if OK, error string if bad
+function validateUrl(url, label, requireHttps = false) {
+  if (!url) return null; // empty allowed (uses platform default)
+  try {
+    const u = new URL(url);
+    if (!['http:','https:'].includes(u.protocol)) return `${label}: must be http or https`;
+    if (requireHttps && u.protocol !== 'https:') return `${label}: must be HTTPS in production`;
+    return null;
+  } catch(e) {
+    return `${label}: not a valid URL`;
+  }
+}
+
 function saveSettings() {
   state.settings.name = document.getElementById('settingName').value || 'My Portfolio';
   state.settings.currency = document.getElementById('settingCurrency').value;
@@ -4735,17 +4802,34 @@ function saveSettings() {
     const proxy  = document.getElementById('settingProxy');
     const supUrl = document.getElementById('settingSupabaseUrl');
     const supKey = document.getElementById('settingSupabaseKey');
+    const aiProv    = document.getElementById('settingAiProvider');
+    const aiProvUrl = document.getElementById('settingAiProviderUrl');
+    const aiProvKey = document.getElementById('settingAiProviderKey');
+
+    // Validate URLs before saving — surface errors as toasts and abort
+    const errs = [];
+    if (proxy?.value.trim())     errs.push(validateUrl(proxy.value.trim(),  'Proxy URL'));
+    if (supUrl?.value.trim())    errs.push(validateUrl(supUrl.value.trim(), 'Supabase URL'));
+    if (aiProvUrl?.value.trim()) errs.push(validateUrl(aiProvUrl.value.trim(), 'AI Provider URL'));
+    // Sanity-check Claude API key format (sk-ant-...)
+    if (apiKey?.value.trim() && !/^sk-ant-/.test(apiKey.value.trim())) {
+      errs.push('Claude API key should start with sk-ant- (got something else)');
+    }
+    const realErrs = errs.filter(Boolean);
+    if (realErrs.length) {
+      toast.error({ title: 'Settings invalid', message: realErrs.join('\n') });
+      return;
+    }
+
     if (apiKey) state.settings.claudeApiKey = apiKey.value.trim();
     if (proxy)  state.settings.proxyUrl     = proxy.value.trim()  || PLATFORM_CONFIG.proxyUrl;
     if (supUrl) state.settings.supabaseUrl  = supUrl.value.trim() || PLATFORM_CONFIG.supabaseUrl;
     if (supKey) state.settings.supabaseKey  = supKey.value.trim() || PLATFORM_CONFIG.supabaseKey;
-    const aiProv    = document.getElementById('settingAiProvider');
-    const aiProvUrl = document.getElementById('settingAiProviderUrl');
-    const aiProvKey = document.getElementById('settingAiProviderKey');
     if (aiProv)    state.settings.aiProvider    = aiProv.value;
     if (aiProvUrl) state.settings.aiProviderUrl = aiProvUrl.value.trim();
     if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
     initSupabase(); // re-init if credentials changed
+    logActivity('settings_change', { adminFieldsModified: true });
   }
 
   updateAuthUI();
@@ -4753,6 +4837,7 @@ function saveSettings() {
   updateAdminDiagnostics();
   closeModal('settingsModal');
   renderAll();
+  toast.success('Settings saved');
 }
 
 function toggleApiKeyVisibility() {
@@ -6478,6 +6563,8 @@ async function init() {
   setInterval(() => refreshAll(), 5 * 60 * 1000);
   // Refresh "X minutes ago" sync indicator every 60s
   setInterval(updateSyncIndicator, 60 * 1000);
+  // Idle session check every 30 seconds
+  setInterval(checkIdle, 30 * 1000);
 
   // Keep-alive ping every 14 min so Render free tier never sleeps
   proxyHealthCheck();
