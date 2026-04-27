@@ -89,7 +89,12 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 - [ ] **Supabase Storage for attachments** — users can attach brokerage statements / screenshots to holdings. Est: half day.
 - [ ] **Netlify Forms for feedback** — in-app "Report a bug" / "Feature request" form → hits Netlify Forms endpoint → you get email. Est: 30 min.
 - [ ] **Deploy previews per PR** — Netlify Pro gives this free. Just enable in settings. Est: 5 min.
-- [ ] **Rate limiting on proxy** — per-user token bucket, prevents abuse when site goes public. Est: 2 hours.
+- [x] **Rate limiting on proxy** — DONE 2026-04-19. Per-IP token bucket via deque, default 60/min via RATE_LIMIT env var, returns 429.
+- [x] **CORS allowlist + PROXY_SECRET enforcement** — DONE 2026-04-19. ALLOWED_ORIGIN env var, X-Proxy-Secret required on all non-public endpoints.
+- [x] **CSV size cap (5MB) + POST body cap (2MB)** — DONE 2026-04-19.
+- [x] **Idle session timeout (30 min) with 2-min warning** — DONE 2026-04-19.
+- [x] **Settings URL validation** — DONE 2026-04-19. URL format check + sk-ant- prefix check on Claude key.
+- [x] **Help / FAQ modal + 2-step welcome wizard** — DONE 2026-04-19.
 - [x] **Audit log** — DONE 2026-04-19. New `investiq_activity_log` table, logs login/signup/logout/csv_import/holding_*/agent_run with details. Admin Panel has Activity Log card with type filter.
 
 ---
