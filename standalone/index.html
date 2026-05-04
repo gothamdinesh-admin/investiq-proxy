@@ -1964,7 +1964,6 @@ const PLATFORM_CONFIG = {
   supabaseUrl:  'https://szyclmouetbbigxexdrn.supabase.co',
   supabaseKey:  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno',
   proxyUrl:     'https://investiq-proxy.onrender.com',
-  adminEmails:  ['gothamdinesh@gmail.com'],
   // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
   // This prevents anyone else from using your proxy to burn your Claude credits.
   // Leave blank for local dev (proxy will warn but still allow requests).
@@ -6203,12 +6202,30 @@ async function checkAdminStatus() {
   if (!_supabase || !_supaUser) {
     _isAdmin = false;
     _adminSource = 'none';
-    const adminLink = document.getElementById('adminNavLink');
-    if (adminLink) adminLink.style.display = 'none';
-    const mobileAdminTab = document.getElementById('mobileAdminTab');
-    if (mobileAdminTab) mobileAdminTab.style.display = 'none';
+    hideAdminUI();
     updateAdminDiagnostics();
     return;
+  }
+
+  // ✅ READ admin from DB — never write
+  const { data, error } = await _supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', _supaUser.id)
+    .single();
+
+  if (error) {
+    console.warn('[admin] failed to read role:', error.message);
+    _isAdmin = false;
+    _adminSource = 'error';
+  } else {
+    _isAdmin = !!data?.is_admin;
+    _adminSource = 'db';
+  }
+
+  updateAdminVisibility();
+  updateAdminDiagnostics();
+}
   }
   try {
     // Ensure the user's profile row exists before checking admin state.
