@@ -40,13 +40,48 @@ AKAHU_API     = "https://api.akahu.io/v1"
 # Default '*' is open and only safe for local dev.
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGIN", "*").split(",") if o.strip()]
 
-# PROXY_SECRET — clients MUST send X-Proxy-Secret matching this.
-# Without it, anyone with the proxy URL can burn your Claude credits.
+# PROXY_SECRET — global admin override (env-set). Always accepted.
+# Per-user secrets are stored in Supabase profiles.proxy_secret and validated
+# via the validate_proxy_secret() RPC. Either is sufficient to authorise.
 PROXY_SECRET = os.environ.get("PROXY_SECRET", "")
+
+# Supabase config — needed for per-user secret validation
+SUPABASE_URL  = os.environ.get("SUPABASE_URL", "")          # e.g. https://xxxx.supabase.co
+SUPABASE_ANON = os.environ.get("SUPABASE_ANON_KEY", "")     # publishable anon key
 
 # RATE_LIMIT — N requests per minute per IP (0 = disabled). Default 60/min.
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "60"))
 _rate_buckets = defaultdict(lambda: deque(maxlen=200))
+
+# Cache validation results for 60s — avoids hammering Supabase per request
+_secret_cache = {}  # secret → (user_id_or_None, expires_at)
+def validate_user_secret(secret):
+    """Return user_id if secret matches an approved user, None otherwise.
+    Cached for 60s to avoid roundtrip per request."""
+    if not secret or not SUPABASE_URL or not SUPABASE_ANON:
+        return None
+    now = time.time()
+    cached = _secret_cache.get(secret)
+    if cached and cached[1] > now:
+        return cached[0]
+    try:
+        # Call the SECURITY DEFINER RPC: returns user_id (uuid) or null
+        url = f"{SUPABASE_URL}/rest/v1/rpc/validate_proxy_secret"
+        body = json.dumps({"secret": secret}).encode()
+        req = urllib.request.Request(url, data=body, method="POST", headers={
+            "apikey":        SUPABASE_ANON,
+            "Authorization": f"Bearer {SUPABASE_ANON}",
+            "Content-Type":  "application/json",
+        })
+        with urllib.request.urlopen(req, context=ctx, timeout=5) as r:
+            result = json.loads(r.read())
+        # RPC returns the uuid as a JSON string (or null)
+        user_id = result if isinstance(result, str) else None
+        _secret_cache[secret] = (user_id, now + 60)
+        return user_id
+    except Exception as ex:
+        print(f"  ⚠ validate_user_secret error: {ex}")
+        return None
 
 ctx = ssl.create_default_context()
 
@@ -110,12 +145,28 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return True
 
     def _check_secret(self):
-        """Return True if request is authorised (or skip if dev mode)."""
-        if not PROXY_SECRET:
-            # Dev mode — allow but warn loudly so it's visible in logs
-            return True
+        """Return True if request is authorised, False otherwise.
+        Accepts EITHER:
+          1. Global admin PROXY_SECRET env var (admin override)
+          2. Any approved user's per-user proxy_secret (looked up in Supabase)
+        Stores authenticated user_id on self for downstream logging.
+        """
+        self._auth_user_id = None
         incoming = self.headers.get("X-Proxy-Secret", "")
-        return incoming == PROXY_SECRET
+        # Dev mode — no secret configured at all
+        if not PROXY_SECRET and not (SUPABASE_URL and SUPABASE_ANON):
+            return True
+        # Global admin secret
+        if PROXY_SECRET and incoming == PROXY_SECRET:
+            self._auth_user_id = "admin-global"
+            return True
+        # Per-user secret via Supabase RPC
+        if incoming and SUPABASE_URL and SUPABASE_ANON:
+            uid = validate_user_secret(incoming)
+            if uid:
+                self._auth_user_id = uid
+                return True
+        return False
 
     def do_OPTIONS(self):
         # Preflight always returns 204, no auth check (CORS spec requirement)
