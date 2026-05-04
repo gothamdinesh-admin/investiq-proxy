@@ -467,6 +467,69 @@
   </div>
 </div>
 
+<!-- PENDING APPROVAL OVERLAY — shown when user is signed in but not yet approved -->
+<div id="pendingApprovalGate" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(8,13,26,0.97);flex-direction:column;align-items:center;justify-content:center;">
+  <div style="max-width:520px;width:90%;padding:32px;text-align:center;">
+    <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:rgba(251,191,36,0.15);align-items:center;justify-content:center;margin-bottom:20px;border:1px solid rgba(251,191,36,0.3);">
+      <i class="fas fa-clock" style="color:#fbbf24;font-size:28px;"></i>
+    </div>
+    <h2 class="text-2xl font-bold mb-3" style="color:#c8d6ef;">Pending admin approval</h2>
+    <div class="text-sm neutral mb-6" style="line-height:1.7;">
+      Thanks for signing up! InvestIQ is currently invite-only — your account has been created and the admin (<b style="color:#818cf8;">gothamdinesh@gmail.com</b>) has been notified.
+      <br><br>
+      You'll receive an email once you're approved (usually within 24 hours). Until then, you can sign out and come back later.
+    </div>
+    <div class="card2 p-4 mb-5 text-left">
+      <div class="text-xs neutral mb-2">Want faster access?</div>
+      <div class="text-sm" style="color:#c8d6ef;line-height:1.6;">
+        Email <a href="mailto:gothamdinesh@gmail.com?subject=InvestIQ%20-%20approval%20request&body=Hi,%0A%0APlease%20approve%20my%20account%20for%20InvestIQ.%0A%0AEmail:%20" style="color:#818cf8;text-decoration:underline;">gothamdinesh@gmail.com</a> with a quick note about who you are and why you'd like access.
+      </div>
+    </div>
+    <button onclick="signOut()" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i>Sign out for now</button>
+  </div>
+</div>
+
+<!-- AI QUOTA EXHAUSTED MODAL — shown when non-admin hits quota -->
+<div class="modal-overlay" id="quotaExhaustedModal" onclick="closeModalBg(event,'quotaExhaustedModal')">
+  <div class="modal" style="max-width:540px;">
+    <div class="text-center mb-6">
+      <div style="display:inline-flex;width:56px;height:56px;border-radius:14px;background:rgba(251,191,36,0.15);align-items:center;justify-content:center;margin-bottom:14px;border:1px solid rgba(251,191,36,0.3);">
+        <i class="fas fa-robot" style="color:#fbbf24;font-size:24px;"></i>
+      </div>
+      <h2 class="text-xl font-bold mb-2">AI agents — usage limit reached</h2>
+      <div class="text-sm neutral" id="quotaInfoText">You've used your free AI analysis runs. Pick how you want to continue:</div>
+    </div>
+
+    <div class="space-y-3">
+      <a href="mailto:gothamdinesh@gmail.com?subject=InvestIQ%20-%20more%20AI%20access&body=Hi,%0A%0AI'd%20like%20more%20AI%20agent%20runs%20for%20my%20InvestIQ%20account.%0A%0AEmail:%20" class="onboarding-card" style="text-decoration:none;">
+        <div class="flex items-center gap-3">
+          <div class="onboarding-icon" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-envelope"></i></div>
+          <div class="text-left flex-1">
+            <div class="font-semibold text-sm">Request more access</div>
+            <div class="text-xs neutral mt-1">Email the admin and ask for additional AI runs. Usually approved within 24 hours.</div>
+          </div>
+          <i class="fas fa-chevron-right neutral"></i>
+        </div>
+      </a>
+
+      <button onclick="closeModal('quotaExhaustedModal');openModal('settingsModal');" class="onboarding-card">
+        <div class="flex items-center gap-3">
+          <div class="onboarding-icon" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-key"></i></div>
+          <div class="text-left flex-1">
+            <div class="font-semibold text-sm">Use your own Claude API key</div>
+            <div class="text-xs neutral mt-1">Get a key at <b>console.anthropic.com</b>, paste it in Settings. You pay Anthropic directly, no limit from us.</div>
+          </div>
+          <i class="fas fa-chevron-right neutral"></i>
+        </div>
+      </button>
+    </div>
+
+    <div class="mt-5 text-center">
+      <button onclick="closeModal('quotaExhaustedModal')" class="btn btn-sm btn-secondary">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ONBOARDING MODAL — shown once after first signup, dismissed by picking a path -->
 <div class="modal-overlay" id="onboardingModal" onclick="event.stopPropagation()" style="background:rgba(8,13,26,0.95);">
   <div class="modal" style="max-width:680px;">
@@ -4473,6 +4536,10 @@ async function runAgents() {
     return;
   }
 
+  // Check AI quota — admins / BYOK users skip; others gated to N runs
+  const allowed = await tryConsumeAiQuota();
+  if (!allowed) return; // paywall modal already shown
+
   // API key no longer required — proxy has platform key. Admin override optional.
   document.getElementById('agentError').style.display = 'none';
   document.getElementById('runAgentsBtn').disabled = true;
@@ -6113,6 +6180,7 @@ function loadDemoData() {
 
 // ===== ADMIN =====
 let _isAdmin = false;
+let _userProfile = {};   // {is_admin, is_approved, ai_usage_count, ai_quota_max}
 let _adminUsers = [];
 let _adminSource = 'none';
 
@@ -6145,11 +6213,12 @@ async function checkAdminStatus() {
 
     const { data, error } = await _supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, is_approved, ai_usage_count, ai_quota_max')
       .eq('id', _supaUser.id)
       .maybeSingle();
     if (error) throw error;
     _isAdmin = !!(data?.is_admin);
+    _userProfile = data || {};
     _adminSource = _isAdmin ? 'database' : 'none';
 
     if (!_isAdmin && isOwnerAdminEmail(_supaUser?.email)) {
@@ -6211,6 +6280,44 @@ function updateAdminVisibility() {
   const settingsModal = document.getElementById('settingsModal');
   if (settingsModal?.classList.contains('open')) populateSettingsForm();
   updateAdminDiagnostics();
+  updateApprovalGate();
+}
+
+// Show or hide the "pending approval" overlay based on profile state
+function updateApprovalGate() {
+  const gate = document.getElementById('pendingApprovalGate');
+  if (!gate) return;
+  // Admins always bypass; non-admin must be is_approved=true
+  const needsApproval = _supaUser && !_isAdmin && _userProfile && _userProfile.is_approved === false;
+  gate.style.display = needsApproval ? 'flex' : 'none';
+}
+
+// Returns true if user can run an AI agent (admin or under quota or BYOK).
+// Records the usage if allowed.
+async function tryConsumeAiQuota() {
+  if (_isAdmin) return true; // admins unlimited
+  // BYOK — user supplied their own key, no quota
+  if ((state.settings.claudeApiKey || '').trim()) return true;
+  if (!_userProfile) return true; // safety: shouldn't happen but don't block
+  const used = +(_userProfile.ai_usage_count || 0);
+  const max  = +(_userProfile.ai_quota_max || 1);
+  if (used >= max) {
+    // Show paywall
+    const info = document.getElementById('quotaInfoText');
+    if (info) info.textContent = `You've used ${used} of ${max} free AI analysis run${max>1?'s':''}. Pick how you want to continue:`;
+    openModal('quotaExhaustedModal');
+    return false;
+  }
+  // Increment server-side
+  if (_supabase && _supaUser) {
+    const newCount = used + 1;
+    const { error } = await _supabase.from('profiles')
+      .update({ ai_usage_count: newCount })
+      .eq('id', _supaUser.id);
+    if (!error) _userProfile.ai_usage_count = newCount;
+    else console.warn('[ai-quota] could not increment:', error.message);
+  }
+  return true;
 }
 
 function maskSupabaseKey(key) {
@@ -6254,7 +6361,7 @@ async function loadAdminData() {
     // Load all profiles
     const { data: profiles, error } = await _supabase
       .from('profiles')
-      .select('id, email, is_admin, created_at, last_seen')
+      .select('id, email, is_admin, is_approved, ai_usage_count, ai_quota_max, created_at, last_seen')
       .order('created_at', { ascending: false });
     if (error) throw error;
 
@@ -6304,10 +6411,13 @@ function renderAdminTable(users) {
     const lastSeen = u.last_seen  ? timeSince(new Date(u.last_seen))            : 'Never';
     const roleBadge = u.is_admin
       ? `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Admin</span>`
-      : `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(148,163,184,0.1);color:#64748b;border:1px solid #1e2d4a;">User</span>`;
+      : u.is_approved
+        ? `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.25);">User</span>`
+        : `<span class="text-xs px-2 py-0 rounded-full" style="background:rgba(248,113,113,0.12);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Pending</span>`;
     const holdingsBadge = u.holdingCount > 0
       ? `<span style="color:#34d399;">${u.holdingCount} holdings</span>`
       : `<span class="neutral">None</span>`;
+    const aiUsage = `${u.ai_usage_count || 0} / ${u.ai_quota_max || 1}`;
     const isSelf = u.id === _supaUser?.id;
     return `<tr style="border-bottom:1px solid #0f1729;" onmouseover="this.style.background='#0f1729'" onmouseout="this.style.background=''">
       <td class="p-3" style="color:#c8d6ef;">${u.email || '—'}${isSelf ? ' <span class="text-xs" style="color:#6366f1;">(you)</span>' : ''}</td>
@@ -6315,15 +6425,47 @@ function renderAdminTable(users) {
       <td class="p-3 neutral">${lastSeen}</td>
       <td class="p-3">${holdingsBadge}</td>
       <td class="p-3">${roleBadge}</td>
+      <td class="p-3 mono text-xs" title="AI agent runs used / quota">${aiUsage}</td>
       <td class="p-3">
-        <div class="flex gap-2">
+        <div class="flex gap-1 flex-wrap">
+          ${!u.is_approved && !isSelf ? `<button onclick="adminApproveUser('${u.id}','${esc(u.email)}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);">Approve</button>` : ''}
+          ${u.is_approved && !u.is_admin && !isSelf ? `<button onclick="adminApproveUser('${u.id}','${esc(u.email)}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Revoke approval">Revoke</button>` : ''}
+          ${!isSelf ? `<button onclick="adminAdjustQuota('${u.id}','${esc(u.email)}',${u.ai_quota_max||1})" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Adjust AI quota">Quota</button>` : ''}
           ${!u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Make Admin</button>` : ''}
           ${u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">Remove Admin</button>` : ''}
-          ${!isSelf ? `<button onclick="adminDeleteUser('${u.id}','${u.email}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button>` : ''}
+          ${!isSelf ? `<button onclick="adminDeleteUser('${u.id}','${esc(u.email)}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button>` : ''}
         </div>
       </td>
     </tr>`;
   }).join('');
+}
+
+function esc(s) { return String(s ?? '').replace(/'/g, "&#39;"); }
+
+async function adminApproveUser(userId, email, approve) {
+  if (!confirm(`${approve ? 'Approve' : 'Revoke approval for'} ${email}?`)) return;
+  const { error } = await _supabase.from('profiles').update({ is_approved: approve }).eq('id', userId);
+  if (error) { toast.error('Failed: ' + error.message); return; }
+  toast.success(approve ? `${email} approved — they can now use the app` : `${email} revoked`);
+  logActivity('admin_action', { action: approve ? 'approve' : 'revoke', target_email: email });
+  loadAdminData();
+}
+
+async function adminAdjustQuota(userId, email, currentMax) {
+  const newVal = prompt(`Set AI agent quota for ${email}\n(currently ${currentMax} runs total).\n\nEnter new max:`, currentMax);
+  if (newVal == null) return;
+  const n = parseInt(newVal, 10);
+  if (isNaN(n) || n < 0) { toast.error('Must be a non-negative number'); return; }
+  const updates = { ai_quota_max: n };
+  // If they want to "reset" the quota, optionally reset usage too
+  if (n > currentMax && confirm('Also reset their usage count to 0? (This effectively grants them N fresh runs.)')) {
+    updates.ai_usage_count = 0;
+  }
+  const { error } = await _supabase.from('profiles').update(updates).eq('id', userId);
+  if (error) { toast.error('Failed: ' + error.message); return; }
+  toast.success(`Quota for ${email} set to ${n}`);
+  logActivity('admin_action', { action: 'adjust_quota', target_email: email, new_max: n });
+  loadAdminData();
 }
 
 // ── Diagnostic tools (admin only) ───────────────────────────────────
