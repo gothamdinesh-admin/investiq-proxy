@@ -6242,32 +6242,20 @@ async function checkAdminStatus() {
         );
     }
 
-    // ── Bootstrap: if NO admin exists yet, auto-promote the first signed-in user ──
-    // Fires once ever — as soon as one admin exists this block is permanently skipped.
-    if (!_isAdmin) {
-      try {
-        const { count } = await _supabase
-          .from('profiles')
-          .select('id', { count: 'exact', head: true })
-          .eq('is_admin', true);
-        if (count === 0) {
-          // upsert so the row is created even if it doesn’t exist yet
-          const { error: upErr } = await _supabase
-            .from('profiles')
-            .upsert(
-              { id: _supaUser.id, email: _supaUser.email, is_admin: true, last_seen: new Date().toISOString() },
-              { onConflict: 'id' }
-            );
-          if (!upErr) {
-            _isAdmin = true;
-            _adminSource = 'bootstrap';
-            console.log('✓ Bootstrap: first user auto-granted admin');
-          } else {
-            console.warn('Bootstrap upsert error:', upErr.message);
-          }
-        }
-      } catch(bsErr) { console.warn('Bootstrap check failed:', bsErr); }
-    }
+    // ── Bootstrap auto-promotion REMOVED 2026-05-05 ──
+    // Critical security bug: the count(*) query on profiles is subject to
+    // Row Level Security. A non-admin user can only see their own profile
+    // row, so `count` always returned 0 from their perspective — even though
+    // an admin existed. Result: every signed-in user was auto-promoted to
+    // admin on login.
+    //
+    // Admins are now ONLY granted via:
+    //   1. PLATFORM_CONFIG.adminEmails allowlist (email-fallback above)
+    //   2. Manual promotion by an existing admin in the Admin Panel
+    //
+    // If you ever need the "first user becomes admin" pattern again, do it
+    // via a SECURITY DEFINER RPC (e.g. claim_first_admin()) that bypasses
+    // RLS — never via a count() in the client.
   } catch(e) {
     _isAdmin = isOwnerAdminEmail(_supaUser?.email);
     _adminSource = _isAdmin ? 'email-fallback' : 'none';
