@@ -76,7 +76,9 @@ C:\Users\gotha\Downloads\Personal Investments\
 └── docs/
     ├── PROJECT_CONTEXT.md  ← this file
     ├── MODEL_SELECTION.md  ← which Claude model for which task
-    └── GUARDRAILS.md       ← output rules + compliance + security
+    ├── GUARDRAILS.md       ← output rules + compliance + security
+    ├── SELF_CHECK.md       ← mandatory pre-commit checklist
+    └── TODO.md             ← prioritised action plan
 ```
 
 All changes go into `standalone/index.html`. Redeploy by drag-dropping the `standalone` folder onto Netlify.

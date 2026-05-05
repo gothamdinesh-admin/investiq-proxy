@@ -10,7 +10,6 @@ and a 4-agent Claude AI advisor system that analyses your portfolio like a priva
 ```
 Personal Investments/
 ├── standalone/index.html     ← Open in browser RIGHT NOW — no install needed
-├── webapp/                   ← Full Next.js app (shareable via Vercel, deploy in 5 min)
 ├── proxy/claude_proxy.py     ← CORS bridge so standalone can call Claude API
 └── README.md
 ```
