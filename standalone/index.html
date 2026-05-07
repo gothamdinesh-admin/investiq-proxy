@@ -2237,8 +2237,14 @@ const IDLE_WARNING_MS = 2 * 60 * 1000; // warn 2 min before
 let _lastActivity = Date.now();
 let _idleWarned = false;
 
+// Throttled — mousemove fires ~60Hz, no need to rewrite state on every pixel.
+// Once-per-5-second resolution is plenty for a 30-min idle timer.
+let _activityThrottle = 0;
 function recordActivity() {
-  _lastActivity = Date.now();
+  const now = Date.now();
+  if (now - _activityThrottle < 5000) return;
+  _activityThrottle = now;
+  _lastActivity = now;
   _idleWarned = false;
   const w = document.getElementById('idleWarning');
   if (w) w.style.display = 'none';
