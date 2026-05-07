@@ -491,7 +491,13 @@
 
 <!-- AI QUOTA EXHAUSTED MODAL — shown when non-admin hits quota -->
 <div class="modal-overlay" id="quotaExhaustedModal" onclick="closeModalBg(event,'quotaExhaustedModal')">
-  <div class="modal" style="max-width:540px;">
+  <div class="modal" style="max-width:540px;position:relative;">
+    <!-- Close X — top-right -->
+    <button onclick="closeModal('quotaExhaustedModal')" aria-label="Close"
+            style="position:absolute;top:14px;right:14px;background:none;border:none;color:#4a6080;font-size:22px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px;"
+            onmouseover="this.style.background='#1e2d4a';this.style.color='#c8d6ef';"
+            onmouseout="this.style.background='none';this.style.color='#4a6080';">&times;</button>
+
     <div class="text-center mb-6">
       <div style="display:inline-flex;width:56px;height:56px;border-radius:14px;background:rgba(251,191,36,0.15);align-items:center;justify-content:center;margin-bottom:14px;border:1px solid rgba(251,191,36,0.3);">
         <i class="fas fa-robot" style="color:#fbbf24;font-size:24px;"></i>
@@ -501,7 +507,9 @@
     </div>
 
     <div class="space-y-3">
-      <a href="mailto:gothamdinesh@gmail.com?subject=InvestIQ%20-%20more%20AI%20access&body=Hi,%0A%0AI'd%20like%20more%20AI%20agent%20runs%20for%20my%20InvestIQ%20account.%0A%0AEmail:%20" class="onboarding-card" style="text-decoration:none;">
+      <a href="mailto:gothamdinesh@gmail.com?subject=InvestIQ%20-%20more%20AI%20access&body=Hi,%0A%0AI'd%20like%20more%20AI%20agent%20runs%20for%20my%20InvestIQ%20account.%0A%0AEmail:%20"
+         onclick="closeModal('quotaExhaustedModal')"
+         class="onboarding-card" style="text-decoration:none;">
         <div class="flex items-center gap-3">
           <div class="onboarding-icon" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-envelope"></i></div>
           <div class="text-left flex-1">
@@ -5231,21 +5239,36 @@ function switchPerfTab(el, mode) {
 }
 
 // ===== MODALS =====
+// Single-modal-at-a-time policy — opening a new modal closes any others.
+// Prevents the visual stacking mess when e.g. quota popup shows over Settings.
 function openModal(id) {
+  // Dismiss any other open modals first (excluding the one we're about to show)
+  document.querySelectorAll('.modal-overlay.open').forEach(el => {
+    if (el.id !== id) el.classList.remove('open');
+  });
   if (id === 'settingsModal') populateSettingsForm();
   else if (id === 'addModal' && !editingId) populateAddForm();
   else if (id === 'connectionsModal') populateConnectionsForm();
-  document.getElementById(id).classList.add('open');
+  document.getElementById(id)?.classList.add('open');
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
+  document.getElementById(id)?.classList.remove('open');
   if (id === 'addModal') editingId = null;
 }
 
 function closeModalBg(e, id) {
   if (e.target === e.currentTarget) closeModal(id);
 }
+
+// Escape key dismisses the topmost open modal
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelectorAll('.modal-overlay.open');
+  if (!open.length) return;
+  // Close the last opened (DOM order ≈ stacking order with z-index ties)
+  open[open.length - 1].classList.remove('open');
+});
 
 // ===== REFRESH =====
 async function refreshAll() {
