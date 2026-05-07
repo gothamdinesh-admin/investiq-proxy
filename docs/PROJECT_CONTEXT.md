@@ -30,7 +30,7 @@ Goals:
 ┌────────────────────────────────────────────────────────────┐
 │                    USER'S BROWSER                           │
 │  https://investiq-....netlify.app  (Netlify drag-drop)     │
-│  One file: standalone/index.html  (~3500 lines, vanilla JS)│
+│  One file: standalone/index.html  (~7000 lines, vanilla JS)│
 └──────────┬─────────────────────────────────┬───────────────┘
            │ auth + data                     │ API calls
            ▼                                 ▼
@@ -68,7 +68,7 @@ Goals:
 ```
 C:\Users\gotha\Downloads\Personal Investments\
 ├── standalone/
-│   └── index.html          ← THE WHOLE APP (~3500 lines, vanilla JS + Tailwind CDN)
+│   └── index.html          ← THE WHOLE APP (~7000 lines, vanilla JS + Tailwind CDN)
 ├── proxy/
 │   ├── claude_proxy.py     ← Python HTTP proxy (Render deploys this)
 │   ├── requirements.txt    ← yfinance

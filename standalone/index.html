@@ -5530,19 +5530,9 @@ function renderHoldingsByPlatform(holdings, totalValue) {
 
 // ===== PLATFORM CONNECTIONS =====
 
-// -- Shared CSV parsing helper --
-function parseCSVLine(line) {
-  const result = [];
-  let cur = '', inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') { inQ = !inQ; continue; }
-    if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; continue; }
-    cur += c;
-  }
-  result.push(cur.trim());
-  return result;
-}
+// (parseCSVLine is defined once earlier — the more robust version handles
+// escaped quotes (""), BOM, and fully-quoted rows. The duplicate naive
+// implementation that lived here was deleted 2026-05-06 — see git log.)
 
 function readCSVFile(file, callback) {
   const reader = new FileReader();
