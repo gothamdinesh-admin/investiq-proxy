@@ -5884,17 +5884,27 @@ function refreshFIF() {
     return;
   }
   rows.sort((a,b) => b.costNZD - a.costNZD);
+  // Defensive layout fixes:
+  //  • display:grid inline on every row (don't rely on CSS class alone)
+  //  • 2.4fr asset column with min-width:0 + ellipsis (prevents long names overflowing)
+  //  • Country left-aligned (it's prose, not numbers)
+  //  • Borders + zebra hover for readability
+  const cols = '2.4fr 1.2fr 1.2fr 1.2fr 1fr';
   tableEl.innerHTML = `
-    <div class="table-header" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
-      <span>Asset</span><span class="text-right">Country</span><span class="text-right">Cost (NZD)</span><span class="text-right">Market (NZD)</span><span class="text-right">FDR 5%</span>
+    <div class="table-header" style="display:grid;grid-template-columns:${cols};">
+      <span>Asset</span>
+      <span>Country</span>
+      <span class="text-right">Cost (NZD)</span>
+      <span class="text-right">Market (NZD)</span>
+      <span class="text-right">FDR 5%</span>
     </div>
     ${rows.map(r => `
-      <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">
-        <div>
-          <div class="font-semibold text-sm">${r.symbol}</div>
-          <div class="text-xs neutral">${r.name || ''}</div>
+      <div class="table-row" style="display:grid;grid-template-columns:${cols};cursor:default;">
+        <div style="min-width:0;overflow:hidden;">
+          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.symbol}</div>
+          <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${(r.name || '').replace(/"/g,'&quot;')}">${r.name || ''}</div>
         </div>
-        <div class="text-right text-sm">${r.country}</div>
+        <div class="text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${(r.country || '').replace(/"/g,'&quot;')}">${r.country}</div>
         <div class="text-right mono text-sm">NZ$${r.costNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
         <div class="text-right mono text-sm">NZ$${r.marketNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
         <div class="text-right mono text-sm" style="color:${inFIFZone?'#fbbf24':'#64748b'};">NZ$${(inFIFZone ? r.marketNZD * 0.05 : 0).toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
