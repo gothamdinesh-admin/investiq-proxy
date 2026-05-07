@@ -83,6 +83,19 @@ After a UI change, mentally walk through each section and verify it still render
 - AI Insights (4 agent cards, run button)
 - Admin (if user is admin)
 
+## 🔍 7b. Grid table layout (every new table)
+
+When adding or modifying any grid-based table (`.table-row` / `.table-header` with `grid-template-columns`):
+
+- [ ] `display:grid` set **inline** on header AND row (not relying on CSS class alone)
+- [ ] Asset / multi-content cell has `min-width:0;overflow:hidden;` on the wrapper
+- [ ] Text inside that cell has `white-space:nowrap;overflow:hidden;text-overflow:ellipsis;`
+- [ ] Long-text fields (name, country, notes) have `title="${esc(value)}"` for the tooltip on hover
+- [ ] Icons inside flex containers in the asset cell have `flex-shrink:0`
+- [ ] All user-supplied data passed through the `esc()` helper
+
+The canonical example lives above `renderDetailedHoldings()` in standalone/index.html — copy that pattern. Skipping any of these on a narrow viewport or with a long instrument name (e.g. "Vanguard Total Stock Market Index Fund Admiral Shares") breaks the column alignment.
+
 ## 🔍 8. Auth gate / multi-user isolation
 
 If I touch auth, Supabase, or RLS:
@@ -121,7 +134,8 @@ Copy-paste mentally before `git commit`:
 [ ] 4. Currency: FX applied exactly once; metrics.holdings vs state.portfolio correct.
 [ ] 5. Credentials: LOCAL_ONLY_SETTINGS covers any new secret fields.
 [ ] 6. Agent contracts: Health Score regex + word limits + model IDs unchanged.
-[ ] 7. UI: all 6 sections (Overview, Holdings, Performance, Market, Insights, Admin) still render.
+[ ] 7. UI: all 8 sections (Overview, Holdings, Performance, Market, Insights, Watchlist, NZ Tax, Admin) still render.
+[ ] 7b. Any new grid table follows the defensive layout pattern (display:grid inline, min-width:0, ellipsis, esc).
 [ ] 8. Auth: admin-only features still hidden from non-admins.
 [ ] 9. Deploy: netlify.toml / .gitignore / folder layout correct.
 [ ] 10. Docs: updated the relevant .md file if architecture/behaviour shifted.

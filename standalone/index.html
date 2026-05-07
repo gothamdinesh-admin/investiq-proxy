@@ -5386,6 +5386,34 @@ function applyHoldingsFilter(holdings) {
   return filtered;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// DEFENSIVE GRID TABLE PATTERN — apply to every new table
+// ═══════════════════════════════════════════════════════════════════════
+// Without these, narrow widths or long instrument names break alignment.
+// Audited every grid table 2026-05-06 — all should now match this pattern.
+//
+//   1. Header AND row both inline:    style="display:grid;grid-template-columns:...;"
+//      (Don't rely on the .table-row CSS class alone — narrow viewports
+//       can override display in unexpected ways.)
+//
+//   2. Asset cell (multi-line content) wrapper:
+//      style="min-width:0;overflow:hidden;"
+//      (Without min-width:0, long content forces the cell wider than its
+//       grid track and pushes the layout off.)
+//
+//   3. Inner text element:
+//      style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+//      title="${esc(fullText)}"
+//      (Truncation + tooltip for the full string.)
+//
+//   4. Icons inside the asset cell's flex container:
+//      style="...flex-shrink:0;"
+//      (Otherwise the icon gets squeezed when text is long.)
+//
+//   5. HTML-escape ALL user data in templates via the esc() helper —
+//      symbol / name / platform / notes can all contain odd characters
+//      from CSV imports.
+// ═══════════════════════════════════════════════════════════════════════
 function renderDetailedHoldings(holdings, totalValue) {
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
