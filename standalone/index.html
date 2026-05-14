@@ -1966,6 +1966,7 @@
      define globals consumed by the inline <script> below. -->
 <script src="js/00-config.js"></script>
 <script src="js/10-helpers.js"></script>
+<script src="js/20-state.js"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -2043,29 +2044,7 @@ const toast = (() => {
 // CURRENCY_SYMBOLS, ASSET_COLORS, CORS_PROXIES moved to js/00-config.js
 
 // ===== STATE =====
-let state = {
-  portfolio: [],
-  settings: {
-    name: 'My Portfolio', currency: 'NZD',
-    claudeApiKey: '',
-    // Platform creds default to PLATFORM_CONFIG — user/admin can override
-    proxyUrl:    PLATFORM_CONFIG.proxyUrl,
-    supabaseUrl: PLATFORM_CONFIG.supabaseUrl,
-    supabaseKey: PLATFORM_CONFIG.supabaseKey
-  },
-  marketData: { indices:{}, fx:{}, crypto:{}, commodities:{} },
-  agentResults: null,
-  allocMode: 'type',
-  perfMode: 'value'
-};
-
-// Fill any empty platform creds with PLATFORM_CONFIG defaults.
-// Admin overrides (stored in localStorage) persist. New users get platform defaults.
-function applyPlatformDefaults() {
-  if (!state.settings.proxyUrl    && PLATFORM_CONFIG.proxyUrl)    state.settings.proxyUrl    = PLATFORM_CONFIG.proxyUrl;
-  if (!state.settings.supabaseUrl && PLATFORM_CONFIG.supabaseUrl) state.settings.supabaseUrl = PLATFORM_CONFIG.supabaseUrl;
-  if (!state.settings.supabaseKey && PLATFORM_CONFIG.supabaseKey) state.settings.supabaseKey = PLATFORM_CONFIG.supabaseKey;
-}
+// state, applyPlatformDefaults moved to js/20-state.js
 
 // ===== SUPABASE =====
 let _supabase = null;
@@ -2904,19 +2883,7 @@ function consolidatePortfolio(holdings) {
 }
 
 // ===== STORAGE =====
-function loadState() {
-  try {
-    const s = localStorage.getItem('investiq_v2');
-    if (s) {
-      const parsed = JSON.parse(s);
-      // Migrate legacy holdings (no lots) to lots format
-      state.portfolio = consolidatePortfolio(parsed.portfolio || []);
-      state.settings = { ...state.settings, ...(parsed.settings||{}) };
-      state.agentResults = parsed.agentResults || null;
-    }
-    applyPlatformDefaults();
-  } catch(e) { console.warn('Failed to load state:', e); }
-}
+// loadState moved to js/20-state.js
 
 // Self-healing duplicate check — runs on load + after any sync.
 // TWO passes:
@@ -3025,19 +2992,7 @@ function healDuplicates(silent = false) {
   return healed + lotsRemoved;
 }
 
-function saveState() {
-  // claudeApiKey is never needed in the browser — the Render proxy holds it server-side.
-  // All other settings (proxyUrl, supabaseUrl/Key, akahuTokens) are safe to persist:
-  //   • proxyUrl / supabaseUrl / supabaseKey are platform-level, non-secret config
-  //   • akahuTokens are per-user and must persist so users don't re-enter them
-  const safeSetting = { ...state.settings, claudeApiKey: '' };
-  localStorage.setItem('investiq_v2', JSON.stringify({
-    portfolio: consolidatePortfolio(state.portfolio),
-    settings: safeSetting,
-    agentResults: state.agentResults
-  }));
-  scheduleSupa(); // sync to cloud if signed in
-}
+// saveState moved to js/20-state.js
 
 // ===== DIRECT ETORO IMPORT =====
 function loadEtoroHoldings() {
