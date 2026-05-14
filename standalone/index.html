@@ -1593,7 +1593,7 @@
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>🌍</span><span class="font-semibold text-sm">Market Impact Agent</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(129,140,248,0.12);color:#818cf8;border:1px solid rgba(129,140,248,0.2);">Sonnet · Balanced</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
           </div>
           <div id="agent-market-status" class="text-xs neutral">Idle</div>
         </div>
@@ -1604,7 +1604,7 @@
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>🔭</span><span class="font-semibold text-sm">Opportunity Scout Agent</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(129,140,248,0.12);color:#818cf8;border:1px solid rgba(129,140,248,0.2);">Sonnet · Balanced</span>
+            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
           </div>
           <div id="agent-opportunity-status" class="text-xs neutral">Idle</div>
         </div>
@@ -4290,7 +4290,11 @@ Then give 3-4 specific bullet observations about these actual holdings. Be conci
   },
   market: {
     label: '🌍 Market Impact',
-    model: 'claude-sonnet-4-5',
+    // Demoted from sonnet-4-5 to haiku-4-5 to escape the 10k input
+    // tokens/min cap that triggers when 3 parallel Sonnet agents run
+    // on a 100+ holding portfolio. Haiku's per-minute cap is ~5× higher;
+    // analytical quality for "name sectors + sentiment" is comparable.
+    model: 'claude-haiku-4-5',
     modelOpenAI: 'local-model',
     maxTokens: 800,
     system: `You are a global macro analyst. Given the portfolio and current market data:
@@ -4302,7 +4306,9 @@ Reference real market dynamics. Be specific to the actual tickers listed. Under 
   },
   opportunity: {
     label: '🔭 Opportunity Scout',
-    model: 'claude-sonnet-4-5',
+    // Demoted from sonnet-4-5 to haiku-4-5 for the same rate-limit reason
+    // as market. Opus advisor still synthesises with the higher model.
+    model: 'claude-haiku-4-5',
     modelOpenAI: 'local-model',
     maxTokens: 800,
     system: `You are a strategic investment opportunity analyst. Based on the portfolio:
@@ -4386,6 +4392,10 @@ async function callClaude(agentKey, userMessage) {
   if (apiKey) endpoints.push('https://api.anthropic.com/v1/messages');
 
   let lastError = null;
+  // Single retry on 429: Anthropic enforces a per-minute sliding window;
+  // waiting the suggested time (or 30s default) and trying once more is
+  // usually enough to clear it without the user having to re-click.
+  let retried429 = false;
   for (const url of endpoints) {
     try {
       const res = await fetch(url, { method:'POST', headers, body, signal: AbortSignal.timeout(60000) });
@@ -4402,6 +4412,25 @@ async function callClaude(agentKey, userMessage) {
       } catch { errMsg = errText || `HTTP ${res.status}`; }
       lastError = `[${res.status}] ${errMsg}`;
       console.error(`[${agentKey}] ${url} →`, lastError);
+      // 429: Anthropic rate limit. Use the retry-after header if present,
+      // else parse the suggested wait from the error body, else 30s. Try
+      // once more on the SAME endpoint before falling through to the next.
+      if (res.status === 429 && !retried429) {
+        retried429 = true;
+        const headerWait = parseFloat(res.headers.get('retry-after') || '0');
+        const bodyWaitMs = /try again in (\d+)/i.exec(errMsg)?.[1];
+        const waitMs = Math.max(15000, Math.min(60000,
+          (headerWait * 1000) || (bodyWaitMs * 1000) || 30000));
+        console.warn(`[${agentKey}] 429 — waiting ${waitMs}ms then retrying once`);
+        await new Promise(r => setTimeout(r, waitMs));
+        const res2 = await fetch(url, { method:'POST', headers, body, signal: AbortSignal.timeout(60000) });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          return data2.content?.[0]?.text || 'No response from agent.';
+        }
+        const err2 = await res2.text();
+        lastError = `[${res2.status}] ${err2 || 'retry failed'}`;
+      }
       // 400 (bad model / bad request) and 401 (auth) — no point retrying on direct API
       if (res.status === 400 || res.status === 401) {
         throw new Error(`${agentKey} (${def.model}): ${errMsg}`);
