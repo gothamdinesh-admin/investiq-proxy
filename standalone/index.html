@@ -1179,7 +1179,11 @@
           <div class="text-xs neutral mt-1">Track tickers you're researching but don't own yet.</div>
         </div>
         <div class="flex items-center gap-2">
-          <input type="text" id="watchlistAddInput" class="input" placeholder="e.g. NVDA, TSLA, AIR.NZ" style="max-width:200px;" onkeydown="if(event.key==='Enter')addToWatchlist()">
+          <input type="text" id="watchlistAddInput" class="input" list="watchlistSuggestions"
+                 placeholder="Search or type ticker…" style="max-width:260px;"
+                 oninput="updateWatchlistSuggestions(this.value)"
+                 onkeydown="if(event.key==='Enter')addToWatchlist()">
+          <datalist id="watchlistSuggestions"></datalist>
           <button onclick="addToWatchlist()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Add</button>
           <button onclick="refreshWatchlist()" class="btn btn-sm btn-secondary" title="Refresh prices"><i class="fas fa-sync-alt"></i></button>
         </div>
@@ -5033,7 +5037,7 @@ function _showSectionCore(name, el) {
   if (name === 'market') renderMarketSection();
   if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
-  if (name === 'watchlist') { renderWatchlist(); refreshWatchlist(); }
+  if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
   if (name === 'news') loadNews();
   if (name === 'tax') refreshFIF();
 }
@@ -5848,6 +5852,153 @@ function refreshFIF() {
 // Prices are fetched from the /api/market proxy endpoint (same as portfolio).
 function ensureWatchlist() {
   if (!Array.isArray(state.settings.watchlist)) state.settings.watchlist = [];
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// WATCHLIST TICKER PICKER
+// Native <datalist> dropdown attached to the watchlist input.
+// Source order:
+//   1. The user's own portfolio holdings (most relevant)
+//   2. A curated set of popular tickers (US, NZ, AU, UK, crypto)
+//   3. (Optional) Yahoo Finance search results via /api/search — debounced
+//      typeahead. If the proxy doesn't expose /api/search yet this fails
+//      silently and the static list still works.
+// ═══════════════════════════════════════════════════════════════════════
+const POPULAR_TICKERS = [
+  // US mega-caps + popular trades
+  { s: 'NVDA',  n: 'NVIDIA Corporation' },
+  { s: 'AAPL',  n: 'Apple Inc.' },
+  { s: 'MSFT',  n: 'Microsoft Corporation' },
+  { s: 'GOOG',  n: 'Alphabet Inc. Class C' },
+  { s: 'GOOGL', n: 'Alphabet Inc. Class A' },
+  { s: 'AMZN',  n: 'Amazon.com Inc.' },
+  { s: 'META',  n: 'Meta Platforms Inc.' },
+  { s: 'TSLA',  n: 'Tesla Inc.' },
+  { s: 'AMD',   n: 'Advanced Micro Devices' },
+  { s: 'INTC',  n: 'Intel Corporation' },
+  { s: 'AVGO',  n: 'Broadcom Inc.' },
+  { s: 'NFLX',  n: 'Netflix Inc.' },
+  { s: 'DIS',   n: 'Walt Disney Co.' },
+  { s: 'JPM',   n: 'JPMorgan Chase' },
+  { s: 'V',     n: 'Visa Inc.' },
+  { s: 'MA',    n: 'Mastercard Inc.' },
+  { s: 'KO',    n: 'Coca-Cola Co.' },
+  { s: 'PFE',   n: 'Pfizer Inc.' },
+  { s: 'BRK-B', n: 'Berkshire Hathaway B' },
+  { s: 'PLTR',  n: 'Palantir Technologies' },
+  { s: 'SMCI',  n: 'Super Micro Computer' },
+  { s: 'COIN',  n: 'Coinbase Global' },
+  // Popular ETFs
+  { s: 'SPY',   n: 'SPDR S&P 500 ETF' },
+  { s: 'QQQ',   n: 'Invesco QQQ (Nasdaq 100)' },
+  { s: 'VTI',   n: 'Vanguard Total Stock Market' },
+  { s: 'VOO',   n: 'Vanguard S&P 500' },
+  { s: 'VWO',   n: 'Vanguard Emerging Markets' },
+  { s: 'ARKK',  n: 'ARK Innovation ETF' },
+  { s: 'URA',   n: 'Global X Uranium ETF' },
+  { s: 'LIT',   n: 'Global X Lithium ETF' },
+  // NZ
+  { s: 'AIR.NZ',  n: 'Air New Zealand' },
+  { s: 'FPH.NZ',  n: 'Fisher & Paykel Healthcare' },
+  { s: 'SPK.NZ',  n: 'Spark New Zealand' },
+  { s: 'MEL.NZ',  n: 'Meridian Energy' },
+  { s: 'MCY.NZ',  n: 'Mercury NZ' },
+  { s: 'CEN.NZ',  n: 'Contact Energy' },
+  { s: 'GNE.NZ',  n: 'Genesis Energy' },
+  { s: 'ATM.NZ',  n: 'a2 Milk Company' },
+  { s: 'EBO.NZ',  n: 'Ebos Group' },
+  { s: 'MFT.NZ',  n: 'Mainfreight' },
+  { s: 'IFT.NZ',  n: 'Infratil' },
+  { s: 'RYM.NZ',  n: 'Ryman Healthcare' },
+  // AU
+  { s: 'BHP.AX',  n: 'BHP Group (ASX)' },
+  { s: 'CBA.AX',  n: 'Commonwealth Bank' },
+  { s: 'WBC.AX',  n: 'Westpac Banking' },
+  { s: 'CSL.AX',  n: 'CSL Limited' },
+  { s: 'WES.AX',  n: 'Wesfarmers' },
+  { s: 'WOW.AX',  n: 'Woolworths Group' },
+  { s: 'FMG.AX',  n: 'Fortescue Metals' },
+  { s: 'TLS.AX',  n: 'Telstra Group' },
+  // UK (LSE — quoted in pence; LSE-pence normalisation handles it)
+  { s: 'AZN.L',   n: 'AstraZeneca (LSE)' },
+  { s: 'HSBA.L',  n: 'HSBC Holdings (LSE)' },
+  { s: 'SHEL.L',  n: 'Shell plc (LSE)' },
+  { s: 'BP.L',    n: 'BP plc (LSE)' },
+  { s: 'GSK.L',   n: 'GSK plc (LSE)' },
+  { s: 'ULVR.L',  n: 'Unilever (LSE)' },
+  { s: 'RIO.L',   n: 'Rio Tinto (LSE)' },
+  // Crypto (Yahoo uses -USD suffix)
+  { s: 'BTC-USD', n: 'Bitcoin' },
+  { s: 'ETH-USD', n: 'Ethereum' },
+  { s: 'SOL-USD', n: 'Solana' },
+  { s: 'ADA-USD', n: 'Cardano' },
+  { s: 'DOGE-USD',n: 'Dogecoin' },
+  { s: 'XRP-USD', n: 'XRP' },
+  { s: 'LINK-USD',n: 'Chainlink' },
+  { s: 'AVAX-USD',n: 'Avalanche' },
+  { s: 'MATIC-USD',n:'Polygon' },
+  { s: 'DOT-USD', n: 'Polkadot' }
+];
+
+// Render the datalist <option>s. Combines: portfolio holdings (top),
+// curated popular list, and any Yahoo search results we've fetched.
+let _watchlistRemoteHits = [];
+let _watchlistSearchDebounce = 0;
+
+function rebuildWatchlistSuggestions() {
+  const dl = document.getElementById('watchlistSuggestions');
+  if (!dl) return;
+  const seen = new Set();
+  const rows = [];
+  // 1. From the user's own portfolio — most contextually useful
+  (state.portfolio || []).forEach(h => {
+    const sym = (h.symbol || '').toUpperCase();
+    if (!sym || seen.has(sym)) return;
+    seen.add(sym);
+    rows.push({ s: sym, n: (h.name || sym) + ' · in your portfolio' });
+  });
+  // 2. Remote Yahoo search hits (if proxy supports /api/search)
+  _watchlistRemoteHits.forEach(r => {
+    const sym = (r.symbol || '').toUpperCase();
+    if (!sym || seen.has(sym)) return;
+    seen.add(sym);
+    rows.push({ s: sym, n: r.shortname || r.longname || sym });
+  });
+  // 3. Curated popular tickers
+  POPULAR_TICKERS.forEach(t => {
+    if (seen.has(t.s)) return;
+    seen.add(t.s);
+    rows.push(t);
+  });
+  // <datalist> options — value=ticker, label/text = friendly name
+  dl.innerHTML = rows.map(r =>
+    `<option value="${r.s}">${(r.n || '').replace(/"/g,'&quot;')}</option>`
+  ).join('');
+}
+
+// Called on every keystroke. Rebuilds the static list immediately, then
+// fires a debounced Yahoo search via the proxy for richer matches.
+function updateWatchlistSuggestions(query) {
+  rebuildWatchlistSuggestions();
+  clearTimeout(_watchlistSearchDebounce);
+  const q = (query || '').trim();
+  if (q.length < 2) { _watchlistRemoteHits = []; return; }
+  _watchlistSearchDebounce = setTimeout(() => fetchYahooSearch(q), 300);
+}
+
+async function fetchYahooSearch(query) {
+  const proxy = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  if (!proxy) return;
+  try {
+    const res = await fetch(`${proxy}/api/search?q=${encodeURIComponent(query)}`, {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) return; // 404 (no route) or 403 — fail quietly, static list still works
+    const data = await res.json();
+    _watchlistRemoteHits = (data.quotes || data.results || []).slice(0, 15);
+    rebuildWatchlistSuggestions();
+  } catch(e) { /* silent — static list remains */ }
 }
 
 async function addToWatchlist() {

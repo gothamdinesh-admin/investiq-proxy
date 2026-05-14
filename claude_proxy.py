@@ -198,6 +198,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
             symbols = params.get("symbols", [None])[0]
             limit_per = int(params.get("limit", ["3"])[0])
             self._fetch_news(symbols.split(",") if symbols else [], limit_per)
+        elif parsed.path == "/api/search":
+            q = (params.get("q", [""])[0] or "").strip()
+            self._yahoo_search(q)
         else:
             self._json(404, {"error": "Not found"})
 
@@ -454,6 +457,56 @@ class ProxyHandler(BaseHTTPRequestHandler):
         cache_set(cache_key, result, ttl_seconds=60)
         self._json(200, result)
         print(f"  ✓ Prices fetched: {list(result.keys())}")
+
+    # ── Yahoo Finance ticker search (typeahead) ───────────────────
+    def _yahoo_search(self, query):
+        """Hit Yahoo's public search endpoint and return up to 15 matches.
+
+        Used by the watchlist picker as a typeahead source. Yahoo search is
+        unauthenticated and public; we just proxy it through the same auth
+        gate as the rest of /api/* so the X-Proxy-Secret still gates abuse.
+        """
+        query = (query or "").strip()
+        if len(query) < 1:
+            return self._json(400, {"error": "q param required"})
+        # 5-min cache — popular queries (NVDA, AAPL, BTC) repeat constantly
+        cache_key = f"search:{query.lower()}"
+        cached = cache_get(cache_key)
+        if cached:
+            return self._json(200, cached)
+        try:
+            import urllib.request, urllib.parse, json as _json
+            url = (
+                "https://query2.finance.yahoo.com/v1/finance/search?"
+                + urllib.parse.urlencode({
+                    "q": query,
+                    "quotesCount": 15,
+                    "newsCount": 0,
+                    "enableFuzzyQuery": "true"
+                })
+            )
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (InvestIQ proxy)"
+            })
+            with urllib.request.urlopen(req, timeout=8) as r:
+                raw = _json.loads(r.read().decode("utf-8", errors="ignore"))
+            quotes = []
+            for q in (raw.get("quotes") or [])[:15]:
+                sym = q.get("symbol")
+                if not sym:
+                    continue
+                quotes.append({
+                    "symbol":    sym,
+                    "shortname": q.get("shortname") or q.get("longname") or sym,
+                    "longname":  q.get("longname") or "",
+                    "exch":      q.get("exchDisp") or q.get("exchange") or "",
+                    "type":      q.get("quoteType") or ""
+                })
+            payload = {"quotes": quotes}
+            cache_set(cache_key, payload, ttl=300)
+            self._json(200, payload)
+        except Exception as e:
+            self._json(502, {"error": f"Yahoo search failed: {e}"})
 
     def _fetch_news(self, symbols, limit_per=3):
         # Yahoo Finance news per ticker — cached 30 min so we don't hammer the API
