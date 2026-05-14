@@ -829,6 +829,7 @@
       <div class="nav-link" onclick="showSection('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
+      <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
       <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
@@ -1961,32 +1962,13 @@
 <!-- ============================================================ -->
 <!-- JAVASCRIPT -->
 <!-- ============================================================ -->
+<!-- Extracted modules (Phase 1 of split). Load order matters — these
+     define globals consumed by the inline <script> below. -->
+<script src="js/00-config.js"></script>
+<script src="js/10-helpers.js"></script>
 <script>
 
-// ═══════════════════════════════════════════════════════════════════════
-// PLATFORM CONFIG — managed by admin, baked in for all users.
-// Regular users never need to enter these. Admin can override in Settings.
-// The Supabase anon key is designed to be public; RLS enforces security.
-// ═══════════════════════════════════════════════════════════════════════
-const PLATFORM_CONFIG = {
-  supabaseUrl:  'https://szyclmouetbbigxexdrn.supabase.co',
-  supabaseKey:  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno',
-  proxyUrl:     'https://investiq-proxy.onrender.com',
-  adminEmails:  ['gothamdinesh@gmail.com'],
-  // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
-  // This prevents anyone else from using your proxy to burn your Claude credits.
-  // Leave blank for local dev (proxy will warn but still allow requests).
-  proxySecret:  '',
-  // AI provider — 'claude' (default, routed via our proxy to Anthropic) or
-  // 'openai-compatible' (for LM Studio / Ollama / any local OpenAI-compatible
-  // endpoint). Admin can override via settings.aiProvider + aiProviderUrl
-  // + aiProviderKey in Settings → Admin Platform Config.
-  // LM Studio default: http://localhost:1234/v1
-  // Ollama default: http://localhost:11434/v1
-  aiProvider:    'claude',
-  aiProviderUrl: '',
-  aiProviderKey: ''
-};
+// PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
 
 // Helper — returns headers object with X-Proxy-Secret injected when configured
 function proxyHeaders(extra = {}) {
@@ -2058,15 +2040,7 @@ const toast = (() => {
 })();
 
 // ===== CONFIG =====
-const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', AED:'د.إ', SGD:'S$', AUD:'A$' };
-const ASSET_COLORS = {
-  stock:'#818cf8', etf:'#60a5fa', crypto:'#fbbf24', bond:'#34d399',
-  cash:'#94a3b8', mutualfund:'#c4b5fd', realestate:'#fb923c', other:'#64748b'
-};
-const CORS_PROXIES = [
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/raw?url='
-];
+// CURRENCY_SYMBOLS, ASSET_COLORS, CORS_PROXIES moved to js/00-config.js
 
 // ===== STATE =====
 let state = {
@@ -2223,25 +2197,7 @@ async function submitGateAuth() {
   // On success, updateAuthUI() hides the gate automatically
 }
 
-// Credentials that must ALWAYS stay local — never saved to cloud, never overwritten from cloud.
-// Keeps your API keys, Supabase creds, and Akahu tokens sticky across sessions/deploys.
-const LOCAL_ONLY_SETTINGS = [
-  'claudeApiKey',
-  'supabaseUrl',
-  'supabaseKey',
-  'akahuAppToken',
-  'akahuUserToken',
-  'aiProviderUrl',   // LM Studio / Ollama URL is local-machine specific
-  'aiProviderKey',   // Per-admin API key, never sync
-  'proxySecret'      // Never leak
-];
-
-// ═══════════════════════════════════════════════════════════════════════
-// IDLE SESSION TIMEOUT — auto-logout after N minutes of no user activity.
-// Prevents lingering sessions on shared/lost devices.
-// ═══════════════════════════════════════════════════════════════════════
-const IDLE_LIMIT_MS = 30 * 60 * 1000;  // 30 min — generous for portfolio review
-const IDLE_WARNING_MS = 2 * 60 * 1000; // warn 2 min before
+// LOCAL_ONLY_SETTINGS, IDLE_LIMIT_MS, IDLE_WARNING_MS moved to js/00-config.js
 let _lastActivity = Date.now();
 let _idleWarned = false;
 
@@ -3452,34 +3408,7 @@ function downloadCSVTemplate() {
 }
 
 // ===== HELPERS =====
-function uuid() { return Math.random().toString(36).substr(2,9) + Date.now().toString(36); }
-
-function fmt(num, dec=2) {
-  if (num === null || num === undefined || isNaN(num)) return '–';
-  return Math.abs(num).toFixed(dec);
-}
-
-function fmtCurrency(num, currency) {
-  const sym = CURRENCY_SYMBOLS[currency || state.settings.currency] || '£';
-  if (num === null || num === undefined || isNaN(num)) return sym+'–';
-  const abs = Math.abs(num);
-  let str;
-  if (abs >= 1e6) str = (abs/1e6).toFixed(2)+'M';
-  else if (abs >= 1e3) str = (abs/1e3).toFixed(1)+'K';
-  else str = abs.toFixed(2);
-  return sym + str;
-}
-
-function fmtChange(num) {
-  if (!num && num !== 0) return '<span class="neutral">–</span>';
-  const cls = num >= 0 ? 'pos' : 'neg';
-  const sign = num >= 0 ? '+' : '-';
-  return `<span class="${cls}">${sign}${fmtCurrency(num)} (${sign}${fmt(Math.abs(num / (state.portfolio.reduce((s,h) => s + h.quantity*(h.purchasePrice||0),0) || 1)*100))}%)</span>`;
-}
-
-function getTagClass(type) {
-  return 'tag tag-' + (type||'other').toLowerCase().replace(' ','');
-}
+// uuid, fmt, fmtCurrency, fmtChange, getTagClass moved to js/10-helpers.js
 
 // ===== FX CONVERSION =====
 function getFxRate(fromCurrency, toCurrency) {
@@ -5024,18 +4953,7 @@ async function proxyHealthCheck() {
   updateAdminDiagnostics();
 }
 
-// URL validation helper — returns null if OK, error string if bad
-function validateUrl(url, label, requireHttps = false) {
-  if (!url) return null; // empty allowed (uses platform default)
-  try {
-    const u = new URL(url);
-    if (!['http:','https:'].includes(u.protocol)) return `${label}: must be http or https`;
-    if (requireHttps && u.protocol !== 'https:') return `${label}: must be HTTPS in production`;
-    return null;
-  } catch(e) {
-    return `${label}: not a valid URL`;
-  }
-}
+// validateUrl moved to js/10-helpers.js
 
 function saveSettings() {
   state.settings.name = document.getElementById('settingName').value || 'My Portfolio';
@@ -6102,9 +6020,7 @@ function renderNews(articles, totalSymbols) {
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">${cards}</div>`;
 }
 
-function _escape(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// _escape moved to js/10-helpers.js
 
 async function refreshWatchlist() {
   ensureWatchlist();
@@ -6374,11 +6290,7 @@ async function tryConsumeAiQuota() {
   return true;
 }
 
-function maskSupabaseKey(key) {
-  if (!key) return 'Not set';
-  if (key.length <= 14) return key;
-  return key.slice(0, 12) + '...' + key.slice(-4);
-}
+// maskSupabaseKey moved to js/10-helpers.js
 
 function updateAdminDiagnostics() {
   const proxyUrl = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').trim();
@@ -6495,7 +6407,7 @@ function renderAdminTable(users) {
   }).join('');
 }
 
-function esc(s) { return String(s ?? '').replace(/'/g, "&#39;"); }
+// esc moved to js/10-helpers.js
 
 async function adminApproveUser(userId, email, approve) {
   if (!confirm(`${approve ? 'Approve' : 'Revoke approval for'} ${email}?`)) return;
@@ -6852,13 +6764,7 @@ async function adminDeleteUser(userId, email) {
   loadAdminData();
 }
 
-function timeSince(date) {
-  const s = Math.floor((new Date() - date) / 1000);
-  if (s < 60) return 'Just now';
-  if (s < 3600) return Math.floor(s/60) + 'm ago';
-  if (s < 86400) return Math.floor(s/3600) + 'h ago';
-  return Math.floor(s/86400) + 'd ago';
-}
+// timeSince moved to js/10-helpers.js
 
 // ===== INIT =====
 function showSkeletons() {
