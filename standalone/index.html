@@ -5309,15 +5309,60 @@ async function adminTestProxy() {
   _adminClearOutput();
   const proxy = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   if (!proxy) return _adminLog('✗ No proxy URL set');
+
+  // ── Step 1: liveness check ────────────────────────────────────────
   _adminLog(`🔍 Pinging ${proxy}/health …`);
   const t0 = Date.now();
   try {
     const res = await fetch(proxy + '/health', { signal: AbortSignal.timeout(15000) });
     const j = await res.json().catch(() => null);
-    _adminLog(`✓ ${res.status} (${Date.now()-t0}ms): ${JSON.stringify(j)}`);
+    _adminLog(`✓ ${res.status} (${Date.now()-t0}ms): ${JSON.stringify(j)}\n`);
   } catch(e) {
     _adminLog(`✗ Proxy unreachable: ${e.message}`);
     _adminLog('  (Render free tier sleeps after 15 min — the next request wakes it)');
+    return;
+  }
+
+  // ── Step 2: auth diagnostic ───────────────────────────────────────
+  // Calls /api/diag with the same X-Proxy-Secret the rest of the app sends,
+  // then prints a human-readable breakdown of which auth path would match
+  // and (if 403'd elsewhere) which failure mode is being hit.
+  _adminLog(`🔍 Auth diagnostic: GET ${proxy}/api/diag with current headers …`);
+  try {
+    const res = await fetch(proxy + '/api/diag', {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(15000)
+    });
+    const d = await res.json();
+    _adminLog(`Response: ${res.status}\n`);
+    _adminLog('── REQUEST (what proxy received) ──');
+    _adminLog(`  origin:                ${d.request?.origin}`);
+    _adminLog(`  x-proxy-secret header: ${d.request?.header_present ? d.request.x_proxy_secret_masked : '(NOT SENT — frontend has nothing to send)'}`);
+    _adminLog('\n── PROXY CONFIG (Render env vars) ──');
+    _adminLog(`  PROXY_SECRET env var set:    ${d.proxy_config?.PROXY_SECRET_env_set ? 'yes (len ' + d.proxy_config.PROXY_SECRET_length + ')' : 'NO — admin global override not configured'}`);
+    _adminLog(`  SUPABASE_URL set:            ${d.proxy_config?.SUPABASE_URL_set ? 'yes' : 'NO — per-user RPC validation impossible'}`);
+    _adminLog(`  SUPABASE_ANON_KEY set:       ${d.proxy_config?.SUPABASE_ANON_set ? 'yes' : 'NO — per-user RPC validation impossible'}`);
+    _adminLog(`  Allowed origins:             ${JSON.stringify(d.proxy_config?.allowed_origins)}`);
+    _adminLog('\n── AUTH OUTCOME ──');
+    if (d.auth_outcome?.would_authorise) {
+      _adminLog(`  ✓ Would authorise as: ${d.auth_outcome.matched_user_id}`);
+    } else {
+      _adminLog(`  ✗ Would REJECT (fail_reason: ${d.auth_outcome?.fail_reason || 'unknown'})`);
+      const hints = {
+        no_header: '  ↳ Frontend isn\'t sending X-Proxy-Secret. Either set\n     state.settings.proxySecret (admin override in Settings)\n     OR populate profiles.proxy_secret in Supabase for your user.',
+        rpc_reject: '  ↳ Secret sent but Supabase RPC says no match. Either the\n     value is wrong, or your profiles row is missing proxy_secret,\n     or you\'re not is_approved=true.',
+        proxy_supabase_misconfigured: '  ↳ Render is missing SUPABASE_URL or SUPABASE_ANON_KEY env\n     vars, so RPC validation can\'t run. Set both env vars and\n     redeploy, OR set the global PROXY_SECRET to match what the\n     frontend sends.'
+      };
+      const hint = hints[d.auth_outcome?.fail_reason];
+      if (hint) _adminLog(hint);
+    }
+    _adminLog('\n── BROWSER STATE (what frontend has) ──');
+    _adminLog(`  _userProfile.proxy_secret: ${_userProfile?.proxy_secret ? '(set)' : '(empty)'}`);
+    _adminLog(`  state.settings.proxySecret: ${state.settings.proxySecret ? '(set)' : '(empty)'}`);
+    _adminLog(`  PLATFORM_CONFIG.proxySecret: ${PLATFORM_CONFIG.proxySecret ? '(set)' : '(empty)'}`);
+  } catch(e) {
+    _adminLog(`✗ Diagnostic failed: ${e.message}`);
+    _adminLog('  (Proxy may not have the /api/diag route deployed yet — Render redeploy needed)');
   }
 }
 

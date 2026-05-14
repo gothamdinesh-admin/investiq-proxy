@@ -303,6 +303,14 @@ async function fetchYahooQuotes(symbols) {
       const data = await res.json();
       // Proxy returns {sym: {price, change, changePct, name}}
       if (Object.keys(data).length > 0) return data;
+    } else if (res.status === 403) {
+      // Surface the proxy's own diagnostic so 403s aren't silent.
+      // Logged once per refresh — fall through to CORS fallback after.
+      try {
+        const err = await res.json();
+        console.warn('[proxy 403]', err.reason || 'unknown', '·', err.hint || '');
+        console.warn('[proxy 403] Run Admin → Test Proxy for full auth breakdown.');
+      } catch { /* old proxy without diag payload */ }
     }
   } catch(e) { /* fall through to public proxies */ }
 

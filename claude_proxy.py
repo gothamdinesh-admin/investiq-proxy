@@ -150,11 +150,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
           1. Global admin PROXY_SECRET env var (admin override)
           2. Any approved user's per-user proxy_secret (looked up in Supabase)
         Stores authenticated user_id on self for downstream logging.
+
+        Also stores a diagnostic reason on self._auth_fail_reason so the 403
+        response can tell the caller exactly why they're being rejected
+        (instead of the unhelpful generic 'Forbidden').
         """
         self._auth_user_id = None
+        self._auth_fail_reason = None
         incoming = self.headers.get("X-Proxy-Secret", "")
         # Dev mode — no secret configured at all
         if not PROXY_SECRET and not (SUPABASE_URL and SUPABASE_ANON):
+            self._auth_user_id = "dev-mode-no-auth"
             return True
         # Global admin secret
         if PROXY_SECRET and incoming == PROXY_SECRET:
@@ -166,7 +172,43 @@ class ProxyHandler(BaseHTTPRequestHandler):
             if uid:
                 self._auth_user_id = uid
                 return True
+            self._auth_fail_reason = "rpc_reject"  # secret sent but RPC said no
+            return False
+        # Pinpoint the failure mode for the response body
+        if not incoming:
+            self._auth_fail_reason = "no_header"
+        elif not (SUPABASE_URL and SUPABASE_ANON):
+            self._auth_fail_reason = "proxy_supabase_misconfigured"
+        else:
+            self._auth_fail_reason = "unknown"
         return False
+
+    def _forbidden(self):
+        """Send a 403 with a non-sensitive diagnostic payload."""
+        reason = getattr(self, "_auth_fail_reason", None) or "unknown"
+        explanations = {
+            "no_header":
+                "Browser sent no X-Proxy-Secret header. Check that your "
+                "profile.proxy_secret is set in Supabase OR that the platform "
+                "PROXY_SECRET is baked into PLATFORM_CONFIG / Settings.",
+            "rpc_reject":
+                "X-Proxy-Secret was sent but Supabase RPC validate_proxy_secret() "
+                "did not match it to any approved user. Either the secret is "
+                "wrong, the profiles row is missing one, or is_approved=false.",
+            "proxy_supabase_misconfigured":
+                "Proxy is missing SUPABASE_URL or SUPABASE_ANON_KEY env vars on "
+                "Render — per-user secret validation can't run. Set them and "
+                "redeploy, or set the global PROXY_SECRET env var to match.",
+            "unknown":
+                "Auth rejected for an unrecognised reason. Hit /api/diag with the "
+                "same X-Proxy-Secret header to see the full breakdown."
+        }
+        return self._json(403, {
+            "error": "Forbidden — invalid or missing X-Proxy-Secret",
+            "reason": reason,
+            "hint":   explanations.get(reason, explanations["unknown"]),
+            "diag_url": "/api/diag"
+        })
 
     def do_OPTIONS(self):
         # Preflight always returns 204, no auth check (CORS spec requirement)
@@ -183,10 +225,48 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(200, {"status": "ok", "service": "InvestIQ Proxy"})
             return
 
+        # /api/diag — public auth diagnostic. Returns *what the proxy received*
+        # and how the secret would (or wouldn't) be authorised, without ever
+        # echoing back the secret itself. Lets us debug 403s from the browser
+        # without dashboard access.
+        if parsed.path == "/api/diag":
+            incoming = self.headers.get("X-Proxy-Secret", "")
+            masked = "(none)"
+            if incoming:
+                if len(incoming) <= 8:
+                    masked = "*" * len(incoming)
+                else:
+                    masked = incoming[:4] + "…" + incoming[-3:] + f" (len={len(incoming)})"
+            # Run the auth path so we can report which branch would accept it.
+            self._check_secret()
+            return self._json(200, {
+                "service": "InvestIQ Proxy diagnostic",
+                "request": {
+                    "origin":   self.headers.get("Origin", "(none)"),
+                    "client_ip": self._client_ip(),
+                    "x_proxy_secret_masked": masked,
+                    "header_present": bool(incoming),
+                    "header_length":  len(incoming),
+                },
+                "proxy_config": {
+                    "PROXY_SECRET_env_set": bool(PROXY_SECRET),
+                    "PROXY_SECRET_length":  len(PROXY_SECRET) if PROXY_SECRET else 0,
+                    "SUPABASE_URL_set":     bool(SUPABASE_URL),
+                    "SUPABASE_ANON_set":    bool(SUPABASE_ANON),
+                    "allowed_origins":      ALLOWED_ORIGINS,
+                    "rate_limit_per_min":   RATE_LIMIT,
+                },
+                "auth_outcome": {
+                    "would_authorise":   self._auth_user_id is not None,
+                    "matched_user_id":   self._auth_user_id,
+                    "fail_reason":       self._auth_fail_reason,
+                }
+            })
+
         if not self._rate_limit_ok():
             return self._json(429, {"error": "Rate limit exceeded — try again in a minute"})
         if not self._check_secret():
-            return self._json(403, {"error": "Forbidden — invalid or missing X-Proxy-Secret"})
+            return self._forbidden()
 
         if parsed.path == "/api/market":
             symbols = params.get("symbols", [None])[0]
@@ -208,7 +288,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if not self._rate_limit_ok():
             return self._json(429, {"error": "Rate limit exceeded — try again in a minute"})
         if not self._check_secret():
-            return self._json(403, {"error": "Forbidden — invalid or missing X-Proxy-Secret"})
+            return self._forbidden()
 
         # Cap request body to 2 MB to prevent abuse
         length = int(self.headers.get("Content-Length", 0))
