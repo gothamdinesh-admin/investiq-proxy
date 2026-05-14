@@ -5149,7 +5149,14 @@ async function refreshAll() {
   btn.innerHTML = '<div class="spinner" style="width:12px;height:12px;display:inline-block;margin-right:4px;"></div>Updating...';
   btn.disabled = true;
 
-  await Promise.all([refreshPortfolioPrices(), refreshMarketData()]);
+  // Serialise FX before prices — getMetrics() needs FX rates to convert
+  // currencies. Parallel races caused a brief flicker where prices landed
+  // before FX and the dashboard rendered with fx=1 fallback.
+  await refreshMarketData();
+  await refreshPortfolioPrices();
+  // Watchlist is its own ticker pool — refresh alongside the portfolio so
+  // prices stay current without the user having to open the Watchlist tab.
+  await refreshWatchlist().catch(() => {});
   renderAll();
 
   document.getElementById('lastUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -5844,25 +5851,41 @@ function ensureWatchlist() {
 }
 
 async function addToWatchlist() {
-  ensureWatchlist();
-  const input = document.getElementById('watchlistAddInput');
-  const raw = (input?.value || '').trim();
-  if (!raw) return;
-  const symbols = raw.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
-  for (const sym of symbols) {
-    if (!state.settings.watchlist.find(w => w.symbol === sym)) {
-      state.settings.watchlist.push({
-        symbol: sym,
-        addedAt: new Date().toISOString().slice(0,10),
-        currentPrice: null,
-        dayChangePct: null
-      });
+  try {
+    ensureWatchlist();
+    const input = document.getElementById('watchlistAddInput');
+    const raw = (input?.value || '').trim();
+    if (!raw) {
+      toast.warning('Type a ticker first (e.g. NVDA)');
+      return;
     }
+    const symbols = raw.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    let added = 0, skipped = 0;
+    for (const sym of symbols) {
+      if (!state.settings.watchlist.find(w => w.symbol === sym)) {
+        state.settings.watchlist.push({
+          symbol: sym,
+          addedAt: new Date().toISOString().slice(0,10),
+          currentPrice: null,
+          dayChangePct: null
+        });
+        added++;
+      } else {
+        skipped++;
+      }
+    }
+    if (input) input.value = '';
+    saveState();
+    renderWatchlist();
+    refreshWatchlist();
+    // Visible confirmation so user knows the click landed.
+    if (added && skipped) toast.success(`Added ${added}, already had ${skipped}`);
+    else if (added)       toast.success(`Added ${added} to watchlist`);
+    else if (skipped)     toast.info(`Already in watchlist`);
+  } catch(e) {
+    console.error('[addToWatchlist] failed:', e);
+    toast.error('Could not add: ' + (e.message || e));
   }
-  if (input) input.value = '';
-  saveState();
-  renderWatchlist();
-  refreshWatchlist();
 }
 
 function removeFromWatchlist(sym) {
