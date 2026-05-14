@@ -4459,18 +4459,47 @@ async function runAgents() {
   ['portfolio','market','opportunity','advisor'].forEach(k => setAgentState(k, 'idle'));
 
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+
+  // ── Payload compression ───────────────────────────────────────────────
+  // With ~100+ holdings, sending every row verbatim to 3 parallel Sonnet
+  // calls easily exceeds Anthropic's 10k input-tokens-per-minute org cap.
+  // We send the top 20 holdings by weight in full + aggregate the long tail
+  // into one row per (type, sector). Same analytical signal, ~70% smaller.
+  const TOP_N = 20;
+  const sorted = [...metrics.holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  const topHoldings = sorted.slice(0, TOP_N).map(h => ({
+    symbol: h.symbol, name: h.name || h.symbol, type: h.type,
+    platform: h.platform, sector: h.sector || 'unknown',
+    value: sym + fmt(h.currentValue),
+    weight: fmt(h.weight) + '%',
+    return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'
+  }));
+  // Aggregate the rest: one row per (type+sector) with combined weight + value.
+  const tail = sorted.slice(TOP_N);
+  const aggMap = new Map();
+  tail.forEach(h => {
+    const key = `${h.type || 'other'}|${h.sector || 'unknown'}`;
+    if (!aggMap.has(key)) aggMap.set(key, { type: h.type, sector: h.sector || 'unknown', value: 0, weight: 0, count: 0 });
+    const a = aggMap.get(key);
+    a.value  += h.currentValue || 0;
+    a.weight += h.weight || 0;
+    a.count  += 1;
+  });
+  const tailAggregates = [...aggMap.values()]
+    .sort((a,b) => b.value - a.value)
+    .map(a => ({
+      type: a.type, sector: a.sector,
+      holdings: a.count,
+      value: sym + fmt(a.value),
+      weight: fmt(a.weight) + '%'
+    }));
+
   const portfolioSummary = {
-    totalValue: sym + fmt(metrics.totalValue),
+    totalValue:  sym + fmt(metrics.totalValue),
     totalReturn: (metrics.totalGain >= 0 ? '+' : '') + fmt(metrics.totalGainPct) + '%',
-    holdings: metrics.holdings.map(h => ({
-      symbol: h.symbol, name: h.name || h.symbol, type: h.type,
-      platform: h.platform, sector: h.sector || 'unknown',
-      quantity: h.quantity, purchasePrice: sym + fmt(h.purchasePrice),
-      currentPrice: h.currentPrice ? sym + fmt(h.currentPrice) : 'unknown',
-      currentValue: sym + fmt(h.currentValue),
-      weight: fmt(h.weight) + '%',
-      return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'
-    }))
+    holdingsCount: metrics.holdings.length,
+    topHoldings,
+    ...(tailAggregates.length ? { tailAggregates, tailNote: `${tail.length} smaller holdings aggregated by type+sector to keep prompt size within rate limits` } : {})
   };
 
   const marketSummary = {
@@ -4483,16 +4512,22 @@ async function runAgents() {
   const baseMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Data:\n${JSON.stringify(marketSummary, null, 2)}${marketContext ? '\n\nAdditional Context:\n' + marketContext : ''}`;
 
   try {
-    // ── Phase 1: run portfolio, market, opportunity IN PARALLEL ──────────────
+    // ── Phase 1: portfolio, market, opportunity — staggered launch ──────────
+    // True parallel hits Anthropic's per-minute input-token cap when the
+    // portfolio is large. Staggering by ~4s spreads ~3 × 3-5k = 10-15k
+    // tokens across ~10s, which keeps us inside the 10k/min sonnet window
+    // without meaningfully slowing the user-perceived total (~25s anyway).
+    const stagger = (ms) => new Promise(r => setTimeout(r, ms));
     setAgentState('portfolio',   'running');
+    const p1 = callClaude('portfolio',   baseMsg);
+    await stagger(4000);
     setAgentState('market',      'running');
+    const p2 = callClaude('market',      baseMsg);
+    await stagger(4000);
     setAgentState('opportunity', 'running');
+    const p3 = callClaude('opportunity', baseMsg);
 
-    const [healthAnalysis, marketAnalysis, opportunities] = await Promise.all([
-      callClaude('portfolio',   baseMsg),
-      callClaude('market',      baseMsg),
-      callClaude('opportunity', baseMsg)
-    ]);
+    const [healthAnalysis, marketAnalysis, opportunities] = await Promise.all([p1, p2, p3]);
 
     setAgentState('portfolio',   'done', healthAnalysis);
     setAgentState('market',      'done', marketAnalysis);
@@ -4516,7 +4551,12 @@ async function runAgents() {
 
   } catch(e) {
     document.getElementById('agentError').style.display = 'block';
-    document.getElementById('agentError').textContent = 'Agent error: ' + e.message;
+    // Friendlier message for the most common failure: Anthropic per-minute
+    // rate-limit. Tells the user it's transient and they can just retry.
+    const isRateLimit = /\b429\b|rate limit/i.test(e.message || '');
+    document.getElementById('agentError').textContent = isRateLimit
+      ? 'Rate limit hit (Anthropic 10k input tokens/min). Wait ~60 seconds and click Run Again — the staggered launch and slimmed payload should keep the next run under cap.'
+      : 'Agent error: ' + e.message;
     logActivity('agent_run_failed', { error: e.message?.slice(0,200) });
     ['portfolio','market','opportunity','advisor'].forEach(k => {
       if (document.getElementById('agent-'+k)?.className.includes('running'))
