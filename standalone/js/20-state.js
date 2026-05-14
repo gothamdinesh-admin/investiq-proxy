@@ -38,6 +38,13 @@ function loadState() {
       state.portfolio = consolidatePortfolio(parsed.portfolio || []);
       state.settings = { ...state.settings, ...(parsed.settings||{}) };
       state.agentResults = parsed.agentResults || null;
+      // Restore last-known FX rates so the first render after reload converts
+      // currencies correctly. Without this, USD/GBP holdings render at raw
+      // foreign-currency numbers (fx=1 fallback) and the displayed total flicks
+      // upward by ~70% once refreshMarketData() finishes ~2s later. Keeping
+      // stale rates is far better than a wildly-wrong initial render — Yahoo
+      // intraday FX moves are fractions of a percent.
+      if (parsed.marketData?.fx) state.marketData.fx = parsed.marketData.fx;
     }
     applyPlatformDefaults();
   } catch(e) { console.warn('Failed to load state:', e); }
@@ -52,7 +59,10 @@ function saveState() {
   localStorage.setItem('investiq_v2', JSON.stringify({
     portfolio: consolidatePortfolio(state.portfolio),
     settings: safeSetting,
-    agentResults: state.agentResults
+    agentResults: state.agentResults,
+    // Persist FX rates only (small, deterministic). Indices/crypto/commodities
+    // are re-fetched anyway and would just bloat the payload.
+    marketData: { fx: state.marketData?.fx || {} }
   }));
   scheduleSupa(); // sync to cloud if signed in
 }
