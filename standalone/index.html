@@ -1270,6 +1270,30 @@
       </div>
     </div>
 
+    <!-- DIVIDENDS SECTION (placeholder — full feature pending) -->
+    <div id="section-dividends" style="display:none;">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-coins" style="color:#fbbf24;"></i> Dividends
+          </h2>
+          <div class="text-xs neutral mt-1">Track cash dividends received across all platforms, in your base currency.</div>
+        </div>
+      </div>
+      <div class="card" style="padding:32px;text-align:center;">
+        <i class="fas fa-coins" style="font-size:48px;color:rgba(251,191,36,0.3);"></i>
+        <h3 class="text-lg font-semibold mt-4 mb-2">Dividend tracking — coming soon</h3>
+        <div class="text-sm neutral mb-4" style="max-width:520px;margin:0 auto;">
+          Planned: per-holding dividend ledger (ex-date, pay-date, gross, NZ RWT / foreign tax withheld),
+          12-month rolling yield, FX-converted totals, and CSV export ready for IR3 line 17.
+        </div>
+        <div class="text-xs neutral" style="opacity:0.7;">
+          This sits behind the FIF check in priority — divs aren't useful until you can also see them on the dashboard.
+          If you want it sooner, drop me a note in the Admin → Diagnostics panel.
+        </div>
+      </div>
+    </div>
+
     <!-- ADMIN SECTION -->
     <div id="section-admin" style="display:none;">
       <div class="flex items-center justify-between mb-6">
@@ -5095,7 +5119,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','news','tax','admin'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','admin'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -5845,12 +5869,18 @@ function refreshFIF() {
   let totalCost = 0;
   let totalMarket = 0;
   const rows = [];
+  let skippedNoCountry = 0;
   state.portfolio.forEach(h => {
     const country = (h.country || '').toUpperCase().trim();
     if (NZ_EXEMPT_COUNTRIES.has(country)) return; // NZ-resident investments exempt
-    if (!country) return;
+    if (!country) { skippedNoCountry++; return; }
     const basis = getHoldingBasis(h);
-    const fx = getFxRate(h.currency || 'USD', base);
+    // LSE-listed tickers (.L / .IL) are quoted by Yahoo in PENCE, not pounds.
+    // getMetrics() divides by 100 before FX; refreshFIF must do the same or
+    // every London holding inflates by 100× (e.g. SHEL.L → NZ$86k instead of
+    // NZ$860). This is the source of the wildly-inflated FIF cost basis.
+    const penceAdj = isPenceQuoted(h.symbol) ? 0.01 : 1;
+    const fx = getFxRate(h.currency || 'USD', base) * penceAdj;
     const costNZD   = basis.quantity * basis.avgBuyPrice * fx;
     const marketNZD = basis.quantity * (h.currentPrice ?? basis.avgBuyPrice) * fx;
     if (costNZD <= 0) return;
@@ -5861,6 +5891,16 @@ function refreshFIF() {
       quantity: basis.quantity, avgCost: basis.avgBuyPrice, costNZD, marketNZD
     });
   });
+  // Visible feedback so the Recalculate button actually shows it ran, and so
+  // the user knows when holdings are being silently excluded due to missing
+  // country tags (the most common cause of "FIF total looks low").
+  if (typeof toast !== 'undefined') {
+    if (skippedNoCountry > 0) {
+      toast.warning(`FIF recalculated. ${skippedNoCountry} holding${skippedNoCountry===1?'':'s'} skipped (no country set — edit them to include in FIF).`);
+    } else {
+      toast.success(`FIF recalculated · ${rows.length} overseas holding${rows.length===1?'':'s'}`);
+    }
+  }
 
   const inFIFZone = totalCost > FIF_THRESHOLD_NZD;
   const fdrEstimate = inFIFZone ? totalMarket * 0.05 : 0;
