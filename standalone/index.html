@@ -4590,18 +4590,24 @@ async function createFamilyPrompt() {
   const name = prompt('Family name?\n\ne.g. "The Smiths", "Muthusamy Whānau", "Retirement Trust"');
   if (!name || !name.trim()) return;
   try {
+    // The DB trigger auto-adds the creator as 'owner' in family_members
+    // (migration 008). created_by defaults to auth.uid() — no need to
+    // pass it from the client. This avoids any stale-_supaUser-id risk.
     const { data, error } = await _supabase
       .from('families')
-      .insert({ name: name.trim(), created_by: _supaUser.id })
+      .insert({ name: name.trim() })
       .select()
       .single();
     if (error) throw error;
-    // Add self as owner
-    const { error: memErr } = await _supabase
-      .from('family_members')
-      .insert({ family_id: data.id, user_id: _supaUser.id, role: 'owner', display_name: _userProfile?.display_name || _supaUser.email.split('@')[0], invited_by: _supaUser.id });
-    if (memErr) throw memErr;
-    // Set as active
+    // Optionally set our display_name on the auto-created member row
+    const displayName = _userProfile?.display_name || _supaUser.email.split('@')[0];
+    if (displayName) {
+      await _supabase.from('family_members')
+        .update({ display_name: displayName })
+        .eq('family_id', data.id)
+        .eq('user_id', _supaUser.id);
+    }
+    // Set as active family
     await _supabase.from('profiles').update({ active_family_id: data.id }).eq('id', _supaUser.id);
     _userProfile.active_family_id = data.id;
     _activeFamilyId = data.id;
