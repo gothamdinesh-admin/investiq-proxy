@@ -4776,50 +4776,31 @@ async function redeemFamilyInvite({ token, code }) {
     return toast.warning('Sign in first, then redeem the invite from Settings → Family.');
   }
   try {
-    // Look up the invite. With RLS as-defined, only members can SELECT invites
-    // for their family — but new joiners aren't members yet. So we use the
-    // service-key path? No — we add an exception: anyone authenticated can
-    // SELECT an invite by token or code (the secret BEING the auth).
-    // For now we attempt a plain select; if RLS blocks it we fall back to
-    // calling the family-invite Edge Function for redemption.
-    const filter = token ? { token } : { code };
-    const { data: invite, error: lookupErr } = await _supabase
-      .from('family_invites')
-      .select('id, family_id, email, role, expires_at, used_at, families!inner(name)')
-      .match(filter)
-      .maybeSingle();
-
-    if (lookupErr || !invite) {
-      return toast.error('Invite not found or already used. Ask the inviter to generate a new one.');
-    }
-    if (invite.used_at) return toast.warning('That invite has already been used.');
-    if (new Date(invite.expires_at) < new Date()) return toast.warning('That invite has expired.');
-    if (invite.email && invite.email.toLowerCase() !== _supaUser.email.toLowerCase()) {
-      return toast.warning(`This invite is for ${invite.email}. Sign in with that email, or ask the inviter to generate a code-only invite.`);
-    }
-
-    // Insert self into family_members
-    const { error: joinErr } = await _supabase.from('family_members').insert({
-      family_id:    invite.family_id,
-      user_id:      _supaUser.id,
-      role:         invite.role,
-      display_name: _userProfile?.display_name || _supaUser.email.split('@')[0],
-      invited_by:   null
+    // Single atomic RPC handles lookup + validation + join + mark-used.
+    // SECURITY DEFINER on the server bypasses RLS for the SELECT step,
+    // which is the only legitimate way for a non-member to read an invite.
+    const { data, error } = await _supabase.rpc('redeem_family_invite', {
+      p_token: token || null,
+      p_code:  code  || null
     });
-    if (joinErr) throw joinErr;
+    if (error) throw error;
+    if (!data?.ok) {
+      const msg = data?.error || 'invite not found';
+      return toast.warning(`Couldn't join: ${msg}`);
+    }
 
-    // Mark invite used
-    await _supabase.from('family_invites')
-      .update({ used_at: new Date().toISOString(), used_by: _supaUser.id })
-      .eq('id', invite.id);
+    // Persist this as the user's active family
+    await _supabase.from('profiles').update({ active_family_id: data.family_id }).eq('id', _supaUser.id);
+    if (_userProfile) _userProfile.active_family_id = data.family_id;
+    _activeFamilyId = data.family_id;
 
-    // Set as active family
-    await _supabase.from('profiles').update({ active_family_id: invite.family_id }).eq('id', _supaUser.id);
-    if (_userProfile) _userProfile.active_family_id = invite.family_id;
-    _activeFamilyId = invite.family_id;
+    if (data.already_in) {
+      toast.info(`You're already in "${data.family_name}" (${data.role}).`);
+    } else {
+      toast.success(`Joined family "${data.family_name}" as ${data.role}`);
+      logActivity('family_invite_accepted', { family_id: data.family_id, role: data.role });
+    }
 
-    toast.success(`Joined family "${invite.families.name}" as ${invite.role}`);
-    logActivity('family_invite_accepted', { family_id: invite.family_id, role: invite.role });
     dismissFamilyInviteBanner();
     // Clean URL
     const url = new URL(location.href);
