@@ -2204,18 +2204,76 @@
   </div>
 </div>
 
-<!-- VIEW HOLDING MODAL -->
+<!-- VIEW HOLDING MODAL — full detail page (chart + lots + AI + news) -->
 <div class="modal-overlay" id="viewModal" onclick="closeModalBg(event,'viewModal')">
-  <div class="modal" style="max-width:460px;">
+  <div class="modal" style="max-width:880px;">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-bold" id="viewModalTitle">Holding Details</h2>
+      <div>
+        <h2 class="text-lg font-bold" id="viewModalTitle">Holding Details</h2>
+        <div id="viewModalSubtitle" class="text-xs neutral mt-1"></div>
+      </div>
       <button onclick="closeModal('viewModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
     </div>
-    <div id="viewModalContent"></div>
-    <div class="flex gap-3 mt-5">
-      <button id="viewEditBtn" class="btn btn-primary flex-1">Edit</button>
+
+    <!-- HEADLINE STATS ROW -->
+    <div id="viewModalStats" class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-4"></div>
+
+    <!-- 1Y PRICE CHART -->
+    <div class="card mb-4" style="padding:14px;">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-chart-area" style="color:#60a5fa;"></i>
+          <span class="font-semibold text-sm">Price history</span>
+          <span id="holdingChartMeta" class="text-xs neutral"></span>
+        </div>
+        <div class="flex items-center gap-1" id="holdingChartRange">
+          <button data-period="1mo" onclick="setHoldingChartRange('1mo')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;">1M</button>
+          <button data-period="3mo" onclick="setHoldingChartRange('3mo')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;">3M</button>
+          <button data-period="6mo" onclick="setHoldingChartRange('6mo')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;">6M</button>
+          <button data-period="1y"  onclick="setHoldingChartRange('1y')"  class="btn btn-sm" style="font-size:10px;padding:3px 8px;background:#6366f1;color:white;">1Y</button>
+          <button data-period="5y"  onclick="setHoldingChartRange('5y')"  class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;">5Y</button>
+        </div>
+      </div>
+      <div style="height:220px;"><canvas id="holdingChartCanvas"></canvas></div>
+    </div>
+
+    <!-- LOTS WITH PER-LOT P&L -->
+    <div class="card mb-4" style="padding:14px;">
+      <div class="flex items-center gap-2 mb-3">
+        <i class="fas fa-layer-group" style="color:#818cf8;"></i>
+        <span class="font-semibold text-sm">Purchase lots</span>
+      </div>
+      <div id="holdingLotsTable"></div>
+    </div>
+
+    <!-- PER-HOLDING AI DEEP-DIVE -->
+    <div class="card mb-4" style="padding:14px;border:1px solid rgba(251,191,36,0.25);">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-brain" style="color:#fbbf24;"></i>
+          <span class="font-semibold text-sm">AI Deep-Dive</span>
+          <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Sonnet</span>
+        </div>
+        <button id="holdingAiBtn" onclick="runHoldingAI()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-magic mr-1"></i>Analyse</button>
+      </div>
+      <div id="holdingAiContent" class="text-xs neutral">Click <b>Analyse</b> for a Claude review of this holding: thesis check, recent price action, news context, and a hold/watch suggestion.</div>
+    </div>
+
+    <!-- TICKER-SPECIFIC NEWS -->
+    <div class="card mb-4" style="padding:14px;">
+      <div class="flex items-center gap-2 mb-3">
+        <i class="fas fa-newspaper" style="color:#34d399;"></i>
+        <span class="font-semibold text-sm">Latest news</span>
+        <span id="holdingNewsMeta" class="text-xs neutral"></span>
+      </div>
+      <div id="holdingNewsContent" class="text-xs neutral">Loading…</div>
+    </div>
+
+    <!-- ACTION BUTTONS -->
+    <div class="flex gap-3 mt-2 flex-wrap">
+      <button id="viewEditBtn" class="btn btn-primary flex-1" style="min-width:120px;"><i class="fas fa-edit mr-1"></i>Edit</button>
       <button id="viewIgnoreBtn" class="btn btn-secondary"></button>
-      <button id="viewDeleteBtn" class="btn btn-danger">Delete</button>
+      <button id="viewDeleteBtn" class="btn btn-danger"><i class="fas fa-trash mr-1"></i>Delete</button>
       <button onclick="closeModal('viewModal')" class="btn btn-secondary">Close</button>
     </div>
   </div>
@@ -3599,75 +3657,340 @@ function toggleIgnoreHolding(id) {
   logActivity(h.ignored ? 'holding_ignore' : 'holding_unignore', { symbol: h.symbol, platform: h.platform });
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// HOLDING DETAIL PAGE — opens a rich modal with chart, per-lot P&L,
+// AI deep-dive, and ticker-specific news. Backed by:
+//   - /api/history (proxy)  → 1y price chart
+//   - /api/news (proxy)     → latest headlines for this ticker
+//   - callClaude('analyse') → per-holding Sonnet review
+// ═══════════════════════════════════════════════════════════════════════
+
+let _currentHoldingId = null;       // which holding the modal is showing
+let _holdingChartObj  = null;       // Chart.js instance (destroyed on close)
+let _holdingChartPeriod = '1y';
+
 function viewHolding(id) {
   const h = state.portfolio.find(x => x.id === id);
   if (!h) return;
+  _currentHoldingId = id;
+  _holdingChartPeriod = '1y';
+
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
-  const fx = getFxRate(h.currency || 'USD', base);
+  const fx = getFxRate(h.currency || 'USD', base) * (isPenceQuoted(h.symbol) ? 0.01 : 1);
+  const rawSym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$';
 
-  // Use lots-based basis (legacy purchasePrice/quantity fields removed)
   const basis = getHoldingBasis(h);
   const quantity = basis.quantity;
-  const avgBuyRaw = basis.avgBuyPrice;            // in holding's native currency
-  const curRaw    = (h.currentPrice ?? avgBuyRaw); // in holding's native currency
+  const avgBuy = basis.avgBuyPrice * fx;
+  const cur    = (h.currentPrice ?? basis.avgBuyPrice) * fx;
+  const curVal = cur * quantity;
+  const gain   = (cur - avgBuy) * quantity;
+  const gainPct = avgBuy > 0 ? ((cur - avgBuy) / avgBuy) * 100 : 0;
+  const signT = gain >= 0 ? '+' : '';
 
-  const avgBuy  = avgBuyRaw * fx;                  // in user's base currency
-  const cur     = curRaw    * fx;
-  const curVal  = cur * quantity;
-  const gainTotal    = (cur - avgBuy) * quantity;
-  const gainPctTotal = avgBuy > 0 ? ((cur - avgBuy) / avgBuy) * 100 : 0;
-  const signT = gainTotal >= 0 ? '+' : '';
-  const rawSym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$'; // original currency symbol
+  // ── Title + subtitle
+  document.getElementById('viewModalTitle').textContent = h.symbol + (h.name && h.name !== h.symbol ? ' · ' + h.name : '');
+  document.getElementById('viewModalSubtitle').innerHTML =
+    `<span class="${getTagClass(h.type)}">${h.type}</span> · ${h.platform} · ${h.currency || 'USD'}` +
+    (h.sector ? ' · ' + h.sector : '') +
+    (h.country ? ' · ' + h.country : '');
 
-  const lotsHTML = basis.lots.length > 0 ? `
-    <div class="col-span-2">
-      <span class="neutral">Purchase Lots</span>
-      <div class="mt-2" style="background:#080d1a;border-radius:8px;padding:10px;">
-        ${basis.lots.map((l,i) => `
-          <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid #1e2d4a;">
-            <span style="color:#64748b;">Lot ${i+1}${l.date ? ' &nbsp;·&nbsp; '+l.date : ''}</span>
-            <span>${parseFloat(l.quantity).toFixed(4)} units @ ${rawSym}${parseFloat(l.price).toFixed(4)}
-              <span style="color:#64748b;"> = ${rawSym}${(parseFloat(l.quantity)*parseFloat(l.price)).toFixed(2)}</span>
-            </span>
-          </div>`).join('')}
-        <div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;color:#818cf8;font-weight:600;">
-          <span>Avg Cost Basis</span>
-          <span>${quantity.toFixed(4)} units @ ${rawSym}${basis.avgBuyPrice.toFixed(4)}</span>
-        </div>
-      </div>
-    </div>` : '';
-
-  document.getElementById('viewModalTitle').textContent = h.symbol + (h.name && h.name !== h.symbol ? ' — ' + h.name : '');
-  document.getElementById('viewModalContent').innerHTML = `
-    <div class="grid grid-cols-2 gap-3 text-sm">
-      <div><span class="neutral">Type</span><div class="mt-1"><span class="${getTagClass(h.type)}">${h.type}</span></div></div>
-      <div><span class="neutral">Platform</span><div class="font-semibold mt-1">${h.platform}</div></div>
-      <div><span class="neutral">Total Units</span><div class="font-semibold mono mt-1">${quantity.toFixed(4)}</div></div>
-      <div><span class="neutral">Avg Buy Price</span><div class="font-semibold mono mt-1" style="color:#818cf8;">${sym}${fmt(avgBuy)}</div></div>
-      <div><span class="neutral">Current Price</span><div class="font-semibold mono mt-1">${h.currentPrice ? sym+fmt(cur) : '<span style="color:#4a6080;">refresh to load</span>'}</div></div>
-      <div><span class="neutral">Current Value</span><div class="font-semibold mono mt-1">${sym}${fmt(curVal)}</div></div>
-      <div><span class="neutral">Total P&L</span><div class="font-semibold mono mt-1 ${gainTotal >= 0 ? 'pos' : 'neg'}">${signT}${sym}${fmt(Math.abs(gainTotal))}</div></div>
-      <div><span class="neutral">Return %</span><div class="font-semibold mono mt-1 ${gainPctTotal >= 0 ? 'pos' : 'neg'}">${signT}${fmt(Math.abs(gainPctTotal))}%</div></div>
-      ${h.dayChangePct != null ? `<div class="col-span-2"><span class="neutral">Today</span><div class="font-semibold mono mt-1 ${h.dayChangePct>=0?'pos':'neg'}">${h.dayChangePct>=0?'+':''}${fmt(h.dayChangePct)}% &nbsp; (${h.dayChangePct>=0?'+':''}${sym}${fmt(Math.abs((h.dayChange||0)*fx*quantity))})</div></div>` : ''}
-      ${lotsHTML}
-      ${h.sector ? `<div><span class="neutral">Sector</span><div class="font-semibold mt-1">${h.sector}</div></div>` : ''}
-      ${h.country ? `<div><span class="neutral">Region</span><div class="font-semibold mt-1">${h.country}</div></div>` : ''}
-      ${h.notes ? `<div class="col-span-2"><span class="neutral">Notes</span><div class="mt-1 text-xs" style="color:#94a3b8;">${h.notes}</div></div>` : ''}
+  // ── Headline stats (4 cards)
+  document.getElementById('viewModalStats').innerHTML = `
+    <div class="metric-card" style="padding:12px;">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Market value</div>
+      <div class="font-bold mono mt-1" style="font-size:18px;color:#c8d6ef;">${sym}${fmt(curVal)}</div>
+      <div class="text-xs neutral mt-1">${quantity.toFixed(4)} units</div>
+    </div>
+    <div class="metric-card" style="padding:12px;">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Total return</div>
+      <div class="font-bold mono mt-1 ${gain >= 0 ? 'pos' : 'neg'}" style="font-size:18px;">${signT}${sym}${fmt(Math.abs(gain))}</div>
+      <div class="text-xs ${gain >= 0 ? 'pos' : 'neg'} mt-1">${signT}${fmt(Math.abs(gainPct))}%</div>
+    </div>
+    <div class="metric-card" style="padding:12px;">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Avg cost</div>
+      <div class="font-bold mono mt-1" style="font-size:18px;color:#818cf8;">${sym}${fmt(avgBuy)}</div>
+      <div class="text-xs neutral mt-1">${rawSym}${basis.avgBuyPrice.toFixed(4)} native</div>
+    </div>
+    <div class="metric-card" style="padding:12px;">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Today</div>
+      <div class="font-bold mono mt-1 ${h.dayChangePct >= 0 ? 'pos' : 'neg'}" style="font-size:18px;">${h.dayChangePct != null ? (h.dayChangePct >= 0 ? '+' : '') + fmt(h.dayChangePct) + '%' : '–'}</div>
+      <div class="text-xs neutral mt-1">${h.currentPrice ? sym + fmt(cur) + '/share' : 'refresh to load'}</div>
     </div>`;
 
+  // ── Per-lot table with P&L per lot
+  renderHoldingLots(h, basis, fx, sym, rawSym);
+
+  // ── Reset AI + news panels (lazy-load on open)
+  document.getElementById('holdingAiContent').innerHTML = 'Click <b>Analyse</b> for a Claude review of this holding: thesis check, recent price action, news context, and a hold/watch suggestion.';
+  document.getElementById('holdingNewsContent').innerHTML = '<div class="py-3 text-center"><i class="fas fa-spinner fa-spin"></i></div>';
+
+  // ── Action buttons
   document.getElementById('viewEditBtn').onclick = () => editHolding(id);
   document.getElementById('viewDeleteBtn').onclick = () => deleteHolding(id);
   const ignoreBtn = document.getElementById('viewIgnoreBtn');
   if (ignoreBtn) {
-    ignoreBtn.innerHTML = h.ignored
-      ? '<i class="fas fa-eye mr-1"></i>Re-activate'
-      : '<i class="fas fa-eye-slash mr-1"></i>Ignore';
+    ignoreBtn.innerHTML = h.ignored ? '<i class="fas fa-eye mr-1"></i>Re-activate' : '<i class="fas fa-eye-slash mr-1"></i>Ignore';
     ignoreBtn.style.background = h.ignored ? 'rgba(52,211,153,0.15)' : '';
     ignoreBtn.style.color = h.ignored ? '#34d399' : '';
     ignoreBtn.onclick = () => { toggleIgnoreHolding(id); closeModal('viewModal'); };
   }
+
   openModal('viewModal');
+
+  // ── Lazy-load the heavy bits AFTER modal opens
+  setHoldingChartRange('1y');
+  loadHoldingNews(h.symbol);
+}
+
+// Render the per-lot P&L table inside the holding detail modal.
+// Each lot shows: date, units, buy price (native), buy price (base),
+// current value, gain $ and gain %.
+function renderHoldingLots(h, basis, fx, sym, rawSym) {
+  const curRaw = h.currentPrice ?? basis.avgBuyPrice;
+  const curBase = curRaw * fx;
+  const cols = '1fr 1fr 1fr 1fr 1fr 1fr';
+  const el = document.getElementById('holdingLotsTable');
+  if (!basis.lots.length) {
+    el.innerHTML = '<div class="text-xs neutral text-center py-3">No lot data — single-purchase legacy holding.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="table-header" style="display:grid;grid-template-columns:${cols};font-size:10px;">
+      <span>Date</span>
+      <span class="text-right">Units</span>
+      <span class="text-right">Buy price</span>
+      <span class="text-right">Cost (${sym})</span>
+      <span class="text-right">Value now</span>
+      <span class="text-right">P&L</span>
+    </div>
+    ${basis.lots.map((l) => {
+      const qty   = parseFloat(l.quantity) || 0;
+      const px    = parseFloat(l.price) || 0;
+      const cost  = qty * px * fx;
+      const value = qty * curBase;
+      const lotGain = value - cost;
+      const lotPct  = cost > 0 ? (lotGain / cost) * 100 : 0;
+      const cls = lotGain >= 0 ? 'pos' : 'neg';
+      const sign = lotGain >= 0 ? '+' : '';
+      return `<div class="table-row" style="display:grid;grid-template-columns:${cols};font-size:12px;">
+        <span class="text-xs neutral">${l.date || '–'}</span>
+        <span class="text-right mono">${qty.toFixed(4)}</span>
+        <span class="text-right mono">${rawSym}${px.toFixed(4)}</span>
+        <span class="text-right mono neutral">${sym}${fmt(cost)}</span>
+        <span class="text-right mono">${sym}${fmt(value)}</span>
+        <span class="text-right mono ${cls}">${sign}${sym}${fmt(Math.abs(lotGain))} <span class="text-xs">(${sign}${fmt(Math.abs(lotPct))}%)</span></span>
+      </div>`;
+    }).join('')}`;
+}
+
+// Switch the chart's time period (1mo/3mo/6mo/1y/5y). Refetches via proxy.
+async function setHoldingChartRange(period) {
+  _holdingChartPeriod = period;
+  // Update active button styling
+  document.querySelectorAll('#holdingChartRange button').forEach(b => {
+    const isActive = b.dataset.period === period;
+    b.style.background = isActive ? '#6366f1' : '';
+    b.style.color = isActive ? 'white' : '';
+    b.classList.toggle('btn-secondary', !isActive);
+  });
+  const h = state.portfolio.find(x => x.id === _currentHoldingId);
+  if (!h) return;
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  const meta = document.getElementById('holdingChartMeta');
+  meta.textContent = '· loading…';
+  try {
+    const res = await fetch(`${proxyBase}/api/history?symbol=${encodeURIComponent(h.symbol)}&period=${period}`, {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderHoldingChart(data, h);
+    const change = data.last && data.first ? ((data.last - data.first) / data.first) * 100 : 0;
+    const sign = change >= 0 ? '+' : '';
+    meta.innerHTML = `· ${data.count} days · range ${sign}${fmt(change)}%`;
+  } catch(e) {
+    meta.innerHTML = `<span style="color:#f87171;">· chart unavailable: ${_escape(e.message)}</span>`;
+    if (_holdingChartObj) { _holdingChartObj.destroy(); _holdingChartObj = null; }
+  }
+}
+
+function renderHoldingChart(data, h) {
+  const ctx = document.getElementById('holdingChartCanvas');
+  if (!ctx) return;
+  const rawSym = CURRENCY_SYMBOLS[h.currency || 'USD'] || '$';
+  const points = data.points || [];
+  const labels = points.map(p => p.date);
+  const closes = points.map(p => p.close);
+  const positive = (data.last || 0) >= (data.first || 0);
+  const lineColor = positive ? '#34d399' : '#f87171';
+  const fillColor = positive ? 'rgba(52,211,153,0.10)' : 'rgba(248,113,113,0.10)';
+  if (_holdingChartObj) _holdingChartObj.destroy();
+  _holdingChartObj = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: h.symbol,
+        data: closes,
+        borderColor: lineColor,
+        backgroundColor: fillColor,
+        fill: true,
+        tension: 0.25,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 1.5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f1729',
+          borderColor: '#1e2d4a',
+          borderWidth: 1,
+          padding: 10,
+          callbacks: {
+            label: (c) => `${rawSym}${c.parsed.y.toFixed(2)} (native ${h.currency || 'USD'})`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#4a6080', maxTicksLimit: 6, autoSkip: true },
+          grid:  { color: 'rgba(30,45,74,0.4)' }
+        },
+        y: {
+          ticks: { color: '#4a6080', callback: (v) => rawSym + Number(v).toFixed(v < 10 ? 2 : 0) },
+          grid:  { color: 'rgba(30,45,74,0.4)' }
+        }
+      }
+    }
+  });
+}
+
+// Fetch per-ticker news via the existing /api/news endpoint.
+async function loadHoldingNews(symbol) {
+  const wrap = document.getElementById('holdingNewsContent');
+  const meta = document.getElementById('holdingNewsMeta');
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  try {
+    const res = await fetch(`${proxyBase}/api/news?symbols=${encodeURIComponent(symbol)}&limit=5`, {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const articles = data.articles || [];
+    if (!articles.length) {
+      wrap.innerHTML = '<div class="text-xs neutral text-center py-3">No recent news for this ticker.</div>';
+      meta.textContent = '';
+      return;
+    }
+    meta.textContent = `· ${articles.length} stories`;
+    wrap.innerHTML = articles.slice(0, 5).map(a => {
+      const ago = a.providerPublishTime ? _agoLabel(new Date(a.providerPublishTime * 1000)) : '';
+      return `<a href="${_escape(a.link || a.url || '#')}" target="_blank" rel="noopener noreferrer"
+        style="display:block;padding:9px 11px;border:1px solid #1e2d4a;border-radius:8px;background:rgba(10,17,32,0.6);text-decoration:none;color:inherit;margin-bottom:6px;">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs" style="color:#60a5fa;font-weight:600;">${_escape(a.publisher || 'Yahoo Finance')}</span>
+          <span class="text-xs neutral" style="font-size:10px;">${ago}</span>
+        </div>
+        <div class="text-sm mt-1" style="color:#c8d6ef;line-height:1.4;">${_escape(a.title)}</div>
+      </a>`;
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div class="text-xs text-center py-3" style="color:#f87171;">News unavailable: ${_escape(e.message)}</div>`;
+  }
+}
+
+function _agoLabel(d) {
+  if (!d || isNaN(d)) return '';
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const h = Math.floor(mins/60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h/24) + 'd ago';
+}
+
+// Per-holding AI deep-dive — single Sonnet call with this holding's context
+// + day's headlines + portfolio context. Reuses callClaude infrastructure
+// (proxy auth, 429 auto-retry, model selection).
+async function runHoldingAI() {
+  const h = state.portfolio.find(x => x.id === _currentHoldingId);
+  if (!h) return;
+  const btn = document.getElementById('holdingAiBtn');
+  const content = document.getElementById('holdingAiContent');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Thinking…'; }
+  content.innerHTML = '<div class="text-xs neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Claude is reviewing this holding…</div>';
+
+  try {
+    const base = state.settings.currency || 'NZD';
+    const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+    const fx = getFxRate(h.currency || 'USD', base) * (isPenceQuoted(h.symbol) ? 0.01 : 1);
+    const basis = getHoldingBasis(h);
+    const cur = (h.currentPrice ?? basis.avgBuyPrice) * fx;
+    const gain = (cur - basis.avgBuyPrice * fx) * basis.quantity;
+    const gainPct = basis.avgBuyPrice > 0 ? ((cur - basis.avgBuyPrice * fx) / (basis.avgBuyPrice * fx)) * 100 : 0;
+
+    // Portfolio context (slim)
+    const metrics = getMetrics();
+    const weight = metrics.holdings.find(x => x.symbol === h.symbol)?.weight || 0;
+    const topPeers = metrics.holdings
+      .filter(x => x.type === h.type && x.symbol !== h.symbol)
+      .sort((a,b) => b.currentValue - a.currentValue)
+      .slice(0, 5)
+      .map(x => `${x.symbol} (${fmt(x.weight)}%)`)
+      .join(', ');
+
+    const userMsg = `Holding: ${h.symbol}${h.name && h.name !== h.symbol ? ' — ' + h.name : ''}
+Type: ${h.type}${h.sector ? ' · ' + h.sector : ''}${h.country ? ' · ' + h.country : ''}
+Platform: ${h.platform}
+Native currency: ${h.currency || 'USD'}
+
+Position:
+- Quantity: ${basis.quantity.toFixed(4)} units
+- Avg cost: ${sym}${fmt(basis.avgBuyPrice * fx)} / unit
+- Current: ${sym}${fmt(cur)} / unit
+- P&L: ${gain >= 0 ? '+' : ''}${sym}${fmt(Math.abs(gain))} (${gain >= 0 ? '+' : ''}${fmt(gainPct)}%)
+- Weight in portfolio: ${fmt(weight)}%
+
+Today's move: ${h.dayChangePct != null ? (h.dayChangePct >= 0 ? '+' : '') + fmt(h.dayChangePct) + '%' : 'unknown'}
+
+Other ${h.type} positions in this portfolio: ${topPeers || '(none)'}
+Base currency: ${base}
+Investor: NZ-based retail, FIF-zone applies for overseas holdings.
+
+Write a focused 4-section review:
+1. **Position context** — 1-2 sentences on what this holding represents in the portfolio (concentration, conviction signal from the size).
+2. **Recent price action** — interpret the today's move + the gain/loss vs cost in plain language.
+3. **What to watch** — 2 specific catalysts or risks for THIS ticker over the next 30 days.
+4. **Stance** — one line: Hold / Watch closely / Consider trimming / Consider adding (with one reason).
+
+Total under 220 words. Be specific. No generic advice. No disclaimers.`;
+
+    // Inject a one-shot 'analyse' agent definition
+    AGENT_DEFS.analyse = {
+      label:    'Holding Analyse',
+      model:    'claude-sonnet-4-5',
+      modelOpenAI: 'local-model',
+      maxTokens: 600,
+      system:   'You are a senior equity analyst writing a per-holding review for a NZ-based retail investor. Focused, specific, non-generic. Reference the actual ticker. No regulatory disclaimers — the app surfaces them separately.'
+    };
+    const out = await callClaude('analyse', userMsg);
+    delete AGENT_DEFS.analyse;
+
+    content.innerHTML = formatMarkdown(out);
+  } catch(e) {
+    content.innerHTML = `<div class="text-xs" style="color:#f87171;">AI review failed: ${_escape(e.message)}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-magic mr-1"></i>Analyse'; }
+  }
 }
 
 // ===== BACKUP / RESTORE (cross-browser data portability) =====
@@ -4062,6 +4385,11 @@ function openModal(id) {
 function closeModal(id) {
   document.getElementById(id)?.classList.remove('open');
   if (id === 'addModal') editingId = null;
+  // Holding-detail-specific cleanup so Chart.js doesn't leak canvases
+  if (id === 'viewModal' && _holdingChartObj) {
+    try { _holdingChartObj.destroy(); } catch(e) {}
+    _holdingChartObj = null;
+  }
 }
 
 function closeModalBg(e, id) {

@@ -287,6 +287,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             requested = (params.get("sources", [""])[0] or "").strip()
             limit = int(params.get("limit", ["40"])[0])
             self._fetch_headlines(requested, limit)
+        elif parsed.path == "/api/history":
+            # Historical price series for a single ticker. Used by the
+            # Holding Detail modal's 1y chart.
+            #   ?symbol=NVDA       — required
+            #   ?period=1y         — 1d/5d/1mo/3mo/6mo/1y/2y/5y/max (default 1y)
+            sym = (params.get("symbol", [""])[0] or "").strip()
+            period = (params.get("period", ["1y"])[0] or "1y").strip()
+            self._fetch_history(sym, period)
         else:
             self._json(404, {"error": "Not found"})
 
@@ -543,6 +551,58 @@ class ProxyHandler(BaseHTTPRequestHandler):
         cache_set(cache_key, result, ttl_seconds=60)
         self._json(200, result)
         print(f"  ✓ Prices fetched: {list(result.keys())}")
+
+    # ── Historical price series for one ticker ────────────────────
+    def _fetch_history(self, symbol, period):
+        """Fetch daily OHLC for a single ticker via yfinance.
+
+        Returns: {symbol, period, points: [{date, close}, ...], min, max}
+        Cached 30 min per (symbol, period) — daily data only changes once a day.
+        """
+        symbol = (symbol or "").strip().upper()
+        if not symbol:
+            return self._json(400, {"error": "symbol param required"})
+        valid_periods = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"}
+        if period not in valid_periods:
+            period = "1y"
+        cache_key = f"history:{symbol}:{period}"
+        cached = cache_get(cache_key)
+        if cached:
+            return self._json(200, cached)
+        try:
+            import yfinance as yf
+            t = yf.Ticker(symbol)
+            hist = t.history(period=period, auto_adjust=False)
+            if hist is None or hist.empty:
+                return self._json(404, {"error": f"No history for {symbol}"})
+            # LSE-listed (.L / .IL) — Yahoo returns pence; normalise to pounds
+            # so the chart shows realistic values. Matches frontend isPenceQuoted.
+            pence_adj = 0.01 if (symbol.endswith(".L") or symbol.endswith(".IL")) else 1.0
+            points = []
+            closes = []
+            for ts, row in hist.iterrows():
+                close = float(row.get("Close") or 0) * pence_adj
+                if close <= 0:
+                    continue
+                points.append({
+                    "date":  ts.strftime("%Y-%m-%d"),
+                    "close": round(close, 4)
+                })
+                closes.append(close)
+            payload = {
+                "symbol":   symbol,
+                "period":   period,
+                "points":   points,
+                "min":      round(min(closes), 4) if closes else 0,
+                "max":      round(max(closes), 4) if closes else 0,
+                "first":    points[0]["close"] if points else 0,
+                "last":     points[-1]["close"] if points else 0,
+                "count":    len(points)
+            }
+            cache_set(cache_key, payload, ttl_seconds=1800)
+            self._json(200, payload)
+        except Exception as e:
+            self._json(502, {"error": f"Yahoo history failed: {e}"})
 
     # ── Yahoo Finance ticker search (typeahead) ───────────────────
     def _yahoo_search(self, query):
