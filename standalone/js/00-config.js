@@ -32,7 +32,10 @@ const CURRENCY_SYMBOLS = { NZD:'NZ$', GBP:'£', USD:'$', EUR:'€', INR:'₹', A
 // Per-asset-type colours for charts and chips.
 const ASSET_COLORS = {
   stock:'#818cf8', etf:'#60a5fa', crypto:'#fbbf24', bond:'#34d399',
-  cash:'#94a3b8', mutualfund:'#c4b5fd', realestate:'#fb923c', other:'#64748b'
+  cash:'#94a3b8', mutualfund:'#c4b5fd', realestate:'#fb923c',
+  fund:'#22d3ee',        // NZ managed funds — distinct teal
+  kiwisaver:'#a78bfa',   // KiwiSaver — distinct violet
+  other:'#64748b'
 };
 
 // CORS fallbacks for direct browser→Yahoo calls (when proxy is unreachable).

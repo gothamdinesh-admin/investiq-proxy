@@ -89,6 +89,8 @@
     .tag-cash { background: rgba(148,163,184,0.15); color: #94a3b8; }
     .tag-mutualfund { background: rgba(167,139,250,0.15); color: #c4b5fd; }
     .tag-realestate { background: rgba(251,146,60,0.15); color: #fb923c; }
+    .tag-fund { background: rgba(34,211,238,0.15); color: #22d3ee; }
+    .tag-kiwisaver { background: rgba(167,139,250,0.18); color: #a78bfa; }
     .tag-other { background: rgba(100,116,139,0.15); color: #64748b; }
 
     .agent-card { border-left: 3px solid; padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 8px 0; }
@@ -1736,12 +1738,14 @@
         </div>
         <div>
           <label>Asset Type *</label>
-          <select id="hType" class="input" required>
+          <select id="hType" class="input" required onchange="onAssetTypeChange()">
             <option value="stock">Stock</option>
             <option value="etf">ETF</option>
             <option value="crypto">Crypto</option>
             <option value="bond">Bond</option>
-            <option value="mutualfund">Mutual Fund</option>
+            <option value="fund">NZ Managed Fund</option>
+            <option value="kiwisaver">KiwiSaver</option>
+            <option value="mutualfund">Mutual Fund (listed)</option>
             <option value="realestate">Real Estate</option>
             <option value="cash">Cash</option>
             <option value="other">Other</option>
@@ -1750,6 +1754,49 @@
         <div>
           <label>Platform / Bank *</label>
           <input type="text" id="hPlatform" class="input" placeholder="e.g. Vanguard, HSBC, Coinbase" required>
+        </div>
+
+        <!-- Fund-specific helper row — only shown when type=fund or kiwisaver -->
+        <div class="col-span-2" id="fundHelperRow" style="display:none;">
+          <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+            <div class="text-xs" style="color:#fbbf24;font-weight:600;margin-bottom:4px;">
+              <i class="fas fa-info-circle mr-1"></i>NZ funds aren't on Yahoo Finance
+            </div>
+            <div class="text-xs neutral" style="line-height:1.5;">
+              Enter the current unit price manually. The app reminds you to refresh weekly — a stale-price badge appears after 7 days. Auto-fetch from Sorted.org.nz is on the roadmap.
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label>Fund Provider</label>
+              <select id="hProvider" class="input">
+                <option value="">— Select —</option>
+                <option>Harbour Asset Management</option>
+                <option>Milford Asset Management</option>
+                <option>Generate KiwiSaver</option>
+                <option>Fisher Funds</option>
+                <option>Simplicity</option>
+                <option>Booster</option>
+                <option>Pathfinder</option>
+                <option>Pie Funds</option>
+                <option>Kernel Wealth</option>
+                <option>InvestNow</option>
+                <option>SuperLife</option>
+                <option>ANZ Investments</option>
+                <option>Westpac (BT Funds)</option>
+                <option>ASB Funds</option>
+                <option>BNZ YouWealth</option>
+                <option>Mercer KiwiSaver</option>
+                <option>AMP KiwiSaver</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div>
+              <label>Current Unit Price <span class="text-xs neutral">(NZ$)</span></label>
+              <input type="number" id="hManualPrice" class="input" placeholder="e.g. 2.4378" step="any" min="0">
+              <div class="text-xs mt-1" style="color:#4a6080;">Check provider's website for today's price.</div>
+            </div>
+          </div>
         </div>
         <div>
           <label>Quantity / Units *</label>
@@ -3513,6 +3560,8 @@ function populateAddForm() {
   if (appendLot) appendLot.checked = false;
   document.getElementById('hQty').placeholder = '10';
   document.getElementById('hBuyPrice').placeholder = '150.00';
+  // Default type → stock; hide the fund helper row
+  if (typeof onAssetTypeChange === 'function') onAssetTypeChange();
 }
 
 function editHolding(id) {
@@ -3552,6 +3601,13 @@ function editHolding(id) {
   } else {
     lotsSection.style.display = 'none';
   }
+
+  // Fund-specific fields — populate then reveal via onAssetTypeChange
+  const provEl = document.getElementById('hProvider');
+  const manEl  = document.getElementById('hManualPrice');
+  if (provEl) provEl.value = h.provider || '';
+  if (manEl)  manEl.value  = (h.type === 'fund' || h.type === 'kiwisaver') ? (h.currentPrice ?? '') : '';
+  onAssetTypeChange();
 
   document.getElementById('addModalTitle').textContent = 'Edit Holding';
   document.getElementById('saveHoldingLabel').textContent = 'Save Changes';
@@ -3596,15 +3652,23 @@ function saveHolding(e) {
   document.getElementById('hBuyPrice').style.borderColor = '';
   const newDate  = document.getElementById('hDate').value;
 
+  const type = document.getElementById('hType').value;
+  const isFundType = (type === 'fund' || type === 'kiwisaver');
+  const manualPrice = parseFloat(document.getElementById('hManualPrice')?.value) || 0;
+  const provider = document.getElementById('hProvider')?.value?.trim() || '';
+
+  // Fund / KiwiSaver get NZD currency forced + country = New Zealand (FIF-exempt)
+  // unless user explicitly set country elsewhere. Yahoo won't be queried.
   const meta = {
     symbol:   document.getElementById('hSymbol').value.toUpperCase().trim(),
     name:     document.getElementById('hName').value.trim(),
-    type:     document.getElementById('hType').value,
+    type:     type,
     platform: document.getElementById('hPlatform').value.trim(),
-    currency: document.getElementById('hCurrency').value,
+    currency: isFundType ? 'NZD' : document.getElementById('hCurrency').value,
     sector:   document.getElementById('hSector').value,
-    country:  document.getElementById('hCountry').value.trim(),
+    country:  document.getElementById('hCountry').value.trim() || (isFundType ? 'New Zealand' : ''),
     notes:    document.getElementById('hNotes').value.trim(),
+    provider: isFundType ? provider : undefined,
   };
   const duplicateIdx = state.portfolio.findIndex(h => holdingKey(h) === holdingKey(meta) && h.id !== id);
 
@@ -3635,11 +3699,46 @@ function saveHolding(e) {
     state.portfolio.push({ ...meta, id, lots: [{ quantity: newQty, price: newPrice, date: newDate }], currentPrice: null, dayChange: null, dayChangePct: null });
   }
 
+  // Fund-type manual price — apply AFTER the holding has been written to the
+  // array so we can find it back by id regardless of new/edit/merge path.
+  if (isFundType && manualPrice > 0) {
+    const target = state.portfolio.find(h => h.id === id) ||
+                   state.portfolio.find(h => holdingKey(h) === holdingKey(meta));
+    if (target) {
+      target.currentPrice = manualPrice;
+      target.manualPriceDate = new Date().toISOString().slice(0, 10);
+      target.dayChange = null;     // can't compute day-change for manual prices
+      target.dayChangePct = null;
+    }
+  }
+
   state.portfolio = consolidatePortfolio(state.portfolio);
   saveState();
   closeModal('addModal');
   renderAll();
   refreshPortfolioPrices().then(renderAll);
+}
+
+// Toggles the fund-helper row + adjusts symbol field hint based on asset type.
+// Called on every <select id="hType"> change.
+function onAssetTypeChange() {
+  const t = document.getElementById('hType').value;
+  const isFund = (t === 'fund' || t === 'kiwisaver');
+  const helper = document.getElementById('fundHelperRow');
+  const symHint = document.querySelector('#hSymbol + .text-xs');
+  if (helper) helper.style.display = isFund ? '' : 'none';
+  if (symHint) {
+    symHint.innerHTML = isFund
+      ? 'For NZ funds, use any short code (e.g. <b>HARBOUR-AE</b>, <b>MILFORD-AG</b>, <b>GENERATE-GROWTH</b>). Not a Yahoo ticker.'
+      : 'Use Yahoo Finance symbol. For UK stocks add .L (e.g. TSCO.L)';
+  }
+  // Auto-fill some sensible defaults when user switches to KiwiSaver
+  if (t === 'kiwisaver') {
+    const platform = document.getElementById('hPlatform');
+    if (platform && !platform.value) platform.value = 'KiwiSaver';
+    const sector = document.getElementById('hSector');
+    if (sector && !sector.value) sector.value = 'Other';
+  }
 }
 
 function deleteHolding(id) {
@@ -3808,8 +3907,48 @@ async function setHoldingChartRange(period) {
   });
   const h = state.portfolio.find(x => x.id === _currentHoldingId);
   if (!h) return;
-  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   const meta = document.getElementById('holdingChartMeta');
+  // Fund / KiwiSaver — Yahoo has no data. Show a friendly message + quick
+  // Edit button instead of letting /api/history return 404.
+  if (h.type === 'fund' || h.type === 'kiwisaver') {
+    if (_holdingChartObj) { _holdingChartObj.destroy(); _holdingChartObj = null; }
+    const ctx = document.getElementById('holdingChartCanvas');
+    if (ctx) {
+      const c2d = ctx.getContext('2d');
+      c2d.clearRect(0, 0, ctx.width, ctx.height);
+    }
+    const ageDays = h.manualPriceDate ? Math.floor((Date.now() - new Date(h.manualPriceDate).getTime()) / 86400000) : null;
+    const ageBadge = ageDays == null ? '<span style="color:#fbbf24;">no manual price set</span>'
+                  : ageDays >= 14 ? `<span style="color:#f87171;">${ageDays} days old — please refresh</span>`
+                  : ageDays >= 7  ? `<span style="color:#fbbf24;">${ageDays} days old</span>`
+                  : `<span style="color:#94a3b8;">${ageDays === 0 ? 'updated today' : ageDays + ' days ago'}</span>`;
+    meta.innerHTML = `· no chart for ${h.type === 'kiwisaver' ? 'KiwiSaver' : 'NZ funds'} (Yahoo doesn't track)`;
+    // Render a placeholder card into the chart area
+    if (ctx) {
+      ctx.style.display = 'none';
+      let placeholder = document.getElementById('holdingChartPlaceholder');
+      if (!placeholder) {
+        placeholder = document.createElement('div');
+        placeholder.id = 'holdingChartPlaceholder';
+        placeholder.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:20px;text-align:center;';
+        ctx.parentElement.appendChild(placeholder);
+      }
+      placeholder.style.display = 'flex';
+      placeholder.innerHTML = `
+        <i class="fas fa-piggy-bank" style="font-size:36px;color:rgba(34,211,238,0.4);margin-bottom:10px;"></i>
+        <div class="text-sm" style="color:#c8d6ef;margin-bottom:6px;">${h.provider ? _escape(h.provider) : 'Unit-priced fund'}</div>
+        <div class="text-xs neutral" style="margin-bottom:10px;">Manual price · ${ageBadge}</div>
+        <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 14px;"><i class="fas fa-edit mr-1"></i>Update unit price</button>
+      `;
+    }
+    return;
+  }
+  // Stock / ETF / crypto — hide placeholder if it was previously shown
+  const ctx2 = document.getElementById('holdingChartCanvas');
+  const placeholder = document.getElementById('holdingChartPlaceholder');
+  if (ctx2) ctx2.style.display = '';
+  if (placeholder) placeholder.style.display = 'none';
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   meta.textContent = '· loading…';
   try {
     const res = await fetch(`${proxyBase}/api/history?symbol=${encodeURIComponent(h.symbol)}&period=${period}`, {
@@ -3888,6 +4027,18 @@ function renderHoldingChart(data, h) {
 async function loadHoldingNews(symbol) {
   const wrap = document.getElementById('holdingNewsContent');
   const meta = document.getElementById('holdingNewsMeta');
+  // Fund / KiwiSaver — Yahoo News doesn't cover NZ unit trusts. Suggest the
+  // provider's own news/factsheets page instead of pretending to search.
+  const h = state.portfolio.find(x => x.id === _currentHoldingId);
+  if (h && (h.type === 'fund' || h.type === 'kiwisaver')) {
+    meta.textContent = '';
+    const provLabel = h.provider ? _escape(h.provider) : 'your fund provider';
+    wrap.innerHTML = `<div class="text-xs neutral" style="padding:10px;">
+      Per-ticker news is sourced from Yahoo Finance, which doesn't cover NZ unit trusts.
+      Check ${provLabel}'s website for fund factsheets, monthly commentary, and unit-price history.
+    </div>`;
+    return;
+  }
   const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
   try {
     const res = await fetch(`${proxyBase}/api/news?symbols=${encodeURIComponent(symbol)}&limit=5`, {
@@ -4795,9 +4946,26 @@ function renderDetailedHoldings(holdings, totalValue) {
     const dayAmt  = h.dayChange || 0;
     const dayColor= dayPct >= 0 ? '#34d399' : '#f87171';
     const daySign = dayPct >= 0 ? '+' : '';
-    const liveTag = haslive
-      ? `<span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>`
-      : '<span style="font-size:10px;color:#4a6080;margin-left:4px;">live pending</span>';
+    // Fund / KiwiSaver use manual prices — show "manual · N days ago" instead
+    // of the meaningless "live pending" or stale day-change %.
+    const isManualType = (h.type === 'fund' || h.type === 'kiwisaver');
+    const ageDays = h.manualPriceDate ? Math.floor((Date.now() - new Date(h.manualPriceDate).getTime()) / 86400000) : null;
+    let liveTag;
+    if (isManualType) {
+      if (ageDays == null) {
+        liveTag = '<span style="font-size:10px;color:#fbbf24;margin-left:4px;" title="No manual price set — edit holding to add">⚠ no price</span>';
+      } else if (ageDays >= 14) {
+        liveTag = `<span style="font-size:10px;color:#f87171;margin-left:4px;" title="Update unit price">⚠ ${ageDays}d stale</span>`;
+      } else if (ageDays >= 7) {
+        liveTag = `<span style="font-size:10px;color:#fbbf24;margin-left:4px;" title="Update unit price">${ageDays}d old</span>`;
+      } else {
+        liveTag = `<span style="font-size:10px;color:#94a3b8;margin-left:4px;">manual · ${ageDays === 0 ? 'today' : ageDays + 'd ago'}</span>`;
+      }
+    } else {
+      liveTag = haslive
+        ? `<span style="font-size:10px;color:${dayColor};margin-left:4px;" title="Today's change">${daySign}${dayPct.toFixed(2)}% today</span>`
+        : '<span style="font-size:10px;color:#4a6080;margin-left:4px;">live pending</span>';
+    }
     // Build a rich tooltip with lot breakdown + FX info
     const lotsInfo = (h.lots && h.lots.length)
       ? h.lots.map(l => `  ${(+l.quantity).toFixed(4)} @ ${l.price ? sym+fmt(l.price*h.fxRate) : '?'} ${l.date ? '('+l.date+')' : ''}`).join('\n')
@@ -5235,6 +5403,9 @@ function refreshFIF() {
   const rows = [];
   let skippedNoCountry = 0;
   state.portfolio.forEach(h => {
+    // NZ-domiciled funds and KiwiSaver are PIE-taxed, not FIF-taxed.
+    // Exclude regardless of country tagging.
+    if (h.type === 'fund' || h.type === 'kiwisaver') return;
     const country = (h.country || '').toUpperCase().trim();
     if (NZ_EXEMPT_COUNTRIES.has(country)) return; // NZ-resident investments exempt
     if (!country) { skippedNoCountry++; return; }

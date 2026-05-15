@@ -129,6 +129,26 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-15 session — Release v0.6 (NZ Funds & KiwiSaver)
+
+**NZ-specific (v0.6)**
+- [x] Fund-type holdings with manual unit prices — Harbour, Milford, Generate,
+      Fisher Funds, Simplicity, Booster, Pathfinder, Pie, Kernel, InvestNow,
+      SuperLife, ANZ, Westpac, ASB, BNZ, Mercer, AMP (and "Other")
+- [x] KiwiSaver as a distinct asset type with its own colour + tag chip
+- [x] Add Holding modal: dynamic fund-helper row (provider dropdown + unit
+      price field) appears when type=fund/kiwisaver
+- [x] Staleness indicator on holdings table: today/Nd ago / "Nd old"
+      (yellow ≥7d) / "Nd stale" (red ≥14d) / "⚠ no price"
+- [x] refreshPortfolioPrices skips fund/kiwisaver (no Yahoo lookup)
+- [x] Holding Detail modal degrades gracefully for fund types: shows a
+      "Manual price · N days ago" placeholder with quick Update button
+      instead of a broken Yahoo chart; news section explains why Yahoo
+      doesn't cover unit trusts and suggests checking provider's site
+- [x] FIF check excludes fund/kiwisaver (NZ unit trusts are PIE-taxed,
+      not FIF-taxed)
+- [x] Auto-defaults on fund creation: currency=NZD, country=New Zealand
+
 ### 2026-05-15 session — Release v0.5 (Holding Detail + Benchmarks)
 
 **Killer UX (v0.5)**
