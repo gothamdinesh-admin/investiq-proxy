@@ -5177,7 +5177,7 @@ function renderAdminTable(users) {
           ${!u.is_approved && !isSelf ? `<button onclick="adminApproveUser('${u.id}','${esc(u.email)}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);">Approve</button>` : ''}
           ${u.is_approved && !u.is_admin && !isSelf ? `<button onclick="adminApproveUser('${u.id}','${esc(u.email)}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Revoke approval">Revoke</button>` : ''}
           ${!isSelf ? `<button onclick="adminAdjustQuota('${u.id}','${esc(u.email)}',${u.ai_quota_max||1})" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Adjust AI quota">Quota</button>` : ''}
-          ${!isSelf && u.is_approved ? `<button onclick="adminRotateProxySecret('${u.id}','${esc(u.email)}')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="Rotate proxy secret">↻ Secret</button>` : ''}
+          ${u.is_approved ? `<button onclick="adminRotateProxySecret('${u.id}','${esc(u.email)}')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" title="${isSelf ? 'Generate/rotate your own proxy secret' : 'Rotate proxy secret'}">↻ Secret</button>` : ''}
           ${!u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',true)" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">Make Admin</button>` : ''}
           ${u.is_admin && !isSelf ? `<button onclick="adminToggleAdmin('${u.id}',false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;">Remove Admin</button>` : ''}
           ${!isSelf ? `<button onclick="adminDeleteUser('${u.id}','${esc(u.email)}')" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">Delete</button>` : ''}
@@ -5217,16 +5217,31 @@ async function adminApproveUser(userId, email, approve) {
   loadAdminData();
 }
 
-// Manual: rotate a user's proxy secret (useful if compromised)
+// Manual: rotate a user's proxy secret (useful if compromised, OR to provision
+// one for the very first admin — who can't be approved via the UI flow because
+// they bootstrap themselves before any approval exists).
 async function adminRotateProxySecret(userId, email) {
-  if (!confirm(`Rotate proxy secret for ${email}?\n\nTheir old secret stops working immediately. They'll get the new one automatically next time they sign in.`)) return;
+  const isSelf = userId === _supaUser?.id;
+  const msg = isSelf
+    ? `Generate / rotate YOUR proxy secret?\n\nThis lets your browser talk to the proxy. The new secret takes effect immediately — no sign-out needed.`
+    : `Rotate proxy secret for ${email}?\n\nTheir old secret stops working immediately. They'll get the new one automatically next time they sign in.`;
+  if (!confirm(msg)) return;
   try {
     const { data: secret, error: rpcErr } = await _supabase.rpc('generate_proxy_secret');
     if (rpcErr || !secret) throw rpcErr || new Error('RPC returned no secret');
     const { error } = await _supabase.from('profiles').update({ proxy_secret: secret }).eq('id', userId);
     if (error) throw error;
-    toast.success(`Secret rotated for ${email}`);
-    logActivity('admin_action', { action: 'rotate_proxy_secret', target_email: email });
+    // Self-rotation: refresh in-memory profile so subsequent fetches send the
+    // new secret right away. Without this you'd keep 403'ing until next reload.
+    if (isSelf) {
+      _userProfile = { ..._userProfile, proxy_secret: secret };
+      toast.success('Your proxy secret is set · live data should work now');
+      // Kick the failed paths so the user sees immediate recovery
+      try { refreshMarketData(); } catch(e) {}
+    } else {
+      toast.success(`Secret rotated for ${email}`);
+    }
+    logActivity('admin_action', { action: 'rotate_proxy_secret', target_email: email, self: isSelf });
     loadAdminData();
   } catch(e) { toast.error('Rotate failed: ' + e.message); }
 }
