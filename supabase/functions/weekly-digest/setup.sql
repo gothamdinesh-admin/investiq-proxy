@@ -14,12 +14,17 @@ ALTER TABLE profiles
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
--- 3. Store the CRON_SECRET so the cron job can authenticate to the Edge
--- Function. Generate one locally first:
---     openssl rand -hex 32
--- then replace <YOUR_CRON_SECRET_HERE> below AND set the same value via:
---     supabase secrets set CRON_SECRET=<that-same-value>
-ALTER DATABASE postgres SET app.cron_secret = '<YOUR_CRON_SECRET_HERE>';
+-- 3. CRON_SECRET — used by the cron job to authenticate to the Edge Function.
+-- Generate locally first:
+--     PowerShell: -join ((48..57)+(97..122) | Get-Random -Count 64 | %{[char]$_})
+--     macOS/Linux: openssl rand -hex 32
+-- We can't ALTER DATABASE … SET in hosted Supabase (permission denied), so
+-- the value is embedded directly in the cron job body below. This is
+-- equivalent security: both methods require admin DB access to read.
+-- Same value MUST also be set as the CRON_SECRET Edge Function secret
+-- (Dashboard → Project Settings → Edge Functions → Add new secret).
+--
+-- *** Local-only file — do NOT git-commit a copy with your real secret. ***
 
 -- 4. Schedule weekly run — 6 AM Monday NZ = 18:00 UTC Sunday.
 -- Unschedule any previous version first so re-running this file is idempotent.
@@ -33,7 +38,7 @@ SELECT cron.schedule(
     SELECT net.http_post(
       url     := 'https://szyclmouetbbigxexdrn.supabase.co/functions/v1/weekly-digest',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer ' || current_setting('app.cron_secret'),
+        'Authorization', 'Bearer <YOUR_CRON_SECRET_HERE>',
         'Content-Type',  'application/json'
       ),
       body    := '{}'::jsonb
