@@ -16,6 +16,8 @@ ALTER TABLE profiles
 --   'pro'    — solo with AI agents + alerts (future)
 --   'family' — up to 6 members per family
 --   'admin'  — platform admin (you)
+-- Idempotent: drop the constraint first if a previous partial run left it.
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_plan_tier_check;
 ALTER TABLE profiles
   ADD CONSTRAINT profiles_plan_tier_check CHECK (plan_tier IN ('free','pro','family','admin'));
 
