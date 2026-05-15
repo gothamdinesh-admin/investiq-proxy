@@ -281,6 +281,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/search":
             q = (params.get("q", [""])[0] or "").strip()
             self._yahoo_search(q)
+        elif parsed.path == "/api/headlines":
+            # Aggregated news from multiple reputable RSS sources.
+            # Optional ?sources=bbc,reuters,rnz (comma-separated source keys).
+            requested = (params.get("sources", [""])[0] or "").strip()
+            limit = int(params.get("limit", ["40"])[0])
+            self._fetch_headlines(requested, limit)
         else:
             self._json(404, {"error": "Not found"})
 
@@ -587,6 +593,141 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(200, payload)
         except Exception as e:
             self._json(502, {"error": f"Yahoo search failed: {e}"})
+
+    # ── Aggregated RSS headlines from reputable sources ────────────
+    # Sources curated for InvestIQ's NZ-based audience: NZ business news
+    # first (RNZ, Stuff), plus globally-trusted Western outlets (BBC,
+    # MarketWatch, CNBC). All sources publish freely-accessible RSS.
+    # Parses with stdlib xml.etree — no extra dep needed.
+    NEWS_SOURCES = {
+        "rnz":         { "name": "RNZ Business",         "url": "https://www.rnz.co.nz/rss/business.xml",            "region": "NZ" },
+        "stuff":       { "name": "Stuff Business",       "url": "https://www.stuff.co.nz/business/rss",              "region": "NZ" },
+        "nzherald":    { "name": "NZ Herald Business",   "url": "https://www.nzherald.co.nz/business/rss.xml",       "region": "NZ" },
+        "bbc":         { "name": "BBC Business",         "url": "http://feeds.bbci.co.uk/news/business/rss.xml",     "region": "Global" },
+        "marketwatch": { "name": "MarketWatch",          "url": "http://feeds.marketwatch.com/marketwatch/topstories/", "region": "Global" },
+        "cnbc":        { "name": "CNBC Top News",        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html","region": "Global" },
+        "investing":   { "name": "Investing.com",        "url": "https://www.investing.com/rss/news.rss",            "region": "Global" },
+        "guardian":    { "name": "Guardian Business",    "url": "https://www.theguardian.com/business/rss",          "region": "Global" },
+    }
+
+    def _parse_rss_feed(self, key, meta):
+        """Fetch + parse one RSS feed → list of normalised article dicts.
+
+        Returns empty list on any failure (network, parse, timeout). Never
+        raises — one bad feed shouldn't break the aggregate response.
+        """
+        try:
+            import urllib.request as _ur
+            from xml.etree import ElementTree as ET
+            req = _ur.Request(meta["url"], headers={
+                "User-Agent": "Mozilla/5.0 (InvestIQ news aggregator)"
+            })
+            with _ur.urlopen(req, timeout=6) as r:
+                raw = r.read()
+            root = ET.fromstring(raw)
+            # RSS 2.0 lives at /rss/channel/item; Atom (rarely used by these
+            # feeds) uses /feed/entry. Handle both defensively.
+            items = root.findall(".//item")
+            if not items:
+                items = root.findall("{http://www.w3.org/2005/Atom}entry")
+            articles = []
+            for it in items[:25]:  # cap per feed to keep payload small
+                title = (it.findtext("title") or "").strip()
+                link  = (it.findtext("link")  or "").strip()
+                if not title or not link:
+                    continue
+                desc  = (it.findtext("description") or it.findtext("summary") or "").strip()
+                # Strip basic HTML tags from description for clean display
+                import re as _re
+                desc = _re.sub(r"<[^>]+>", "", desc)[:300]
+                pub   = (it.findtext("pubDate") or it.findtext("{http://www.w3.org/2005/Atom}updated") or "").strip()
+                articles.append({
+                    "title":    title,
+                    "link":     link,
+                    "summary":  desc,
+                    "pubDate":  pub,
+                    "source":   meta["name"],
+                    "sourceKey": key,
+                    "region":   meta["region"],
+                })
+            return articles
+        except Exception as e:
+            print(f"  ⚠ RSS fetch failed for {key}: {e}")
+            return []
+
+    def _fetch_headlines(self, requested, limit):
+        """Aggregate RSS from multiple sources in parallel. Cached 15 min.
+
+        ?sources=bbc,rnz   → only those feeds (comma-separated keys)
+        ?sources=all       → every feed (default if param omitted)
+        ?limit=N           → cap returned article count (default 40)
+        """
+        keys = (requested or "all").lower().split(",")
+        keys = [k.strip() for k in keys if k.strip()]
+        if "all" in keys or not keys:
+            active = list(self.NEWS_SOURCES.keys())
+        else:
+            active = [k for k in keys if k in self.NEWS_SOURCES]
+        if not active:
+            return self._json(400, {"error": "Unknown source. Valid: " + ",".join(self.NEWS_SOURCES.keys())})
+
+        cache_key = f"headlines:{','.join(sorted(active))}"
+        cached = cache_get(cache_key)
+        if cached:
+            # Trim to limit even from cache so caller's limit param respected
+            payload = dict(cached)
+            payload["articles"] = (cached.get("articles") or [])[:limit]
+            return self._json(200, payload)
+
+        # Fetch all selected feeds in parallel — capped at 8 workers (we have
+        # 8 sources max). Each feed has its own 6s timeout, so worst case is
+        # ~6s total, not 6s × N.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        all_articles = []
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            futures = {
+                pool.submit(self._parse_rss_feed, k, self.NEWS_SOURCES[k]): k
+                for k in active
+            }
+            for fut in as_completed(futures):
+                all_articles.extend(fut.result())
+
+        # Dedupe by URL (some outlets cross-publish the same wire story)
+        seen = set()
+        deduped = []
+        for a in all_articles:
+            if a["link"] in seen:
+                continue
+            seen.add(a["link"])
+            deduped.append(a)
+
+        # Sort by pubDate descending (newest first). Some feeds use RFC822,
+        # others use ISO 8601; the helper tolerates both, falls back to
+        # string compare if neither parses.
+        from email.utils import parsedate_to_datetime
+        def _parse_date(s):
+            if not s: return 0
+            try:
+                return parsedate_to_datetime(s).timestamp()
+            except Exception:
+                try:
+                    return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    return 0
+        deduped.sort(key=lambda a: _parse_date(a["pubDate"]), reverse=True)
+
+        payload = {
+            "ranAt":      datetime.utcnow().isoformat() + "Z",
+            "sources":    [{ "key": k, **self.NEWS_SOURCES[k] } for k in active],
+            "totalCount": len(deduped),
+            "articles":   deduped  # cache the full set, trim at response time
+        }
+        cache_set(cache_key, payload, ttl_seconds=900)  # 15 min
+        # Respect the caller's limit param
+        out = dict(payload)
+        out["articles"] = deduped[:limit]
+        self._json(200, out)
+        print(f"  ✓ Headlines aggregated: {len(deduped)} articles from {len(active)} sources")
 
     def _fetch_news(self, symbols, limit_per=3):
         # Yahoo Finance news per ticker — cached 30 min so we don't hammer the API

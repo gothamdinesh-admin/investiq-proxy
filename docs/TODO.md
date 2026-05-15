@@ -1,6 +1,6 @@
 # InvestIQ — Prioritised Action Plan
 
-_Last revisited: 2026-04-19 · Paid plans now active (Supabase Pro · Render Starter · Netlify Pro)_
+_Last revisited: 2026-05-15 · Paid plans now active (Supabase Pro · Render Starter · Netlify Pro)_
 
 This is the single source of truth for what's next. Priority order is intentional — do P0 first, then P1 top-down.
 
@@ -39,7 +39,7 @@ The recent barrage of fixes needs user verification before building more on top.
 
 - [ ] **Benchmark overlay on performance chart** — NZX 50 and S&P 500 lines plotted against your portfolio % return. Every serious investor expects this. Needs historical index data — Yahoo has `^NZ50` and `^GSPC` already. Est: 3 hours.
 - [ ] **Price alerts** — "NVDA drops 5%, email me." Uses Supabase scheduled function (now available on Pro). Est: half day.
-- [ ] **Weekly email digest** — Sunday morning summary: YTD return, biggest movers, upcoming dividends, FIF threshold alert. Supabase scheduled function + Resend API. Est: half day.
+- [x] **Weekly email digest** — DONE 2026-05-15. Supabase Edge Function (`supabase/functions/weekly-digest/`) pulls latest + 7-day-old snapshot, computes deltas + top/worst mover, sends styled HTML via Resend. Settings toggle wired to `profiles.digest_opt_in`. **Activation pending:** user must run `supabase functions deploy weekly-digest`, set RESEND_API_KEY / FROM_EMAIL / CRON_SECRET secrets, and run `setup.sql` for the pg_cron schedule.
 
 ---
 
@@ -50,7 +50,7 @@ The recent barrage of fixes needs user verification before building more on top.
 - [ ] **Bulk edit holdings** — select multiple rows, apply same change (currency, sector, platform, delete). Est: 2 hours.
 - [ ] **Manual price override per holding** — lets user set price when Yahoo returns garbage (e.g. delisted or tiny-cap tickers). Est: 1 hour.
 - [x] **"Ignore this holding" toggle** — DONE 2026-04-19. Row button + view modal button + Hide-ignored filter + Total Value subtitle. Excludes from totals.
-- [ ] **Ticker autocomplete on Add Holding** — search Yahoo as user types. Est: 2 hours.
+- [ ] **Ticker autocomplete on Add Holding** — search Yahoo as user types. Est: 2 hours. _(Partial: implemented on watchlist via `/api/search` proxy route + native datalist. Same pattern can be lifted into Add Holding modal next session.)_
 - [ ] **Holdings grouping toggle** — by platform / by sector / by country / by asset type. Already partially there for platform. Est: 2 hours.
 - [ ] **Per-holding notes/tags** — freeform + taggable ("long-term", "speculative", "dividend", etc). Est: 2 hours.
 
@@ -75,7 +75,8 @@ The recent barrage of fixes needs user verification before building more on top.
 - [ ] **Custom agent creation** — admin can define new agent types with custom prompts. Est: 2 hours.
 - [ ] **AI-written rebalancing plan** — "you're 65% tech, target 40% — sell X shares of NVDA, buy Y of VT." Complements the Opportunity Scout agent. Est: 3 hours.
 - [x] **News feed for your holdings** — DONE 2026-04-19. New `/api/news` proxy endpoint (yfinance), News tab with scope filter (all / portfolio / watchlist / movers >2%), card layout with thumbnails, server-cached 30 min.
-- [ ] **News summarisation with Claude Haiku** — next step: feed the headlines through Haiku for a 3-bullet daily briefing. Est: 1 hour on top of existing news feed.
+- [x] **News summarisation with Claude Haiku — Daily Brief** — DONE 2026-05-15. New card at top of News tab. Reads top 20 headlines + user's top 10 holdings, Haiku returns 3 bullets ≤25 words each + sentiment line. Reuses callClaude with a per-call AGENT_DEFS entry. ~400 max-tokens, runs in <5s.
+- [x] **Multi-source news aggregator** — DONE 2026-05-15. New `/api/headlines` proxy endpoint aggregates RSS from 8 reputable sources in parallel (RNZ Business, Stuff, NZ Herald, BBC, MarketWatch, CNBC, Investing.com, Guardian) using stdlib xml.etree — no extra Python dep. Deduped by URL, sorted newest-first, 15-min cache. Frontend has source-chip filter + NZ/Global region toggle.
 - [ ] **Prompt caching** — cache the agent system prompts + portfolio context. Cuts AI cost 50-80%. Est: 1 hour.
 
 ---
@@ -103,7 +104,7 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 - [ ] **PWA (add to homescreen)** — installable, offline cache, icon on phone. Est: 2 hours.
 - [ ] **Push notifications via PWA** — price alerts, dividend payments. Needs service worker. Est: half day.
-- [ ] **Mobile responsive final pass** — I know there are still some rough edges, especially the holdings table on narrow screens. Est: 3 hours.
+- [x] **Mobile responsive final pass** — DONE 2026-05-15. Pure-CSS @media block covers: 40px min tap targets, sticky portfolio summary with backdrop blur, holdings/FIF/watchlist tables → labelled card layouts under 768px, toast moved above mobile tab bar, charts capped 260px, iOS no-zoom inputs.
 - [ ] **Keyboard shortcuts** — Cmd+K for search, Cmd+/ for help overlay, Esc to close modals. Est: 2 hours.
 - [ ] **Screen reader support** — proper ARIA labels, focus management in modals, sr-only text for icon buttons. Est: 3 hours.
 
@@ -131,6 +132,39 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 ---
 
 ## ✅ Recently completed (for future session context)
+
+### 2026-05-15 session
+
+**Architectural**
+- [x] **JS modular split** — index.html went from ~7,170 → 5,720 lines. Eight self-contained files in `standalone/js/` (00-config, 10-helpers, 20-state, 30-cloud, 40-auth, 50-portfolio, 60-import, 70-ai) totalling ~1,728 lines. Each module pre-loaded via `<script src>` before the inline script; forward refs resolve lazily.
+
+**News & Daily Brief**
+- [x] Multi-source RSS aggregator (`/api/headlines` proxy route, 8 sources, parallel fetch, 15-min cache)
+- [x] AI Daily Brief card (Haiku-summarised, 3 bullets + sentiment, runs against current portfolio)
+- [x] News tab restructured: Daily Brief → Market Headlines (source chips + region filter) → Your Tickers
+
+**Robustness / infrastructure**
+- [x] Sign-in won't hang anymore — every Supabase await has a hard timeout (15s auth / 8s admin check / 20s portfolio load)
+- [x] Proxy 403 diagnostic — new `/api/diag` endpoint + Admin → Test Proxy button shows the full auth handshake breakdown
+- [x] Admin self-rotate proxy secret — fixed catch-22 where the first admin had no way to provision their own `profiles.proxy_secret`
+- [x] FX rate persistence — `marketData.fx` now stored in localStorage so initial reload doesn't flash raw foreign-currency numbers
+- [x] AI agents rate-limit handling — slim payload + 4s stagger + Haiku demotion for non-advisor agents + auto-retry on 429
+
+**Watchlist**
+- [x] Ticker typeahead picker — native `<datalist>` populated from user's portfolio + curated popular tickers + live Yahoo search via new `/api/search` proxy route
+- [x] Watchlist refreshes alongside portfolio prices (was tab-open only)
+- [x] Visible feedback toast on Add (avoids "doesn't do anything" silence)
+
+**FIF tax**
+- [x] Pence-quote bug fix — LSE tickers (.L / .IL) were showing 100× true value in FIF; now applies `isPenceQuoted` adjustment consistently with `getMetrics`
+- [x] Recalculate button surfaces toast + flags holdings missing `country` field
+
+**Dividends**
+- [x] Section placeholder with proper "coming soon" copy (replaces dead nav link)
+
+**AI ergonomics**
+- [x] Modal-overlap fix when AI quota popup appears
+- [x] Friendlier 429 error message tells user it's transient
 
 ### Reliability / data quality
 - [x] LSE pence normalisation for .L / .IL tickers (AZN.L no longer +14389%)
