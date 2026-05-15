@@ -2,7 +2,68 @@
 
 _Self-contained reference for handing this project to a new LLM (Claude, GPT, local model, etc.). Read this and you have enough context to work on any part of the codebase without asking the human for context._
 
-_Last updated: 2026-05-06 · Source of truth — if anything below conflicts with code, code wins. Update this doc when fixing the mismatch._
+_Last revised: 2026-05-16 (v0.7a-family-foundation) — old sections below may reference v0.3-era code. The newer specialist docs are the source of truth where they conflict._
+
+> **⚠️ READ THIS FIRST IF YOU'RE NEW:**
+> The doc set has been refactored. Specialist docs replace big chunks of this file. Start with:
+>
+> - `PROJECT_CONTEXT.md` — high-level orientation (front door)
+> - `ARCHITECTURE.md` — system diagram + data flows
+> - `CODE_MAP.md` — every file + function explained
+> - `SCALING.md` — what scales, what breaks, what to fix
+> - `ROLES.md` — working agreement (human + AI)
+> - `TODO.md` — current priorities
+>
+> Use this file (`LLM_HANDOFF.md`) for the **inline code excerpts, glossary, and playbooks** that aren't in the specialist docs. The high-level summaries in sections 0–7 of this file are now stale; trust the specialist docs over them when they disagree.
+
+---
+
+## v0.4 → v0.7a delta (what's changed since this doc was written)
+
+This file was written at ~v0.3. Major shifts since then:
+
+### Frontend
+- `standalone/index.html` is now ~7,500 lines (was ~7,000)
+- **JS split into 8 modules in `standalone/js/`** — 00-config, 10-helpers, 20-state, 30-cloud, 40-auth, 50-portfolio, 60-import, 70-ai. Loaded via `<script src>` before the inline script. ~1,800 lines extracted total.
+- New **Holding Detail modal** with 1y price chart + per-lot P&L + AI Deep-Dive + ticker news
+- New **Benchmark overlay** on Performance chart (NZX50 / S&P 500 / NASDAQ / FTSE / ASX 200)
+- New **News tab** restructured: Daily Brief (Haiku-summarised) → Multi-source headlines → Per-ticker news
+- New **NZ Fund + KiwiSaver** support with manual unit prices (staleness indicators, FIF excluded)
+- New **Family Settings section** — create/invite/manage families with hierarchical visibility
+- New **Plan placeholder** — Free/Pro/Family tiers (paywall deferred)
+- Mobile UX pass — sticky portfolio summary, card-flow tables under 768px, 40px tap targets
+
+### Proxy (`claude_proxy.py`)
+- Now ~1,000 lines (was ~666)
+- New routes: `/api/diag`, `/api/search`, `/api/history`, `/api/headlines`
+- Granular 403 reasons via `_check_secret().fail_reason` + `_forbidden()` response with hints
+- Multi-source RSS aggregator (8 sources, parallel fetch, 15-min cache)
+- Yahoo ticker search typeahead
+- Historical price series for one ticker (used by Holding Detail chart + benchmarks)
+
+### Supabase
+- New migration tier (007-010) for the **family platform**
+- New helpers: `is_family_member()`, `my_family_role()`, `can_view_user()`
+- New table: `families`, `family_members`, `family_invites`
+- New columns on profiles: `active_family_id`, `plan_tier`, `display_name`, `digest_opt_in`, `digest_last_sent`
+- Cross-table family-aware SELECT policies on `profiles`, `investiq_portfolios`, `investiq_snapshots`
+- New SECURITY DEFINER RPC: `redeem_family_invite(p_token, p_code)`
+- Auto-owner trigger on family creation
+
+### Edge Functions
+- `weekly-digest` — Monday-morning portfolio email via Resend, scheduled via pg_cron
+- `family-invite` — email invite sender via Resend
+
+### Tags
+- `v0.4-news-brief`
+- `v0.5-holding-detail-benchmarks`
+- `v0.6-nz-funds`
+- `v0.7a-family-foundation`
+
+### Approval model
+- Invite-only signup → admin approves → user gets per-user proxy_secret (in profiles)
+- Admin can self-rotate their own proxy_secret (fixed bootstrap catch-22)
+- Family members are NOT necessarily approved app users — they need their own approval
 
 ---
 

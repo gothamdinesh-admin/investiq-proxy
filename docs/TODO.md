@@ -129,6 +129,16 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Documentation baseline
+
+**Doc set refresh (v0.7-docs)**
+- [x] `docs/ROLES.md` (NEW) — working agreement, trust safeguards, what I will / won't do without explicit OK
+- [x] `docs/CODE_MAP.md` (NEW) — every file in the repo + what it does, every JS module's exports, every SQL migration's effect, every Edge Function's flow
+- [x] `docs/ARCHITECTURE.md` (NEW) — system diagram (ASCII), sign-in flow, refresh cycle, AI agents flow, family invite flow, weekly digest flow, RLS model, auth handshake, deploy flow, onboarding flow, snapshot system
+- [x] `docs/SCALING.md` (NEW) — capacity headroom per layer, what scales easily, what needs attention before growth, what's a problem only at real scale, future-proofing notes, 30-day improvement list, cost projection
+- [x] `docs/PROJECT_CONTEXT.md` (refreshed) — front door doc, links to specialist docs, current state through v0.7a
+- [x] `docs/LLM_HANDOFF.md` (delta added at top) — points to specialist docs, summarises v0.4 → v0.7a changes since original write
+
 ### 2026-05-15 session — Release v0.7a (Family Foundation)
 
 **Family platform foundation (v0.7a)**
