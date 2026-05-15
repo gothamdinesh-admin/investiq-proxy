@@ -2309,36 +2309,69 @@ async function loadSnapshotHistory(days = 90) {
   } catch(e) { console.warn('Snapshot history error:', e.message); return []; }
 }
 
+// Wrap a promise with a hard timeout — prevents the sign-in button from
+// hanging on "Please wait..." forever if a downstream call (profile fetch,
+// portfolio load) stalls. Returns whatever the promise resolves to, or
+// throws after `ms` so the caller can surface a real error.
+function _withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)), ms
+    ))
+  ]);
+}
+
 async function signIn(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
-  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
-  if (error) return { error: error.message };
+  try {
+    const { data, error } = await _withTimeout(
+      _supabase.auth.signInWithPassword({ email, password }),
+      15000, 'Supabase auth'
+    );
+    if (error) return { error: error.message };
 
-  // SECURITY: clear ANY stale data from a previous session on this device
-  // (e.g. shared computer, browser profile reused). The cloud is the source
-  // of truth — local state will be repopulated from loadFromSupabase below.
-  clearLocalUserData({ keepSettings: true });
+    // SECURITY: clear ANY stale data from a previous session on this device
+    // (e.g. shared computer, browser profile reused). The cloud is the source
+    // of truth — local state will be repopulated from loadFromSupabase below.
+    clearLocalUserData({ keepSettings: true });
 
-  _supaUser = data.user;
-  await checkAdminStatus();
-  logActivity('login', { email: _supaUser.email, isAdmin: _isAdmin });
-  // Touch last_seen
-  _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
-  updateAuthUI();
+    _supaUser = data.user;
+    // Admin check has a known historical RLS-recursion failure mode. Cap it
+    // at 8s and continue without admin info rather than hang the sign-in.
+    try {
+      await _withTimeout(checkAdminStatus(), 8000, 'Admin status check');
+    } catch(e) {
+      console.warn('[signIn] checkAdminStatus failed/timed-out — continuing without admin info:', e.message);
+    }
+    logActivity('login', { email: _supaUser.email, isAdmin: _isAdmin });
+    // Touch last_seen (fire-and-forget — not awaited)
+    _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
+    updateAuthUI();
 
-  // Force a hard sync from cloud — bypass the local-newer guard since we
-  // just wiped local data above. Cloud is authoritative on fresh login.
-  delete state.settings.updatedAt;
-  localStorage.removeItem('investiq_updated_at');
-  const loaded = await loadFromSupabase();
-  if (loaded) {
-    autoNormalizeTickers(true);
-    healDuplicates(true);
-    renderAll();
-    if (state.agentResults) renderInsightsSection(state.agentResults);
+    // Force a hard sync from cloud — bypass the local-newer guard since we
+    // just wiped local data above. Cloud is authoritative on fresh login.
+    delete state.settings.updatedAt;
+    localStorage.removeItem('investiq_updated_at');
+    try {
+      const loaded = await _withTimeout(loadFromSupabase(), 20000, 'Portfolio load');
+      if (loaded) {
+        autoNormalizeTickers(true);
+        healDuplicates(true);
+        renderAll();
+        if (state.agentResults) renderInsightsSection(state.agentResults);
+      }
+    } catch(e) {
+      console.warn('[signIn] loadFromSupabase failed/timed-out — user can refresh later:', e.message);
+      toast.warning('Signed in, but portfolio didn\'t load. Hit Refresh to retry.');
+    }
+    updateSyncIndicator();
+    return { ok: true };
+  } catch(e) {
+    // Top-level catch — covers auth timeout / network failure.
+    console.error('[signIn] hard failure:', e);
+    return { error: e.message || 'Sign-in failed (network or Supabase outage)' };
   }
-  updateSyncIndicator();
-  return { ok: true };
 }
 
 async function signUp(email, password) {
