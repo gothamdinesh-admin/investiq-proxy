@@ -1567,6 +1567,7 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <select id="familyViewPicker" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="switchFamilyView(this.value)"></select>
+          <button id="familyViewRenameBtn" onclick="renameFamilyFromAggregate()" class="btn btn-sm btn-secondary" title="Rename family" style="display:none;"><i class="fas fa-pen"></i></button>
           <button onclick="refreshFamilyView()" class="btn btn-sm btn-secondary" title="Refresh from cloud"><i class="fas fa-sync-alt"></i></button>
           <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Manage family"><i class="fas fa-cog mr-1"></i>Manage</button>
         </div>
@@ -4721,6 +4722,11 @@ async function renderFamilySection() {
     _activeFamilyId = _myFamilies[0].id;
   }
 
+  const activeFam = _myFamilies.find(f => f.id === _activeFamilyId) || _myFamilies[0];
+  const canRename = activeFam.role === 'owner';
+  const renameBtn = canRename
+    ? `<button onclick="renameFamilyPrompt('${activeFam.id}','${_escape(activeFam.name).replace(/'/g, "&#39;")}')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 8px;" title="Rename family"><i class="fas fa-pen"></i></button>`
+    : '';
   const familyPicker = _myFamilies.length > 1
     ? `<select onchange="switchActiveFamily(this.value)" class="input" style="font-size:12px;padding:6px 8px;width:auto;max-width:180px;">
         ${_myFamilies.map(f => `<option value="${f.id}" ${f.id === _activeFamilyId ? 'selected' : ''}>${_escape(f.name)}</option>`).join('')}
@@ -4730,7 +4736,7 @@ async function renderFamilySection() {
   wrap.innerHTML = `
     <div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:10px;padding:14px;">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div>${familyPicker}</div>
+        <div class="flex items-center gap-2">${familyPicker}${renameBtn}</div>
         <button onclick="createFamilyPrompt()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;" title="Create another family"><i class="fas fa-plus mr-1"></i>New</button>
       </div>
       <div id="familyMembersList" class="text-xs neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Loading members…</div>
@@ -4875,6 +4881,46 @@ async function createFamilyPrompt() {
     renderFamilySection();
   } catch(e) {
     toast.error('Could not create family: ' + e.message);
+  }
+}
+
+async function renameFamilyPrompt(familyId, currentName) {
+  const result = await showFormModal({
+    title: 'Rename family',
+    icon: 'fa-pen',
+    iconColor: '#22d3ee',
+    description: 'Visible to all members. No effect on data — just the label.',
+    fields: [{
+      name: 'name',
+      label: 'New family name',
+      value: currentName,
+      required: true
+    }],
+    submitLabel: 'Save name',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const newName = (result.name || '').trim();
+  if (!newName || newName === currentName) return;
+  try {
+    const { error } = await _supabase.from('families').update({ name: newName }).eq('id', familyId);
+    if (error) throw error;
+    // Update in-memory cache so subsequent renders are correct without re-fetch
+    const fam = _myFamilies.find(f => f.id === familyId);
+    if (fam) fam.name = newName;
+    toast.success(`Renamed to "${newName}"`);
+    logActivity('family_renamed', { family_id: familyId, old_name: currentName, new_name: newName });
+    renderFamilySection();
+    // Refresh the aggregate view too if it's currently visible
+    const familyViewName = document.getElementById('familyViewName');
+    if (familyViewName && currentSection === 'family') familyViewName.textContent = newName;
+  } catch(e) {
+    // RLS denies if you're not owner — surface a helpful message
+    if (/policy|denied|permission/i.test(e.message || '')) {
+      toast.error('Only the family owner can rename.');
+    } else {
+      toast.error('Rename failed: ' + e.message);
+    }
   }
 }
 
@@ -5246,6 +5292,9 @@ async function loadFamilyAggregateView() {
   const fam = _myFamilies.find(f => f.id === _activeFamilyId) || _myFamilies[0];
   _activeFamilyId = fam.id;
   if (nameEl) nameEl.textContent = fam.name;
+  // Show rename pencil only to owner
+  const renameBtn = document.getElementById('familyViewRenameBtn');
+  if (renameBtn) renameBtn.style.display = (fam.role === 'owner') ? '' : 'none';
 
   wrap.innerHTML = `<div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading household data…</div>`;
 
@@ -5463,6 +5512,14 @@ function _renderFamilyAllocChart(memberRows) {
       }
     }
   });
+}
+
+async function renameFamilyFromAggregate() {
+  const fam = _myFamilies.find(f => f.id === _activeFamilyId);
+  if (!fam) return;
+  await renameFamilyPrompt(fam.id, fam.name);
+  // Refresh the aggregate view so the new name appears in the picker + header
+  loadFamilyAggregateView();
 }
 
 function switchFamilyView(familyId) {
