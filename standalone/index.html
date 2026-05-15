@@ -4519,9 +4519,12 @@ async function loadFamilyMembers(familyId) {
   const myRole = _myFamilies.find(f => f.id === familyId)?.role;
   const canInvite = myRole === 'owner' || myRole === 'adult';
 
+  // Two-query merge — PostgREST can't auto-join family_members.user_id to
+  // profiles.id because the FK on user_id targets auth.users (not profiles).
+  // Simpler than adding a dual FK + relationship hint.
   const { data: members, error } = await _supabase
     .from('family_members')
-    .select('user_id, role, display_name, joined_at, profiles!inner(email)')
+    .select('user_id, role, display_name, joined_at')
     .eq('family_id', familyId)
     .order('joined_at');
   if (error) {
@@ -4529,17 +4532,31 @@ async function loadFamilyMembers(familyId) {
     return;
   }
 
+  // Fetch profile emails for the member user_ids. RLS lets us read profiles
+  // of fellow family members through the existing family-aware policies.
+  const userIds = (members || []).map(m => m.user_id);
+  let profileById = {};
+  if (userIds.length) {
+    const { data: profs } = await _supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', userIds);
+    (profs || []).forEach(p => { profileById[p.id] = p; });
+  }
+
   const memberHtml = (members || []).map(m => {
     const def = FAMILY_ROLE_DEFS[m.role] || { label: m.role, color: '#94a3b8' };
     const isSelf = m.user_id === _supaUser.id;
     const canRemove = (myRole === 'owner' && !isSelf) || isSelf;
+    const email = profileById[m.user_id]?.email || '(email hidden)';
+    const fallbackName = email.includes('@') ? email.split('@')[0] : 'Member';
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1e2d4a;">
       <div style="min-width:0;flex:1;">
-        <div class="text-sm" style="color:#c8d6ef;">${_escape(m.display_name || m.profiles.email.split('@')[0])}${isSelf ? ' <span class="text-xs neutral">(you)</span>' : ''}</div>
-        <div class="text-xs neutral" style="font-size:10px;">${_escape(m.profiles.email)}</div>
+        <div class="text-sm" style="color:#c8d6ef;">${_escape(m.display_name || fallbackName)}${isSelf ? ' <span class="text-xs neutral">(you)</span>' : ''}</div>
+        <div class="text-xs neutral" style="font-size:10px;">${_escape(email)}</div>
       </div>
       <span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:${def.color}22;color:${def.color};border:1px solid ${def.color}44;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">${def.label}</span>
-      ${canRemove ? `<button onclick="removeFamilyMember('${familyId}','${m.user_id}','${_escape(m.profiles.email)}',${isSelf})" class="btn btn-sm" style="font-size:10px;padding:3px 8px;margin-left:8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="${isSelf ? 'Leave family' : 'Remove member'}"><i class="fas fa-${isSelf ? 'sign-out-alt' : 'times'}"></i></button>` : ''}
+      ${canRemove ? `<button onclick="removeFamilyMember('${familyId}','${m.user_id}','${_escape(email)}',${isSelf})" class="btn btn-sm" style="font-size:10px;padding:3px 8px;margin-left:8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="${isSelf ? 'Leave family' : 'Remove member'}"><i class="fas fa-${isSelf ? 'sign-out-alt' : 'times'}"></i></button>` : ''}
     </div>`;
   }).join('');
 
