@@ -1630,6 +1630,9 @@
           <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
             <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
           </button>
+          <button onclick="adminTestDigest()" class="btn btn-sm" style="background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);">
+            <i class="fas fa-envelope mr-1"></i>Send Test Digest
+          </button>
           <button onclick="adminClearCloudRow()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">
             <i class="fas fa-trash-alt mr-1"></i>Reset Cloud Portfolio
           </button>
@@ -5809,6 +5812,67 @@ async function adminTestSupabase() {
 
     _adminLog('\n🎉 All Supabase tests passed. RLS is correctly configured.');
   } catch(e) { _adminLog(`✗ Exception: ${e.message}`); }
+}
+
+// Manually invoke the weekly-digest Edge Function — verifies the full
+// pipeline (Edge Function deployed, RESEND_API_KEY set, profiles row has
+// digest_opt_in=true) without waiting for the Sunday cron. Requires the
+// admin to know the CRON_SECRET (asked via prompt — not stored anywhere).
+async function adminTestDigest() {
+  _adminClearOutput();
+  const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
+  if (!supaUrl) return _adminLog('✗ Supabase URL not set in PLATFORM_CONFIG');
+  _adminLog('🔍 Will invoke: ' + supaUrl + '/functions/v1/weekly-digest\n');
+  const secret = prompt('Paste the CRON_SECRET you set with `supabase secrets set CRON_SECRET=…`\n\n(Same value you put in setup.sql for app.cron_secret. Not stored — only used for this one request.)');
+  if (!secret) return _adminLog('✗ Cancelled — no secret entered');
+  _adminLog('🚀 Calling Edge Function …');
+  try {
+    const res = await fetch(supaUrl + '/functions/v1/weekly-digest', {
+      method:  'POST',
+      headers: {
+        'Authorization': 'Bearer ' + secret,
+        'Content-Type':  'application/json'
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(30000)
+    });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = text; }
+    _adminLog(`Response: ${res.status}`);
+    if (res.status === 401) {
+      _adminLog('✗ Unauthorised — your CRON_SECRET doesn\'t match what the function expects.');
+      _adminLog('  Re-run: supabase secrets set CRON_SECRET=<your-value>');
+    } else if (res.status === 404) {
+      _adminLog('✗ Function not deployed. Run: supabase functions deploy weekly-digest --no-verify-jwt');
+    } else if (res.ok && body?.attempted !== undefined) {
+      _adminLog(`✓ Function ran successfully.`);
+      _adminLog(`  attempted: ${body.attempted}`);
+      _adminLog(`  sent:      ${body.sent}`);
+      _adminLog(`  failed:    ${body.failed}`);
+      if (body.details?.length) {
+        _adminLog('\n  per-user:');
+        body.details.forEach(d => {
+          const icon = d.ok ? '✓' : '✗';
+          _adminLog(`    ${icon} ${d.email}${d.reason ? ' — ' + d.reason : ''}`);
+        });
+      }
+      if (body.attempted === 0) {
+        _adminLog('\n  💡 No opted-in users found. Toggle Settings → Weekly Email Digest ON and retry.');
+      }
+      if (body.failed > 0 && body.details?.some(d => /resend|RESEND_API/i.test(d.reason || ''))) {
+        _adminLog('\n  💡 Resend setup incomplete. Set RESEND_API_KEY + RESEND_FROM_EMAIL secrets:');
+        _adminLog('     supabase secrets set RESEND_API_KEY=re_xxx');
+        _adminLog('     supabase secrets set RESEND_FROM_EMAIL=\'InvestIQ <onboarding@resend.dev>\'');
+      }
+    } else {
+      _adminLog('✗ Unexpected response:');
+      _adminLog(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+    }
+  } catch(e) {
+    _adminLog(`✗ Network error: ${e.message}`);
+    _adminLog('  Function may not be deployed yet. Check Supabase Dashboard → Edge Functions.');
+  }
 }
 
 async function adminTestProxy() {
