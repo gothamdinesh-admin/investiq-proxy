@@ -31,6 +31,13 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 SELECT cron.unschedule('investiq-weekly-digest')
 WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'investiq-weekly-digest');
 
+-- Replace BOTH placeholders below:
+--   <YOUR_SUPABASE_ANON_KEY>  → the long JWT-like key from PLATFORM_CONFIG.supabaseKey
+--                                (also visible in Dashboard → Project Settings → API)
+--                                Satisfies the "Verify JWT" gate so the request
+--                                reaches the function.
+--   <YOUR_CRON_SECRET_HERE>   → the random value you generated, must match the
+--                                CRON_SECRET Edge Function secret.
 SELECT cron.schedule(
   'investiq-weekly-digest',
   '0 18 * * 0',  -- minute hour DoM month DoW (UTC)
@@ -38,7 +45,8 @@ SELECT cron.schedule(
     SELECT net.http_post(
       url     := 'https://szyclmouetbbigxexdrn.supabase.co/functions/v1/weekly-digest',
       headers := jsonb_build_object(
-        'Authorization', 'Bearer <YOUR_CRON_SECRET_HERE>',
+        'Authorization', 'Bearer <YOUR_SUPABASE_ANON_KEY>',
+        'X-Cron-Secret', '<YOUR_CRON_SECRET_HERE>',
         'Content-Type',  'application/json'
       ),
       body    := '{}'::jsonb

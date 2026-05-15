@@ -193,13 +193,12 @@ async function digestForUser(userId: string, email: string): Promise<DigestResul
   return { email, ok: send.ok, reason: send.error };
 }
 
-// CORS — the admin "Send Test Digest" button calls this from the browser,
-// which triggers a preflight on requests with Authorization headers. Without
-// these the browser drops the response and you get "Failed to fetch".
+// CORS — the admin "Send Test Digest" button calls this from the browser.
+// X-Cron-Secret is added to allowed headers so the preflight doesn't reject it.
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type, X-Cron-Secret",
   "Access-Control-Max-Age":       "86400"
 };
 
@@ -209,12 +208,19 @@ serve(async (req) => {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
-  // Shared-secret gate — only the cron job (or admin) can invoke this.
-  // Edge Functions are public by default; this prevents drive-by sends.
-  const authHeader = req.headers.get("Authorization") || "";
-  const provided = authHeader.replace(/^Bearer\s+/i, "");
+  // Auth model:
+  //   - Supabase's Verify-JWT gateway (when on) needs `Authorization: Bearer <jwt>`
+  //     to be a real Supabase JWT. Our admin button passes the user's session
+  //     access_token there; pg_cron passes the anon key. Both satisfy the gate.
+  //   - Our OWN authorisation comes from X-Cron-Secret, validated below.
+  //     Anyone who knows this secret can fire the digest — same threat model
+  //     as before, just on a different header.
+  const provided = req.headers.get("X-Cron-Secret") || "";
   if (CRON_SECRET && provided !== CRON_SECRET) {
-    return new Response(JSON.stringify({ error: "unauthorised" }), {
+    return new Response(JSON.stringify({
+      error: "unauthorised",
+      hint:  "Set X-Cron-Secret header to the CRON_SECRET value."
+    }), {
       status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
     });
   }

@@ -5823,15 +5823,28 @@ async function adminTestDigest() {
   const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
   if (!supaUrl) return _adminLog('✗ Supabase URL not set in PLATFORM_CONFIG');
   _adminLog('🔍 Will invoke: ' + supaUrl + '/functions/v1/weekly-digest\n');
-  const secret = prompt('Paste the CRON_SECRET you set with `supabase secrets set CRON_SECRET=…`\n\n(Same value you put in setup.sql for app.cron_secret. Not stored — only used for this one request.)');
+  const secret = prompt('Paste the CRON_SECRET you set in Supabase Function secrets.\n\n(Not stored — used only for this one request.)');
   if (!secret) return _adminLog('✗ Cancelled — no secret entered');
+
+  // Get the current user's Supabase JWT so the Verify-JWT gateway lets the
+  // request through. Our function's own auth uses X-Cron-Secret separately.
+  let userJwt = '';
+  try {
+    const sess = await _supabase.auth.getSession();
+    userJwt = sess?.data?.session?.access_token || '';
+  } catch(e) { /* fall through with empty JWT */ }
+  if (!userJwt) {
+    _adminLog('⚠ No active Supabase session — Verify-JWT gateway will reject. Sign in first.');
+  }
+
   _adminLog('🚀 Calling Edge Function …');
   try {
     const res = await fetch(supaUrl + '/functions/v1/weekly-digest', {
       method:  'POST',
       headers: {
-        'Authorization': 'Bearer ' + secret,
-        'Content-Type':  'application/json'
+        'Authorization':   'Bearer ' + (userJwt || PLATFORM_CONFIG.supabaseKey),
+        'X-Cron-Secret':   secret,
+        'Content-Type':    'application/json'
       },
       body: '{}',
       signal: AbortSignal.timeout(30000)
