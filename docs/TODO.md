@@ -129,6 +129,43 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-15 session — Release v0.7a (Family Foundation)
+
+**Family platform foundation (v0.7a)**
+- [x] DB migration 007_family_foundation.sql: families, family_members,
+      family_invites tables with hierarchical RLS. profiles extended with
+      active_family_id, plan_tier ('free'/'pro'/'family'/'admin'),
+      display_name.
+- [x] SECURITY DEFINER helpers: is_family_member(fam_id),
+      my_family_role(fam_id), can_view_user(target_user_id).
+- [x] Cross-table RLS: adults in your family can SELECT your
+      investiq_portfolios + investiq_snapshots rows via can_view_user().
+      Teens/children/viewers only see their own.
+- [x] Settings → Family section: create family, invite by email,
+      generate 6-char code, member list with role chips, pending
+      invites list with revoke + copy-link, member remove (owner) /
+      leave (self), multi-family switcher.
+- [x] Settings → Plan section: shows current tier with brand colours +
+      perks list, disabled "Upgrade" button (paid plans deferred until
+      50+ active users), info note when in 1+ families but on Free tier.
+- [x] Inbound invite banner: page-load check for ?family_invite=<token>
+      or ?family_invite_code=<code> → top gradient banner with Accept
+      button → look up + join + clean URL.
+- [x] Edge Function family-invite (Resend-backed email send), reuses
+      existing RESEND_API_KEY secret. Requires Verify JWT ON (caller's
+      identity authorises the send).
+
+**Activation pending (user runs):**
+- Paste supabase/migrations/007_family_foundation.sql into SQL Editor
+- Deploy family-invite Edge Function via Dashboard (paste index.ts,
+  leave Verify JWT ON)
+- Set APP_URL secret if Netlify URL ever changes
+
+**Pending v0.7b (aggregate view):**
+- Family sidebar tab with combined household total
+- Per-member breakdown cards with their value/return/top holding
+- Family-aggregate AI digest
+
 ### 2026-05-15 session — Release v0.6 (NZ Funds & KiwiSaver)
 
 **NZ-specific (v0.6)**

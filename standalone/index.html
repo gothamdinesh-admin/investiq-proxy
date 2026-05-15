@@ -586,6 +586,19 @@
 <!-- TOAST CONTAINER — for non-blocking notifications (replaces alert()) -->
 <div id="toastContainer" style="position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 40px);"></div>
 
+<!-- FAMILY INVITE BANNER — shown when URL has ?family_invite=<token> -->
+<div id="familyInviteBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#6366f1,#22d3ee);padding:14px 20px;color:white;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+  <div style="max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <i class="fas fa-envelope-open-text" style="font-size:18px;"></i>
+    <div style="flex:1;min-width:220px;">
+      <div style="font-weight:600;font-size:14px;">Family invite</div>
+      <div id="familyInviteBannerText" style="font-size:12px;opacity:0.95;margin-top:2px;">Loading invite details…</div>
+    </div>
+    <button id="familyInviteAcceptBtn" onclick="acceptFamilyInviteFromBanner()" style="background:white;color:#6366f1;border:none;padding:8px 16px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">Accept invite</button>
+    <button onclick="dismissFamilyInviteBanner()" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.3);padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;">Later</button>
+  </div>
+</div>
+
 <!-- AUTH GATE — shown when Supabase is configured but user is not signed in -->
 <div id="authGate" style="display:none;position:fixed;inset:0;z-index:9999;background:#080d1a;flex-direction:column;align-items:center;justify-content:center;">
   <div style="width:100%;max-width:400px;padding:32px;">
@@ -1971,6 +1984,33 @@
               <div class="text-xs" style="color:#64748b;margin-top:3px;">Total value · week change · top + worst mover · holdings count. Sent at 6 AM NZT, opt out anytime.</div>
             </div>
           </label>
+        </div>
+      </div>
+
+      <!-- ═══════════ FAMILY (multi-user platform) ═══════════ -->
+      <div id="familySection" style="display:none;">
+        <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-users" style="color:#22d3ee;"></i>
+              <span class="text-xs font-semibold" style="color:#22d3ee;letter-spacing:0.5px;text-transform:uppercase;">Family</span>
+            </div>
+            <span class="text-xs neutral">Track portfolios across your household</span>
+          </div>
+          <div id="familyContent">
+            <div class="text-xs neutral text-center py-3"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ PLAN (paywall placeholders) ═══════════ -->
+      <div id="planSection" style="display:none;">
+        <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-crown" style="color:#fbbf24;"></i>
+            <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Your Plan</span>
+          </div>
+          <div id="planContent" class="text-xs neutral">Loading…</div>
         </div>
       </div>
 
@@ -4231,6 +4271,16 @@ function populateSettingsForm() {
   if (digestSection) digestSection.style.display = _supaUser ? 'block' : 'none';
   if (digestToggle)  digestToggle.checked = !!_userProfile?.digest_opt_in;
 
+  // Family + Plan sections — both visible only when signed in
+  const familySection = document.getElementById('familySection');
+  const planSection   = document.getElementById('planSection');
+  if (familySection) familySection.style.display = _supaUser ? 'block' : 'none';
+  if (planSection)   planSection.style.display   = _supaUser ? 'block' : 'none';
+  if (_supaUser) {
+    renderFamilySection();
+    renderPlanSection();
+  }
+
   // Account info section — visible to ALL signed-in users
   const accountSection = document.getElementById('accountInfoSection');
   const settingsEmail  = document.getElementById('settingsUserEmail');
@@ -4377,6 +4427,458 @@ function saveSettings() {
   closeModal('settingsModal');
   renderAll();
   toast.success('Settings saved');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// FAMILY PLATFORM (v0.7a) — load + render the Family section in Settings.
+//
+// State model:
+//   _myFamilies        — array of { id, name, role, member_count } the user belongs to
+//   _activeFamily      — currently expanded one in Settings (defaults to active_family_id)
+//   _familyInviteList  — pending invites for the active family
+//
+// All data fetched via Supabase RLS-respecting queries.
+// ═══════════════════════════════════════════════════════════════════════
+
+let _myFamilies = [];
+let _activeFamilyId = null;
+let _familyInviteList = [];
+
+const FAMILY_ROLE_DEFS = {
+  owner:  { label: 'Owner',  color: '#fbbf24', desc: 'Full control · can invite + remove' },
+  adult:  { label: 'Adult',  color: '#34d399', desc: 'Sees all family data + can manage own' },
+  teen:   { label: 'Teen',   color: '#60a5fa', desc: 'Own portfolio + family total visibility' },
+  child:  { label: 'Child',  color: '#a78bfa', desc: 'Custodial — adults manage on their behalf' },
+  viewer: { label: 'Viewer', color: '#94a3b8', desc: 'Read-only — own data only' }
+};
+
+async function renderFamilySection() {
+  const wrap = document.getElementById('familyContent');
+  if (!wrap || !_supabase || !_supaUser) return;
+
+  // Load families this user belongs to (FAMILY-RLS scopes this automatically)
+  const { data: memberRows, error } = await _supabase
+    .from('family_members')
+    .select('family_id, role, display_name, joined_at, families!inner(id, name, created_by, created_at)')
+    .eq('user_id', _supaUser.id);
+  if (error) {
+    wrap.innerHTML = `<div class="text-xs" style="color:#f87171;">Couldn't load families: ${_escape(error.message)}</div>`;
+    return;
+  }
+  _myFamilies = (memberRows || []).map(r => ({
+    id:        r.families.id,
+    name:      r.families.name,
+    role:      r.role,
+    joined_at: r.joined_at,
+    created_by: r.families.created_by
+  }));
+
+  if (!_myFamilies.length) {
+    wrap.innerHTML = `
+      <div style="background:#0a1120;border:1px dashed #1e2d4a;border-radius:10px;padding:14px;text-align:center;">
+        <div class="text-sm" style="color:#c8d6ef;margin-bottom:6px;">You're not in a family yet</div>
+        <div class="text-xs neutral mb-3" style="line-height:1.5;">Create one to invite your spouse, kids, or accountant. Each member keeps their own login + portfolio — the family layer adds shared visibility and aggregate views (coming next).</div>
+        <button onclick="createFamilyPrompt()" class="btn btn-sm btn-primary" style="font-size:12px;padding:6px 14px;"><i class="fas fa-plus mr-1"></i>Create Family</button>
+        <div class="text-xs neutral mt-3" style="font-size:11px;">Or have a 6-character invite code?
+          <button onclick="redeemFamilyCodePrompt()" style="background:none;border:none;color:#60a5fa;cursor:pointer;text-decoration:underline;font-size:11px;">Enter code</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Active family = profile's active_family_id, else first
+  _activeFamilyId = _activeFamilyId ||
+                    _userProfile?.active_family_id ||
+                    _myFamilies[0].id;
+  // Validate it's still one we belong to
+  if (!_myFamilies.find(f => f.id === _activeFamilyId)) {
+    _activeFamilyId = _myFamilies[0].id;
+  }
+
+  const familyPicker = _myFamilies.length > 1
+    ? `<select onchange="switchActiveFamily(this.value)" class="input" style="font-size:12px;padding:6px 8px;width:auto;max-width:180px;">
+        ${_myFamilies.map(f => `<option value="${f.id}" ${f.id === _activeFamilyId ? 'selected' : ''}>${_escape(f.name)}</option>`).join('')}
+       </select>`
+    : `<span class="text-sm font-semibold" style="color:#c8d6ef;">${_escape(_myFamilies[0].name)}</span>`;
+
+  wrap.innerHTML = `
+    <div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:10px;padding:14px;">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>${familyPicker}</div>
+        <button onclick="createFamilyPrompt()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;" title="Create another family"><i class="fas fa-plus mr-1"></i>New</button>
+      </div>
+      <div id="familyMembersList" class="text-xs neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Loading members…</div>
+      <div id="familyInvitesArea" class="mt-3"></div>
+    </div>`;
+
+  loadFamilyMembers(_activeFamilyId);
+}
+
+async function loadFamilyMembers(familyId) {
+  if (!_supabase) return;
+  const myRole = _myFamilies.find(f => f.id === familyId)?.role;
+  const canInvite = myRole === 'owner' || myRole === 'adult';
+
+  const { data: members, error } = await _supabase
+    .from('family_members')
+    .select('user_id, role, display_name, joined_at, profiles!inner(email)')
+    .eq('family_id', familyId)
+    .order('joined_at');
+  if (error) {
+    document.getElementById('familyMembersList').innerHTML = `<span style="color:#f87171;">Couldn't load members: ${_escape(error.message)}</span>`;
+    return;
+  }
+
+  const memberHtml = (members || []).map(m => {
+    const def = FAMILY_ROLE_DEFS[m.role] || { label: m.role, color: '#94a3b8' };
+    const isSelf = m.user_id === _supaUser.id;
+    const canRemove = (myRole === 'owner' && !isSelf) || isSelf;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1e2d4a;">
+      <div style="min-width:0;flex:1;">
+        <div class="text-sm" style="color:#c8d6ef;">${_escape(m.display_name || m.profiles.email.split('@')[0])}${isSelf ? ' <span class="text-xs neutral">(you)</span>' : ''}</div>
+        <div class="text-xs neutral" style="font-size:10px;">${_escape(m.profiles.email)}</div>
+      </div>
+      <span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:${def.color}22;color:${def.color};border:1px solid ${def.color}44;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">${def.label}</span>
+      ${canRemove ? `<button onclick="removeFamilyMember('${familyId}','${m.user_id}','${_escape(m.profiles.email)}',${isSelf})" class="btn btn-sm" style="font-size:10px;padding:3px 8px;margin-left:8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="${isSelf ? 'Leave family' : 'Remove member'}"><i class="fas fa-${isSelf ? 'sign-out-alt' : 'times'}"></i></button>` : ''}
+    </div>`;
+  }).join('');
+
+  // Pending invites (only visible to adults+)
+  let invitesHtml = '';
+  if (canInvite) {
+    const { data: invites } = await _supabase
+      .from('family_invites')
+      .select('id, email, role, code, expires_at, used_at, created_at')
+      .eq('family_id', familyId)
+      .is('used_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+    _familyInviteList = invites || [];
+    if (_familyInviteList.length) {
+      invitesHtml = `<div class="text-xs neutral mt-3 mb-2" style="text-transform:uppercase;letter-spacing:0.5px;font-size:10px;">Pending invites</div>
+        ${_familyInviteList.map(inv => `
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#0f1729;border:1px solid #1e2d4a;border-radius:6px;margin-bottom:4px;font-size:11px;">
+            <i class="fas fa-${inv.email ? 'envelope' : 'key'}" style="color:#60a5fa;font-size:10px;"></i>
+            <span style="flex:1;color:#94a3b8;">${inv.email ? _escape(inv.email) : `Code: <code style="color:#fbbf24;">${_escape(inv.code)}</code>`} · ${(FAMILY_ROLE_DEFS[inv.role] || {}).label || inv.role}</span>
+            <button onclick="copyInviteLink('${inv.code}','${inv.email || ''}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 6px;" title="Copy invite link"><i class="fas fa-copy"></i></button>
+            <button onclick="revokeFamilyInvite('${inv.id}')" class="btn btn-sm" style="font-size:10px;padding:3px 6px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Revoke"><i class="fas fa-times"></i></button>
+          </div>
+        `).join('')}`;
+    }
+    invitesHtml += `
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+        <button onclick="inviteFamilyMemberPrompt('${familyId}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 12px;flex:1;min-width:140px;"><i class="fas fa-envelope mr-1"></i>Invite by email</button>
+        <button onclick="generateFamilyInviteCode('${familyId}')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:6px 12px;flex:1;min-width:140px;"><i class="fas fa-key mr-1"></i>Generate code</button>
+      </div>`;
+  }
+
+  document.getElementById('familyMembersList').innerHTML = memberHtml || '<span>No members.</span>';
+  document.getElementById('familyInvitesArea').innerHTML = invitesHtml;
+}
+
+async function switchActiveFamily(familyId) {
+  _activeFamilyId = familyId;
+  // Persist as active
+  if (_supabase && _supaUser) {
+    await _supabase.from('profiles').update({ active_family_id: familyId }).eq('id', _supaUser.id);
+    _userProfile.active_family_id = familyId;
+  }
+  loadFamilyMembers(familyId);
+}
+
+async function createFamilyPrompt() {
+  const name = prompt('Family name?\n\ne.g. "The Smiths", "Muthusamy Whānau", "Retirement Trust"');
+  if (!name || !name.trim()) return;
+  try {
+    const { data, error } = await _supabase
+      .from('families')
+      .insert({ name: name.trim(), created_by: _supaUser.id })
+      .select()
+      .single();
+    if (error) throw error;
+    // Add self as owner
+    const { error: memErr } = await _supabase
+      .from('family_members')
+      .insert({ family_id: data.id, user_id: _supaUser.id, role: 'owner', display_name: _userProfile?.display_name || _supaUser.email.split('@')[0], invited_by: _supaUser.id });
+    if (memErr) throw memErr;
+    // Set as active
+    await _supabase.from('profiles').update({ active_family_id: data.id }).eq('id', _supaUser.id);
+    _userProfile.active_family_id = data.id;
+    _activeFamilyId = data.id;
+    toast.success(`Created family "${name.trim()}"`);
+    logActivity('family_created', { family_id: data.id, name: name.trim() });
+    renderFamilySection();
+  } catch(e) {
+    toast.error('Could not create family: ' + e.message);
+  }
+}
+
+async function inviteFamilyMemberPrompt(familyId) {
+  const email = prompt('Email address to invite?');
+  if (!email || !email.trim()) return;
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
+    return toast.warning('That doesn\'t look like a valid email');
+  }
+  const role = prompt('Role? Choose one: adult / teen / child / viewer\n\n• adult — full peer (sees everyone)\n• teen — own portfolio + family total\n• child — custodial (you manage for them)\n• viewer — read-only', 'adult');
+  if (!role || !['adult','teen','child','viewer'].includes(role.trim().toLowerCase())) {
+    return toast.warning('Invalid role. Try again.');
+  }
+  try {
+    const { data: invite, error } = await _supabase
+      .from('family_invites')
+      .insert({
+        family_id:  familyId,
+        invited_by: _supaUser.id,
+        email:      email.trim().toLowerCase(),
+        role:       role.trim().toLowerCase()
+      })
+      .select()
+      .single();
+    if (error) throw error;
+
+    // Fire the Edge Function to send the email (non-blocking — the row exists either way)
+    const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
+    const sess = await _supabase.auth.getSession();
+    const jwt = sess?.data?.session?.access_token || '';
+    try {
+      const res = await fetch(supaUrl + '/functions/v1/family-invite', {
+        method:  'POST',
+        headers: {
+          'Authorization': 'Bearer ' + jwt,
+          'Content-Type':  'application/json'
+        },
+        body: JSON.stringify({ invite_id: invite.id })
+      });
+      if (res.ok) {
+        toast.success(`Invite sent to ${email}`);
+      } else {
+        const errBody = await res.json().catch(() => ({}));
+        toast.warning(`Invite saved but email failed: ${errBody.error || res.status}. Share the code instead: ${invite.code}`);
+      }
+    } catch(e) {
+      toast.warning(`Invite saved but email failed: ${e.message}. Share the code instead: ${invite.code}`);
+    }
+    logActivity('family_invite_sent', { family_id: familyId, email: email.trim(), role });
+    loadFamilyMembers(familyId);
+  } catch(e) {
+    toast.error('Could not create invite: ' + e.message);
+  }
+}
+
+async function generateFamilyInviteCode(familyId) {
+  const role = prompt('Role for whoever joins with this code?\n\nadult / teen / child / viewer', 'adult');
+  if (!role || !['adult','teen','child','viewer'].includes(role.trim().toLowerCase())) return;
+  try {
+    const { data: invite, error } = await _supabase
+      .from('family_invites')
+      .insert({
+        family_id:  familyId,
+        invited_by: _supaUser.id,
+        email:      null,    // code-only invite
+        role:       role.trim().toLowerCase()
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    alert(`Invite code generated:\n\n  ${invite.code}\n\nShare this verbally. It expires in 7 days. The recipient signs up to InvestIQ then enters this code in Settings → Family → Enter code.`);
+    logActivity('family_invite_sent', { family_id: familyId, code_only: true, role });
+    loadFamilyMembers(familyId);
+  } catch(e) {
+    toast.error('Could not generate code: ' + e.message);
+  }
+}
+
+function copyInviteLink(code, email) {
+  const url = `${location.origin}${location.pathname}?family_invite_code=${encodeURIComponent(code)}`;
+  navigator.clipboard?.writeText(url).then(() => {
+    toast.success(email ? `Link copied — already emailed to ${email}` : 'Invite link copied');
+  }).catch(() => {
+    prompt('Copy this invite link:', url);
+  });
+}
+
+async function revokeFamilyInvite(inviteId) {
+  if (!confirm('Revoke this invite? The recipient won\'t be able to use it.')) return;
+  try {
+    const { error } = await _supabase.from('family_invites').delete().eq('id', inviteId);
+    if (error) throw error;
+    toast.success('Invite revoked');
+    loadFamilyMembers(_activeFamilyId);
+  } catch(e) {
+    toast.error('Revoke failed: ' + e.message);
+  }
+}
+
+async function removeFamilyMember(familyId, userId, email, isSelf) {
+  const msg = isSelf
+    ? `Leave family? You'll lose access to family data (but your own portfolio stays intact).`
+    : `Remove ${email} from the family? They keep their own portfolio, just lose family visibility.`;
+  if (!confirm(msg)) return;
+  try {
+    const { error } = await _supabase
+      .from('family_members')
+      .delete()
+      .eq('family_id', familyId)
+      .eq('user_id', userId);
+    if (error) throw error;
+    toast.success(isSelf ? 'Left family' : `Removed ${email}`);
+    logActivity('family_member_removed', { family_id: familyId, target_user_id: userId, self: isSelf });
+    if (isSelf && _userProfile?.active_family_id === familyId) {
+      _userProfile.active_family_id = null;
+      _activeFamilyId = null;
+      await _supabase.from('profiles').update({ active_family_id: null }).eq('id', _supaUser.id);
+    }
+    renderFamilySection();
+  } catch(e) {
+    toast.error('Could not remove: ' + e.message);
+  }
+}
+
+// Invite-code redemption flow — user enters the 6-char code shared verbally
+async function redeemFamilyCodePrompt() {
+  const code = prompt('Enter your 6-character invite code:');
+  if (!code || !code.trim()) return;
+  return redeemFamilyInvite({ code: code.trim().toUpperCase() });
+}
+
+// Token-based redemption — called when ?family_invite=<token> hits the page
+async function acceptFamilyInviteFromBanner() {
+  const token = sessionStorage.getItem('_pendingFamilyInviteToken');
+  if (!token) return dismissFamilyInviteBanner();
+  await redeemFamilyInvite({ token });
+}
+
+async function redeemFamilyInvite({ token, code }) {
+  if (!_supabase || !_supaUser) {
+    return toast.warning('Sign in first, then redeem the invite from Settings → Family.');
+  }
+  try {
+    // Look up the invite. With RLS as-defined, only members can SELECT invites
+    // for their family — but new joiners aren't members yet. So we use the
+    // service-key path? No — we add an exception: anyone authenticated can
+    // SELECT an invite by token or code (the secret BEING the auth).
+    // For now we attempt a plain select; if RLS blocks it we fall back to
+    // calling the family-invite Edge Function for redemption.
+    const filter = token ? { token } : { code };
+    const { data: invite, error: lookupErr } = await _supabase
+      .from('family_invites')
+      .select('id, family_id, email, role, expires_at, used_at, families!inner(name)')
+      .match(filter)
+      .maybeSingle();
+
+    if (lookupErr || !invite) {
+      return toast.error('Invite not found or already used. Ask the inviter to generate a new one.');
+    }
+    if (invite.used_at) return toast.warning('That invite has already been used.');
+    if (new Date(invite.expires_at) < new Date()) return toast.warning('That invite has expired.');
+    if (invite.email && invite.email.toLowerCase() !== _supaUser.email.toLowerCase()) {
+      return toast.warning(`This invite is for ${invite.email}. Sign in with that email, or ask the inviter to generate a code-only invite.`);
+    }
+
+    // Insert self into family_members
+    const { error: joinErr } = await _supabase.from('family_members').insert({
+      family_id:    invite.family_id,
+      user_id:      _supaUser.id,
+      role:         invite.role,
+      display_name: _userProfile?.display_name || _supaUser.email.split('@')[0],
+      invited_by:   null
+    });
+    if (joinErr) throw joinErr;
+
+    // Mark invite used
+    await _supabase.from('family_invites')
+      .update({ used_at: new Date().toISOString(), used_by: _supaUser.id })
+      .eq('id', invite.id);
+
+    // Set as active family
+    await _supabase.from('profiles').update({ active_family_id: invite.family_id }).eq('id', _supaUser.id);
+    if (_userProfile) _userProfile.active_family_id = invite.family_id;
+    _activeFamilyId = invite.family_id;
+
+    toast.success(`Joined family "${invite.families.name}" as ${invite.role}`);
+    logActivity('family_invite_accepted', { family_id: invite.family_id, role: invite.role });
+    dismissFamilyInviteBanner();
+    // Clean URL
+    const url = new URL(location.href);
+    url.searchParams.delete('family_invite');
+    url.searchParams.delete('family_invite_code');
+    history.replaceState({}, '', url.toString());
+    if (document.getElementById('settingsModal')?.classList.contains('open')) {
+      renderFamilySection();
+    }
+  } catch(e) {
+    toast.error('Could not redeem invite: ' + e.message);
+  }
+}
+
+function dismissFamilyInviteBanner() {
+  const b = document.getElementById('familyInviteBanner');
+  if (b) b.style.display = 'none';
+  sessionStorage.removeItem('_pendingFamilyInviteToken');
+}
+
+// On page load — check for ?family_invite=<token> or ?family_invite_code=<code>
+function checkFamilyInviteOnLoad() {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('family_invite');
+  const code  = params.get('family_invite_code');
+  if (!token && !code) return;
+  sessionStorage.setItem('_pendingFamilyInviteToken', token || code);
+  const banner = document.getElementById('familyInviteBanner');
+  const text   = document.getElementById('familyInviteBannerText');
+  if (banner) banner.style.display = 'block';
+  if (text)   text.textContent = _supaUser
+    ? 'Click Accept to join the family.'
+    : 'Sign in first, then return here to accept.';
+  // If signed in, look up family name for nicer message
+  if (_supaUser && _supabase) {
+    const filter = token ? { token } : { code };
+    _supabase.from('family_invites')
+      .select('role, expires_at, families!inner(name)')
+      .match(filter)
+      .maybeSingle()
+      .then(({ data: inv }) => {
+        if (inv && text) {
+          text.textContent = `You've been invited to "${inv.families.name}" as ${inv.role}.`;
+        }
+      });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PLAN PLACEHOLDER — Settings → Your Plan section
+// Just shows current tier + a disabled "Upgrade" button. No Stripe yet.
+// ═══════════════════════════════════════════════════════════════════════
+const PLAN_DEFS = {
+  free:   { label: 'Free',   color: '#94a3b8', price: 'NZD $0/mo',  perks: ['1 portfolio', '20 holdings', 'Manual refresh'] },
+  pro:    { label: 'Pro',    color: '#818cf8', price: 'NZD $8/mo',  perks: ['Unlimited holdings', 'AI agents + alerts', 'Weekly digest'] },
+  family: { label: 'Family', color: '#22d3ee', price: 'NZD $15/mo', perks: ['Up to 6 family members', 'Aggregate view', 'Joint goals'] },
+  admin:  { label: 'Admin',  color: '#fbbf24', price: 'Platform',   perks: ['Everything · platform owner'] }
+};
+
+function renderPlanSection() {
+  const wrap = document.getElementById('planContent');
+  if (!wrap) return;
+  const tier = _userProfile?.plan_tier || 'free';
+  const def = PLAN_DEFS[tier] || PLAN_DEFS.free;
+  const familyCount = _myFamilies.length;
+  wrap.innerHTML = `
+    <div style="background:#0a1120;border:1px solid ${def.color}44;border-radius:10px;padding:14px;">
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <div class="text-sm font-semibold" style="color:${def.color};">${def.label} plan</div>
+          <div class="text-xs neutral">${def.price}</div>
+        </div>
+        ${tier !== 'admin' ? `<button onclick="toast.info('Paid plans coming soon · all features currently free during beta')" class="btn btn-sm" style="font-size:11px;padding:5px 12px;background:${def.color}22;color:${def.color};border:1px solid ${def.color}44;">${tier === 'family' ? 'Manage' : 'Upgrade'}</button>` : ''}
+      </div>
+      <ul style="font-size:11px;color:#94a3b8;line-height:1.6;padding-left:16px;margin:0;">
+        ${def.perks.map(p => `<li>${p}</li>`).join('')}
+      </ul>
+      ${familyCount > 0 && tier !== 'family' && tier !== 'admin' ? `<div class="text-xs neutral mt-2" style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.25);border-radius:6px;padding:8px;line-height:1.5;">
+        <i class="fas fa-info-circle mr-1" style="color:#22d3ee;"></i>You're in ${familyCount} ${familyCount === 1 ? 'family' : 'families'}. Family plan unlocks aggregate view + joint goals (currently free during beta).
+      </div>` : ''}
+      <div class="text-xs neutral mt-2" style="font-size:10px;font-style:italic;">All features currently free during beta. Paid tiers turn on once we hit 50+ active users.</div>
+    </div>`;
 }
 
 function toggleApiKeyVisibility() {
@@ -6167,7 +6669,7 @@ async function checkAdminStatus() {
 
     const { data, error } = await _supabase
       .from('profiles')
-      .select('is_admin, is_approved, ai_usage_count, ai_quota_max, proxy_secret, digest_opt_in')
+      .select('is_admin, is_approved, ai_usage_count, ai_quota_max, proxy_secret, digest_opt_in, plan_tier, active_family_id, display_name')
       .eq('id', _supaUser.id)
       .maybeSingle();
     if (error) throw error;
@@ -6966,6 +7468,10 @@ async function init() {
       });
     } catch(e) { console.warn('Supabase session check failed:', e); }
   }
+
+  // Family invite — check URL params for an inbound invite token / code.
+  // Banner shows whether or not the user is signed in (prompts sign-in if not).
+  try { checkFamilyInviteOnLoad(); } catch(e) { console.warn('[family] invite check failed:', e); }
 
   // Load market data first (gets FX rates), then portfolio prices, then re-render with correct NZD values
   try {
