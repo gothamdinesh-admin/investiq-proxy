@@ -1237,22 +1237,33 @@
     <div id="section-performance" style="display:none;">
       <h2 class="text-xl font-bold mb-6">Performance Analysis</h2>
 
-      <!-- Historical snapshot chart -->
+      <!-- Historical snapshot chart with benchmark overlay -->
       <div class="card p-5 mb-6">
-        <div class="flex items-center justify-between mb-4">
-          <div class="section-title"><i class="fas fa-history" style="color:#34d399;"></i> Portfolio Value Over Time</div>
-          <div class="flex gap-1">
-            <button onclick="loadSnapshotChart(30)" class="btn btn-sm btn-secondary">30d</button>
-            <button onclick="loadSnapshotChart(90)" class="btn btn-sm btn-secondary">90d</button>
-            <button onclick="loadSnapshotChart(365)" class="btn btn-sm btn-secondary">1y</button>
-            <button onclick="loadSnapshotChart(3650)" class="btn btn-sm btn-secondary">All</button>
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div class="section-title"><i class="fas fa-history" style="color:#34d399;"></i> Portfolio vs Benchmarks</div>
+          <div class="flex gap-1 flex-wrap">
+            <button data-snap-range="30"   onclick="setSnapshotRange(30)"   class="btn btn-sm btn-secondary">30d</button>
+            <button data-snap-range="90"   onclick="setSnapshotRange(90)"   class="btn btn-sm" style="background:#6366f1;color:white;">90d</button>
+            <button data-snap-range="365"  onclick="setSnapshotRange(365)"  class="btn btn-sm btn-secondary">1y</button>
+            <button data-snap-range="3650" onclick="setSnapshotRange(3650)" class="btn btn-sm btn-secondary">All</button>
           </div>
         </div>
+
+        <!-- Display-mode + benchmark toggle row -->
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <div class="flex gap-1">
+            <button data-snap-mode="return" onclick="setSnapshotMode('return')" class="btn btn-sm" style="background:#6366f1;color:white;font-size:11px;padding:4px 10px;">% Return</button>
+            <button data-snap-mode="value"  onclick="setSnapshotMode('value')"  class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;">NZ$ Value</button>
+          </div>
+          <div id="benchmarkChips" class="flex gap-1 flex-wrap"></div>
+        </div>
+
         <div id="snapshotChartEmpty" class="text-center py-8" style="color:#4a6080;">
           <i class="fas fa-chart-line text-3xl mb-2 block" style="opacity:0.3;"></i>
           <div class="text-sm">Your performance chart will grow here. A snapshot is saved automatically each day you open the app.</div>
         </div>
-        <div style="height:280px;display:none;" id="snapshotChartWrap"><canvas id="snapshotChart"></canvas></div>
+        <div style="height:300px;display:none;" id="snapshotChartWrap"><canvas id="snapshotChart"></canvas></div>
+        <div id="benchmarkMeta" class="text-xs neutral mt-2"></div>
       </div>
 
       <!-- Historical holdings (time-travel view) -->
@@ -4295,13 +4306,108 @@ function _showSectionCore(name, el) {
   if (name === 'tax') refreshFIF();
 }
 
-async function loadSnapshotChart(days = 90) {
-  const history = await loadSnapshotHistory(days);
+// ═══════════════════════════════════════════════════════════════════════
+// BENCHMARK OVERLAY — compare your portfolio's % return against major
+// indices over the chosen time range. Benchmarks fetched via /api/history
+// then normalised to % change from the first day in window so all lines
+// share a common 0% baseline.
+// ═══════════════════════════════════════════════════════════════════════
+const BENCHMARK_DEFS = {
+  nzx50:  { label: 'NZX 50',  symbol: '^NZ50',  color: '#34d399' },
+  spx:    { label: 'S&P 500', symbol: '^GSPC',  color: '#fbbf24' },
+  nasdaq: { label: 'NASDAQ',  symbol: '^IXIC',  color: '#60a5fa' },
+  ftse:   { label: 'FTSE 100',symbol: '^FTSE',  color: '#c084fc' },
+  asx200: { label: 'ASX 200', symbol: '^AXJO',  color: '#f87171' }
+};
+let _benchmarksEnabled = { nzx50: true, spx: true, nasdaq: false, ftse: false, asx200: false };
+let _snapshotDays = 90;
+let _snapshotMode = 'return';   // 'return' (%) or 'value' (NZD)
+let _benchmarkCache = {};       // symbol → { period, points } cached this session
+
+function renderBenchmarkChips() {
+  const wrap = document.getElementById('benchmarkChips');
+  if (!wrap) return;
+  wrap.innerHTML = Object.entries(BENCHMARK_DEFS).map(([k, d]) => {
+    const on = _benchmarksEnabled[k];
+    return `<button onclick="toggleBenchmark('${k}')" class="text-xs"
+      style="padding:4px 9px;border-radius:9999px;cursor:pointer;border:1px solid ${on ? d.color : '#1e2d4a'};background:${on ? d.color + '22' : 'transparent'};color:${on ? d.color : '#4a6080'};font-weight:${on ? '600' : '500'};">
+      ${on ? '<i class="fas fa-check mr-1" style="font-size:9px;"></i>' : ''}${d.label}
+    </button>`;
+  }).join('');
+}
+
+function toggleBenchmark(key) {
+  _benchmarksEnabled[key] = !_benchmarksEnabled[key];
+  renderBenchmarkChips();
+  loadSnapshotChart();
+}
+
+function setSnapshotRange(days) {
+  _snapshotDays = days;
+  document.querySelectorAll('button[data-snap-range]').forEach(b => {
+    const isActive = parseInt(b.dataset.snapRange) === days;
+    b.style.background = isActive ? '#6366f1' : '';
+    b.style.color      = isActive ? 'white' : '';
+    b.classList.toggle('btn-secondary', !isActive);
+  });
+  loadSnapshotChart();
+}
+
+function setSnapshotMode(mode) {
+  _snapshotMode = mode;
+  document.querySelectorAll('button[data-snap-mode]').forEach(b => {
+    const isActive = b.dataset.snapMode === mode;
+    b.style.background = isActive ? '#6366f1' : '';
+    b.style.color      = isActive ? 'white' : '';
+    b.classList.toggle('btn-secondary', !isActive);
+  });
+  loadSnapshotChart();
+}
+
+// Fetch + cache benchmark history (returns array of { date, close }).
+// Caches by symbol+period for the session so flipping toggles is instant.
+async function fetchBenchmarkHistory(symbol, period) {
+  const cacheKey = `${symbol}:${period}`;
+  if (_benchmarkCache[cacheKey]) return _benchmarkCache[cacheKey];
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  try {
+    const res = await fetch(`${proxyBase}/api/history?symbol=${encodeURIComponent(symbol)}&period=${period}`, {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _benchmarkCache[cacheKey] = data.points || [];
+    return _benchmarkCache[cacheKey];
+  } catch(e) {
+    console.warn(`[benchmark] ${symbol} fetch failed:`, e.message);
+    return [];
+  }
+}
+
+// Map "days" range to Yahoo period string for /api/history
+function _daysToPeriod(days) {
+  if (days <= 30) return '1mo';
+  if (days <= 90) return '3mo';
+  if (days <= 180) return '6mo';
+  if (days <= 365) return '1y';
+  if (days <= 730) return '2y';
+  if (days <= 1825) return '5y';
+  return 'max';
+}
+
+async function loadSnapshotChart(days) {
+  if (days != null) _snapshotDays = days;
+  renderBenchmarkChips();
+
+  const history = await loadSnapshotHistory(_snapshotDays);
   const empty = document.getElementById('snapshotChartEmpty');
   const wrap  = document.getElementById('snapshotChartWrap');
+  const meta  = document.getElementById('benchmarkMeta');
   if (!history.length) {
     if (empty) empty.style.display = 'block';
     if (wrap)  wrap.style.display  = 'none';
+    if (meta)  meta.textContent = '';
     return;
   }
   if (empty) empty.style.display = 'none';
@@ -4312,45 +4418,138 @@ async function loadSnapshotChart(days = 90) {
   const values = history.map(h => Number(h.total_value));
   const costs  = history.map(h => Number(h.total_cost));
 
+  // Build datasets based on display mode
+  const datasets = [];
+  if (_snapshotMode === 'value') {
+    // Absolute NZD mode — benchmarks don't make sense here, just value vs cost
+    datasets.push({
+      label: 'Market value',
+      data: values,
+      borderColor: '#34d399',
+      backgroundColor: 'rgba(52,211,153,0.12)',
+      fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4
+    });
+    datasets.push({
+      label: 'Cost basis',
+      data: costs,
+      borderColor: '#818cf8',
+      borderDash: [4, 4],
+      backgroundColor: 'transparent',
+      fill: false, tension: 0.3, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4
+    });
+    if (meta) meta.textContent = 'Showing absolute NZD value — benchmarks hidden (different scales).';
+  } else {
+    // % return mode — everything normalised to start = 0%
+    const portfolioPct = _normaliseToPct(values);
+    datasets.push({
+      label: 'Your portfolio',
+      data: portfolioPct,
+      borderColor: '#34d399',
+      backgroundColor: 'rgba(52,211,153,0.12)',
+      fill: true, tension: 0.3, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4
+    });
+
+    // Fetch active benchmarks in parallel, align dates to portfolio's labels
+    const activeBenchmarks = Object.entries(_benchmarksEnabled)
+      .filter(([k, on]) => on)
+      .map(([k]) => k);
+    const period = _daysToPeriod(_snapshotDays);
+    const benchmarkData = await Promise.all(
+      activeBenchmarks.map(async (key) => {
+        const def = BENCHMARK_DEFS[key];
+        const points = await fetchBenchmarkHistory(def.symbol, period);
+        return { key, def, points };
+      })
+    );
+
+    benchmarkData.forEach(({ key, def, points }) => {
+      if (!points.length) return;
+      // Align: for each portfolio label date, find the closest benchmark close
+      const aligned = labels.map(date => {
+        const exact = points.find(p => p.date === date);
+        if (exact) return exact.close;
+        // Find nearest prior — benchmarks may have gaps (weekends, holidays)
+        const prior = [...points].reverse().find(p => p.date <= date);
+        return prior ? prior.close : null;
+      });
+      const pct = _normaliseToPct(aligned);
+      datasets.push({
+        label: def.label,
+        data: pct,
+        borderColor: def.color,
+        backgroundColor: 'transparent',
+        fill: false, tension: 0.3, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
+        borderDash: [3, 3]
+      });
+    });
+
+    // Meta line — your return vs each enabled benchmark
+    const yourReturn = portfolioPct[portfolioPct.length - 1] || 0;
+    const benchSummaries = benchmarkData
+      .filter(b => b.points.length)
+      .map(b => {
+        const aligned = labels.map(date => {
+          const exact = b.points.find(p => p.date === date);
+          if (exact) return exact.close;
+          const prior = [...b.points].reverse().find(p => p.date <= date);
+          return prior ? prior.close : null;
+        });
+        const pct = _normaliseToPct(aligned);
+        const last = pct[pct.length - 1] || 0;
+        const delta = yourReturn - last;
+        const sign = delta >= 0 ? '+' : '';
+        return `${b.def.label}: ${last >= 0 ? '+' : ''}${last.toFixed(1)}% (you: ${sign}${delta.toFixed(1)}pp)`;
+      });
+    if (meta) {
+      meta.innerHTML = benchSummaries.length
+        ? `Over ${_snapshotDays}d: <b style="color:${yourReturn >= 0 ? '#34d399' : '#f87171'};">your portfolio ${yourReturn >= 0 ? '+' : ''}${yourReturn.toFixed(1)}%</b> · ${benchSummaries.join(' · ')}`
+        : `Over ${_snapshotDays}d: <b style="color:${yourReturn >= 0 ? '#34d399' : '#f87171'};">your portfolio ${yourReturn >= 0 ? '+' : ''}${yourReturn.toFixed(1)}%</b>`;
+    }
+  }
+
   const ctx = document.getElementById('snapshotChart')?.getContext('2d');
   if (!ctx) return;
   if (charts.snapshot) charts.snapshot.destroy();
   charts.snapshot = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Market Value',
-          data: values,
-          borderColor: '#34d399',
-          backgroundColor: 'rgba(52,211,153,0.12)',
-          fill: true, tension: 0.3, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4
-        },
-        {
-          label: 'Cost Basis',
-          data: costs,
-          borderColor: '#818cf8',
-          borderDash: [4, 4],
-          backgroundColor: 'transparent',
-          fill: false, tension: 0.3, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4
-        }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 11 } } },
+        legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
         tooltip: {
-          callbacks: { label: (c) => `${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()}` }
+          callbacks: {
+            label: (c) => _snapshotMode === 'value'
+              ? `${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()}`
+              : `${c.dataset.label}: ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)}%`
+          }
         }
       },
       scales: {
         x: { ticks: { color: '#4a6080', maxTicksLimit: 8 }, grid: { color: '#1a2540' } },
-        y: { ticks: { color: '#4a6080', callback: v => sym + Number(v).toLocaleString() }, grid: { color: '#1a2540' } }
+        y: {
+          ticks: {
+            color: '#4a6080',
+            callback: v => _snapshotMode === 'value'
+              ? sym + Number(v).toLocaleString()
+              : (v >= 0 ? '+' : '') + Number(v).toFixed(0) + '%'
+          },
+          grid: { color: '#1a2540' }
+        }
       }
     }
+  });
+}
+
+// Normalise an array of values to % change from the first non-null point.
+function _normaliseToPct(values) {
+  let baseline = null;
+  return values.map(v => {
+    if (v == null || isNaN(v)) return null;
+    if (baseline == null) baseline = v;
+    if (!baseline) return 0;
+    return ((v - baseline) / baseline) * 100;
   });
 }
 
