@@ -1849,6 +1849,23 @@
           <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
         </select>
       </div>
+      <!-- ═══════════ EMAIL DIGEST ═══════════ -->
+      <div id="digestSection" style="display:none;">
+        <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-envelope" style="color:#818cf8;"></i>
+            <span class="text-xs font-semibold" style="color:#818cf8;letter-spacing:0.5px;text-transform:uppercase;">Weekly Email Digest</span>
+          </div>
+          <label style="display:flex;align-items:center;gap:10px;padding:12px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;cursor:pointer;">
+            <input type="checkbox" id="settingDigestOptIn" style="width:18px;height:18px;flex-shrink:0;cursor:pointer;">
+            <div style="flex:1;">
+              <div class="text-sm" style="color:#c8d6ef;">Send me a weekly summary every Monday morning</div>
+              <div class="text-xs" style="color:#64748b;margin-top:3px;">Total value · week change · top + worst mover · holdings count. Sent at 6 AM NZT, opt out anytime.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
       <!-- ═══════════ ACCOUNT INFO — visible when signed in ═══════════ -->
       <div id="accountInfoSection" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
@@ -3672,6 +3689,13 @@ function populateSettingsForm() {
   document.getElementById('settingName').value = state.settings.name || '';
   document.getElementById('settingCurrency').value = state.settings.currency || 'NZD';
 
+  // Weekly digest opt-in — show only when signed in. Source is the profile
+  // column (server truth); we mirror to state.settings for local display.
+  const digestSection = document.getElementById('digestSection');
+  const digestToggle  = document.getElementById('settingDigestOptIn');
+  if (digestSection) digestSection.style.display = _supaUser ? 'block' : 'none';
+  if (digestToggle)  digestToggle.checked = !!_userProfile?.digest_opt_in;
+
   // Account info section — visible to ALL signed-in users
   const accountSection = document.getElementById('accountInfoSection');
   const settingsEmail  = document.getElementById('settingsUserEmail');
@@ -3789,6 +3813,27 @@ function saveSettings() {
     if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
     initSupabase(); // re-init if credentials changed
     logActivity('settings_change', { adminFieldsModified: true });
+  }
+
+  // Persist digest opt-in to the profiles row (server truth). Fire-and-forget
+  // — failure here shouldn't block the rest of saveSettings from succeeding.
+  const digestToggle = document.getElementById('settingDigestOptIn');
+  if (digestToggle && _supabase && _supaUser) {
+    const newVal = !!digestToggle.checked;
+    const oldVal = !!_userProfile?.digest_opt_in;
+    if (newVal !== oldVal) {
+      _supabase.from('profiles')
+        .update({ digest_opt_in: newVal })
+        .eq('id', _supaUser.id)
+        .then(({ error }) => {
+          if (error) {
+            toast.warning('Digest preference didn\'t save: ' + error.message);
+          } else {
+            _userProfile.digest_opt_in = newVal;
+            logActivity('settings_change', { digest_opt_in: newVal });
+          }
+        });
+    }
   }
 
   updateAuthUI();
@@ -5175,7 +5220,7 @@ async function checkAdminStatus() {
 
     const { data, error } = await _supabase
       .from('profiles')
-      .select('is_admin, is_approved, ai_usage_count, ai_quota_max, proxy_secret')
+      .select('is_admin, is_approved, ai_usage_count, ai_quota_max, proxy_secret, digest_opt_in')
       .eq('id', _supaUser.id)
       .maybeSingle();
     if (error) throw error;
