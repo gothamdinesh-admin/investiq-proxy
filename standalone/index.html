@@ -671,6 +671,27 @@
   </div>
 </div>
 
+<!-- ═══════════ REUSABLE PROMPT/CONFIRM/INFO MODAL ═══════════
+     Replaces native prompt(), confirm(), alert() with a styled modal that
+     matches the rest of the app. Driven by showFormModal() / showConfirm()
+     / showInfo() helpers. Fields + buttons are injected dynamically. -->
+<div class="modal-overlay" id="promptModal" onclick="closeModalBg(event,'promptModal')">
+  <div class="modal" style="max-width:460px;">
+    <div class="flex items-start justify-between mb-3 gap-3">
+      <div class="flex items-center gap-2 flex-1" style="min-width:0;">
+        <i id="promptModalIcon" class="fas fa-question-circle" style="color:#818cf8;font-size:18px;"></i>
+        <h2 class="text-lg font-bold" id="promptModalTitle" style="min-width:0;">Prompt</h2>
+      </div>
+      <button onclick="closeModal('promptModal');_promptModalCallback?.(null);" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+    </div>
+    <div id="promptModalDescription" class="text-sm neutral mb-4" style="line-height:1.5;"></div>
+    <form id="promptModalForm" onsubmit="event.preventDefault();_submitPromptModal();">
+      <div id="promptModalFields"></div>
+      <div id="promptModalActions" class="flex gap-2 mt-5 flex-wrap"></div>
+    </form>
+  </div>
+</div>
+
 <!-- AI QUOTA EXHAUSTED MODAL — shown when non-admin hits quota -->
 <div class="modal-overlay" id="quotaExhaustedModal" onclick="closeModalBg(event,'quotaExhaustedModal')">
   <div class="modal" style="max-width:540px;position:relative;">
@@ -1012,6 +1033,7 @@
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
+      <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:#22d3ee;"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
       <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
@@ -1531,6 +1553,27 @@
           This sits behind the FIF check in priority — divs aren't useful until you can also see them on the dashboard.
           If you want it sooner, drop me a note in the Admin → Diagnostics panel.
         </div>
+      </div>
+    </div>
+
+    <!-- FAMILY SECTION (v0.7b — aggregate household view) -->
+    <div id="section-family" style="display:none;">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-users" style="color:#22d3ee;"></i><span id="familyViewName">Family</span>
+          </h2>
+          <div class="text-xs neutral mt-1">Combined household view across all members. Adults see everyone's portfolios; teens/children/viewers see only their own.</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="familyViewPicker" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="switchFamilyView(this.value)"></select>
+          <button onclick="refreshFamilyView()" class="btn btn-sm btn-secondary" title="Refresh from cloud"><i class="fas fa-sync-alt"></i></button>
+          <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Manage family"><i class="fas fa-cog mr-1"></i>Manage</button>
+        </div>
+      </div>
+
+      <div id="familyViewContent">
+        <div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading household…</div>
       </div>
     </div>
 
@@ -2462,6 +2505,189 @@ const toast = (() => {
     warning: (msg, d) => show('warning', msg, d)
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+// REUSABLE PROMPT / CONFIRM / INFO MODAL
+//
+// Replaces native prompt(), confirm(), alert() with a styled modal driven
+// by #promptModal in the HTML. Returns a Promise resolving to either the
+// form values (or true for confirm), or null (for cancel / close).
+//
+// API:
+//   showFormModal({ title, icon, description, fields: [{name, label, type,
+//                   placeholder, value, required, options}], submitLabel,
+//                   submitVariant, cancelLabel })
+//     → Promise<{[name]: value}> | null on cancel
+//
+//   showConfirm({ title, icon, description, confirmLabel, confirmVariant,
+//                 cancelLabel })
+//     → Promise<boolean>
+//
+//   showInfo({ title, icon, description, actions, body })
+//     → Promise<string|null>  (returns the action key clicked, or null)
+//
+// Each call rejects any previously-pending prompt with null before opening
+// to avoid stacking. Escape key + close X always resolve null.
+// ═══════════════════════════════════════════════════════════════════════
+let _promptModalCallback = null;
+
+function _submitPromptModal() {
+  if (!_promptModalCallback) return;
+  // Collect field values
+  const form = document.getElementById('promptModalForm');
+  const fd = new FormData(form);
+  const data = {};
+  fd.forEach((v, k) => { data[k] = (typeof v === 'string') ? v.trim() : v; });
+  // Required check
+  const requiredMissing = (form.querySelectorAll('[data-required]') || []);
+  for (const el of requiredMissing) {
+    if (!data[el.name]) {
+      el.style.borderColor = '#f87171';
+      el.focus();
+      return;
+    }
+  }
+  const cb = _promptModalCallback;
+  _promptModalCallback = null;
+  closeModal('promptModal');
+  cb(data);
+}
+
+function showFormModal(opts) {
+  return new Promise((resolve) => {
+    // Reject any previous pending modal
+    if (_promptModalCallback) { _promptModalCallback(null); _promptModalCallback = null; }
+
+    document.getElementById('promptModalTitle').textContent = opts.title || 'Prompt';
+    const iconEl = document.getElementById('promptModalIcon');
+    iconEl.className = 'fas ' + (opts.icon || 'fa-question-circle');
+    iconEl.style.color = opts.iconColor || '#818cf8';
+    iconEl.style.fontSize = '18px';
+
+    const desc = document.getElementById('promptModalDescription');
+    desc.innerHTML = opts.description || '';
+    desc.style.display = opts.description ? '' : 'none';
+
+    // Build fields
+    const fieldsHtml = (opts.fields || []).map(f => {
+      const id = 'pm_' + f.name;
+      const req = f.required ? 'required data-required' : '';
+      const val = f.value != null ? String(f.value).replace(/"/g, '&quot;') : '';
+      if (f.type === 'select') {
+        return `<div style="margin-bottom:12px;">
+          ${f.label ? `<label for="${id}" style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px;">${_escape(f.label)}</label>` : ''}
+          <select id="${id}" name="${f.name}" class="input" ${req}>
+            ${(f.options || []).map(o => {
+              const ov = typeof o === 'string' ? o : o.value;
+              const ol = typeof o === 'string' ? o : o.label;
+              const sel = (f.value === ov) ? 'selected' : '';
+              return `<option value="${_escape(ov)}" ${sel}>${_escape(ol)}</option>`;
+            }).join('')}
+          </select>
+          ${f.hint ? `<div style="font-size:11px;color:#4a6080;margin-top:4px;">${_escape(f.hint)}</div>` : ''}
+        </div>`;
+      }
+      if (f.type === 'textarea') {
+        return `<div style="margin-bottom:12px;">
+          ${f.label ? `<label for="${id}" style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px;">${_escape(f.label)}</label>` : ''}
+          <textarea id="${id}" name="${f.name}" class="input" rows="${f.rows || 3}" placeholder="${_escape(f.placeholder || '')}" ${req}>${_escape(val)}</textarea>
+          ${f.hint ? `<div style="font-size:11px;color:#4a6080;margin-top:4px;">${_escape(f.hint)}</div>` : ''}
+        </div>`;
+      }
+      if (f.type === 'static') {
+        return `<div style="margin-bottom:12px;padding:12px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;${f.style || ''}">${f.html || _escape(f.value || '')}</div>`;
+      }
+      // default: text / email / number / password
+      return `<div style="margin-bottom:12px;">
+        ${f.label ? `<label for="${id}" style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px;">${_escape(f.label)}</label>` : ''}
+        <input type="${f.type || 'text'}" id="${id}" name="${f.name}" class="input" placeholder="${_escape(f.placeholder || '')}" value="${val}" ${req} autocomplete="${f.autocomplete || 'off'}">
+        ${f.hint ? `<div style="font-size:11px;color:#4a6080;margin-top:4px;">${_escape(f.hint)}</div>` : ''}
+      </div>`;
+    }).join('');
+    document.getElementById('promptModalFields').innerHTML = fieldsHtml;
+
+    // Build buttons
+    const submitVariant = opts.submitVariant || 'primary';
+    const submitLabel   = opts.submitLabel   || 'OK';
+    const cancelLabel   = opts.cancelLabel   || 'Cancel';
+    document.getElementById('promptModalActions').innerHTML = `
+      <button type="submit" class="btn btn-${submitVariant} flex-1" style="min-width:120px;">${_escape(submitLabel)}</button>
+      <button type="button" class="btn btn-secondary" onclick="closeModal('promptModal');_promptModalCallback?.(null);">${_escape(cancelLabel)}</button>
+    `;
+
+    _promptModalCallback = resolve;
+    openModal('promptModal');
+
+    // Focus the first input after the modal opens
+    setTimeout(() => {
+      const first = document.querySelector('#promptModalFields input:not([type="hidden"]), #promptModalFields select, #promptModalFields textarea');
+      first?.focus();
+    }, 80);
+  });
+}
+
+// Styled replacement for confirm() — returns Promise<boolean>
+function showConfirm(opts) {
+  return new Promise((resolve) => {
+    if (_promptModalCallback) { _promptModalCallback(null); _promptModalCallback = null; }
+
+    document.getElementById('promptModalTitle').textContent = opts.title || 'Confirm';
+    const iconEl = document.getElementById('promptModalIcon');
+    iconEl.className = 'fas ' + (opts.icon || 'fa-question-circle');
+    iconEl.style.color = opts.iconColor || (opts.danger ? '#f87171' : '#fbbf24');
+
+    const desc = document.getElementById('promptModalDescription');
+    desc.innerHTML = opts.description || '';
+    desc.style.display = opts.description ? '' : 'none';
+
+    document.getElementById('promptModalFields').innerHTML = '';
+
+    const variant = opts.confirmVariant || (opts.danger ? 'danger' : 'primary');
+    document.getElementById('promptModalActions').innerHTML = `
+      <button type="button" class="btn btn-${variant} flex-1" style="min-width:120px;" onclick="_resolvePromptModal(true);">${_escape(opts.confirmLabel || 'Confirm')}</button>
+      <button type="button" class="btn btn-secondary" onclick="_resolvePromptModal(false);">${_escape(opts.cancelLabel || 'Cancel')}</button>
+    `;
+
+    _promptModalCallback = resolve;
+    openModal('promptModal');
+  });
+}
+
+// Helper for non-form button resolution
+function _resolvePromptModal(value) {
+  if (!_promptModalCallback) return;
+  const cb = _promptModalCallback;
+  _promptModalCallback = null;
+  closeModal('promptModal');
+  cb(value);
+}
+
+// Styled replacement for alert() — with optional actions
+// Returns the key of the action clicked, or null on close
+function showInfo(opts) {
+  return new Promise((resolve) => {
+    if (_promptModalCallback) { _promptModalCallback(null); _promptModalCallback = null; }
+
+    document.getElementById('promptModalTitle').textContent = opts.title || 'Info';
+    const iconEl = document.getElementById('promptModalIcon');
+    iconEl.className = 'fas ' + (opts.icon || 'fa-info-circle');
+    iconEl.style.color = opts.iconColor || '#60a5fa';
+
+    const desc = document.getElementById('promptModalDescription');
+    desc.innerHTML = opts.description || '';
+    desc.style.display = opts.description ? '' : 'none';
+
+    document.getElementById('promptModalFields').innerHTML = opts.body || '';
+
+    const actions = opts.actions || [{ key: 'ok', label: 'Got it', variant: 'primary' }];
+    document.getElementById('promptModalActions').innerHTML = actions.map(a =>
+      `<button type="button" class="btn btn-${a.variant || 'secondary'}${a.flex ? ' flex-1' : ''}" style="${a.flex ? 'min-width:120px;' : ''}" onclick="_resolvePromptModal('${_escape(a.key)}');">${_escape(a.label)}</button>`
+    ).join('');
+
+    _promptModalCallback = resolve;
+    openModal('promptModal');
+  });
+}
 
 // ===== CONFIG =====
 // CURRENCY_SYMBOLS, ASSET_COLORS, CORS_PROXIES moved to js/00-config.js
@@ -4604,8 +4830,24 @@ async function switchActiveFamily(familyId) {
 }
 
 async function createFamilyPrompt() {
-  const name = prompt('Family name?\n\ne.g. "The Smiths", "Muthusamy Whānau", "Retirement Trust"');
-  if (!name || !name.trim()) return;
+  const result = await showFormModal({
+    title: 'Create a family',
+    icon: 'fa-users',
+    iconColor: '#22d3ee',
+    description: 'Each member keeps their own login + portfolio — the family layer adds shared visibility for adults and aggregate household views.',
+    fields: [{
+      name: 'name',
+      label: 'Family name',
+      placeholder: 'e.g. The Smiths, Muthusamy Whānau, Retirement Trust',
+      required: true,
+      hint: 'Visible to everyone you invite. Can be anything.'
+    }],
+    submitLabel: 'Create family',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const name = result.name?.trim();
+  if (!name) return;
   try {
     // The DB trigger auto-adds the creator as 'owner' in family_members
     // (migration 008). created_by defaults to auth.uid() — no need to
@@ -4628,8 +4870,8 @@ async function createFamilyPrompt() {
     await _supabase.from('profiles').update({ active_family_id: data.id }).eq('id', _supaUser.id);
     _userProfile.active_family_id = data.id;
     _activeFamilyId = data.id;
-    toast.success(`Created family "${name.trim()}"`);
-    logActivity('family_created', { family_id: data.id, name: name.trim() });
+    toast.success(`Created family "${name}"`);
+    logActivity('family_created', { family_id: data.id, name });
     renderFamilySection();
   } catch(e) {
     toast.error('Could not create family: ' + e.message);
@@ -4637,14 +4879,45 @@ async function createFamilyPrompt() {
 }
 
 async function inviteFamilyMemberPrompt(familyId) {
-  const email = prompt('Email address to invite?');
-  if (!email || !email.trim()) return;
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) {
-    return toast.warning('That doesn\'t look like a valid email');
+  const result = await showFormModal({
+    title: 'Invite by email',
+    icon: 'fa-envelope',
+    iconColor: '#60a5fa',
+    description: 'They get a styled email with an accept link plus a 6-char backup code. The link expires in 7 days.',
+    fields: [
+      {
+        name: 'email',
+        type: 'email',
+        label: 'Email address',
+        placeholder: 'spouse@example.com',
+        required: true,
+        autocomplete: 'email'
+      },
+      {
+        name: 'role',
+        type: 'select',
+        label: 'Their role',
+        value: 'adult',
+        options: [
+          { value: 'adult',  label: 'Adult — full peer (sees all family data)' },
+          { value: 'teen',   label: 'Teen — own portfolio + family total only' },
+          { value: 'child',  label: 'Child — custodial (adults manage on their behalf)' },
+          { value: 'viewer', label: 'Viewer — read-only (e.g. accountant)' }
+        ],
+        hint: 'Hierarchical visibility: adults see everyone, teens/children/viewers see only themselves.'
+      }
+    ],
+    submitLabel: 'Send invite',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const email = (result.email || '').trim().toLowerCase();
+  const role  = (result.role  || 'adult').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return toast.warning("That doesn't look like a valid email");
   }
-  const role = prompt('Role? Choose one: adult / teen / child / viewer\n\n• adult — full peer (sees everyone)\n• teen — own portfolio + family total\n• child — custodial (you manage for them)\n• viewer — read-only', 'adult');
-  if (!role || !['adult','teen','child','viewer'].includes(role.trim().toLowerCase())) {
-    return toast.warning('Invalid role. Try again.');
+  if (!['adult','teen','child','viewer'].includes(role)) {
+    return toast.warning('Invalid role');
   }
   try {
     const { data: invite, error } = await _supabase
@@ -4652,8 +4925,8 @@ async function inviteFamilyMemberPrompt(familyId) {
       .insert({
         family_id:  familyId,
         invited_by: _supaUser.id,
-        email:      email.trim().toLowerCase(),
-        role:       role.trim().toLowerCase()
+        email,
+        role
       })
       .select()
       .single();
@@ -4681,7 +4954,7 @@ async function inviteFamilyMemberPrompt(familyId) {
     } catch(e) {
       toast.warning(`Invite saved but email failed: ${e.message}. Share the code instead: ${invite.code}`);
     }
-    logActivity('family_invite_sent', { family_id: familyId, email: email.trim(), role });
+    logActivity('family_invite_sent', { family_id: familyId, email, role });
     loadFamilyMembers(familyId);
   } catch(e) {
     toast.error('Could not create invite: ' + e.message);
@@ -4689,8 +4962,31 @@ async function inviteFamilyMemberPrompt(familyId) {
 }
 
 async function generateFamilyInviteCode(familyId) {
-  const role = prompt('Role for whoever joins with this code?\n\nadult / teen / child / viewer', 'adult');
-  if (!role || !['adult','teen','child','viewer'].includes(role.trim().toLowerCase())) return;
+  const result = await showFormModal({
+    title: 'Generate invite code',
+    icon: 'fa-key',
+    iconColor: '#fbbf24',
+    description: 'A 6-character code to share verbally. No email is sent — the recipient just types the code into Settings → Family → Enter code after signing up.',
+    fields: [{
+      name: 'role',
+      type: 'select',
+      label: "Their role when they join",
+      value: 'adult',
+      options: [
+        { value: 'adult',  label: 'Adult — full peer (sees all family data)' },
+        { value: 'teen',   label: 'Teen — own portfolio + family total only' },
+        { value: 'child',  label: 'Child — custodial (adults manage on their behalf)' },
+        { value: 'viewer', label: 'Viewer — read-only (e.g. accountant)' }
+      ]
+    }],
+    submitLabel: 'Generate code',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const role = (result.role || 'adult').trim().toLowerCase();
+  if (!['adult','teen','child','viewer'].includes(role)) {
+    return toast.warning('Invalid role');
+  }
   try {
     const { data: invite, error } = await _supabase
       .from('family_invites')
@@ -4698,12 +4994,38 @@ async function generateFamilyInviteCode(familyId) {
         family_id:  familyId,
         invited_by: _supaUser.id,
         email:      null,    // code-only invite
-        role:       role.trim().toLowerCase()
+        role
       })
       .select()
       .single();
     if (error) throw error;
-    alert(`Invite code generated:\n\n  ${invite.code}\n\nShare this verbally. It expires in 7 days. The recipient signs up to InvestIQ then enters this code in Settings → Family → Enter code.`);
+
+    // Display the generated code in a nice modal with copy button
+    const copyUrl = `${location.origin}${location.pathname}?family_invite_code=${encodeURIComponent(invite.code)}`;
+    await showInfo({
+      title: 'Code generated',
+      icon: 'fa-key',
+      iconColor: '#fbbf24',
+      description: 'Share verbally with the new member. They sign up to InvestIQ, then enter this code in Settings → Family. Expires in 7 days.',
+      body: `
+        <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:10px;padding:18px;text-align:center;margin-bottom:10px;">
+          <div style="font-family:'SF Mono',Consolas,monospace;font-size:32px;color:#fbbf24;letter-spacing:6px;font-weight:700;">${_escape(invite.code)}</div>
+          <div style="font-size:11px;color:#7a9cc0;margin-top:8px;">Role: ${role}</div>
+        </div>
+      `,
+      actions: [
+        { key: 'copy_code', label: '<i class="fas fa-copy mr-1"></i>Copy code', variant: 'secondary' },
+        { key: 'copy_link', label: '<i class="fas fa-link mr-1"></i>Copy link', variant: 'secondary' },
+        { key: 'done',      label: 'Done', variant: 'primary', flex: true }
+      ]
+    }).then(action => {
+      if (action === 'copy_code') {
+        navigator.clipboard?.writeText(invite.code).then(() => toast.success('Code copied'));
+      } else if (action === 'copy_link') {
+        navigator.clipboard?.writeText(copyUrl).then(() => toast.success('Invite link copied'));
+      }
+    });
+
     logActivity('family_invite_sent', { family_id: familyId, code_only: true, role });
     loadFamilyMembers(familyId);
   } catch(e) {
@@ -4721,7 +5043,16 @@ function copyInviteLink(code, email) {
 }
 
 async function revokeFamilyInvite(inviteId) {
-  if (!confirm('Revoke this invite? The recipient won\'t be able to use it.')) return;
+  const ok = await showConfirm({
+    title: 'Revoke invite?',
+    icon: 'fa-times-circle',
+    iconColor: '#f87171',
+    description: "The recipient won't be able to use it. If they already accepted, this won't undo that — it just kills the unused token.",
+    confirmLabel: 'Revoke',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
   try {
     const { error } = await _supabase.from('family_invites').delete().eq('id', inviteId);
     if (error) throw error;
@@ -4733,10 +5064,18 @@ async function revokeFamilyInvite(inviteId) {
 }
 
 async function removeFamilyMember(familyId, userId, email, isSelf) {
-  const msg = isSelf
-    ? `Leave family? You'll lose access to family data (but your own portfolio stays intact).`
-    : `Remove ${email} from the family? They keep their own portfolio, just lose family visibility.`;
-  if (!confirm(msg)) return;
+  const ok = await showConfirm({
+    title: isSelf ? 'Leave family?' : `Remove ${email}?`,
+    icon: isSelf ? 'fa-sign-out-alt' : 'fa-user-times',
+    iconColor: '#f87171',
+    description: isSelf
+      ? "You'll lose access to family data, but your own portfolio stays intact. You can be re-invited later."
+      : "They keep their own portfolio — they just lose family visibility. They can be re-invited later.",
+    confirmLabel: isSelf ? 'Leave family' : 'Remove member',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
   try {
     const { error } = await _supabase
       .from('family_members')
@@ -4759,9 +5098,25 @@ async function removeFamilyMember(familyId, userId, email, isSelf) {
 
 // Invite-code redemption flow — user enters the 6-char code shared verbally
 async function redeemFamilyCodePrompt() {
-  const code = prompt('Enter your 6-character invite code:');
-  if (!code || !code.trim()) return;
-  return redeemFamilyInvite({ code: code.trim().toUpperCase() });
+  const result = await showFormModal({
+    title: 'Enter invite code',
+    icon: 'fa-key',
+    iconColor: '#fbbf24',
+    description: 'Someone shared a 6-character family invite code with you? Type it in here to join their family.',
+    fields: [{
+      name: 'code',
+      label: 'Invite code',
+      placeholder: 'ABC123',
+      required: true,
+      hint: 'Codes are 6 characters, letters + numbers. Case-insensitive.'
+    }],
+    submitLabel: 'Join family',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const code = (result.code || '').trim().toUpperCase();
+  if (!code) return;
+  return redeemFamilyInvite({ code });
 }
 
 // Token-based redemption — called when ?family_invite=<token> hits the page
@@ -4847,6 +5202,281 @@ function checkFamilyInviteOnLoad() {
         }
       });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// FAMILY AGGREGATE VIEW (v0.7b)
+//
+// New "Family" page section showing the entire household at a glance.
+// Per-member cards (their value, return, top holding), household total,
+// allocation by member chart. Adults see everyone; teens/children/viewers
+// see only themselves (RLS enforces this — same query returns less data).
+// ═══════════════════════════════════════════════════════════════════════
+let _familyViewChartObj = null;
+
+async function loadFamilyAggregateView() {
+  const wrap = document.getElementById('familyViewContent');
+  const picker = document.getElementById('familyViewPicker');
+  const nameEl = document.getElementById('familyViewName');
+  if (!_supaUser || !_supabase) {
+    wrap.innerHTML = `<div class="text-center py-10 neutral text-sm">Sign in to see family data.</div>`;
+    return;
+  }
+  if (!_myFamilies?.length) {
+    // Try loading the family list first
+    await renderFamilySection().catch(() => {});
+  }
+  if (!_myFamilies?.length) {
+    wrap.innerHTML = `<div class="card p-8 text-center">
+      <i class="fas fa-users text-3xl mb-3 block" style="opacity:0.3;"></i>
+      <div class="text-sm" style="color:#c8d6ef;margin-bottom:4px;">You're not in a family yet</div>
+      <div class="text-xs neutral mb-4">Create one to track your household's combined portfolio.</div>
+      <button onclick="openModal('settingsModal')" class="btn btn-primary"><i class="fas fa-cog mr-1"></i>Open Settings</button>
+    </div>`;
+    return;
+  }
+
+  // Multi-family picker
+  if (picker) {
+    picker.innerHTML = _myFamilies.map(f =>
+      `<option value="${f.id}" ${f.id === _activeFamilyId ? 'selected' : ''}>${_escape(f.name)}</option>`
+    ).join('');
+    picker.style.display = _myFamilies.length > 1 ? '' : 'none';
+  }
+  const fam = _myFamilies.find(f => f.id === _activeFamilyId) || _myFamilies[0];
+  _activeFamilyId = fam.id;
+  if (nameEl) nameEl.textContent = fam.name;
+
+  wrap.innerHTML = `<div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading household data…</div>`;
+
+  try {
+    // 1. Fetch family roster (limited by RLS)
+    const { data: members, error: memErr } = await _supabase
+      .from('family_members')
+      .select('user_id, role, display_name, joined_at')
+      .eq('family_id', fam.id)
+      .order('joined_at');
+    if (memErr) throw memErr;
+
+    // 2. Fetch profile emails for each member (RLS allows this for adults)
+    const userIds = members.map(m => m.user_id);
+    const { data: profs } = await _supabase
+      .from('profiles')
+      .select('id, email, display_name, plan_tier')
+      .in('id', userIds);
+    const profById = {};
+    (profs || []).forEach(p => { profById[p.id] = p; });
+
+    // 3. Fetch each member's most-recent snapshot (for value + cost + holdings count)
+    // RLS lets adults see all family members' snapshots; teens/children/viewers see only their own.
+    const { data: snaps } = await _supabase
+      .from('investiq_snapshots')
+      .select('user_id, snapshot_date, total_value, total_cost, breakdown')
+      .in('user_id', userIds)
+      .order('snapshot_date', { ascending: false });
+
+    // Group by user_id, keep the latest only
+    const latestByUser = {};
+    (snaps || []).forEach(s => {
+      if (!latestByUser[s.user_id]) latestByUser[s.user_id] = s;
+    });
+
+    // Build per-member rows
+    const sym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+    const memberRows = members.map(m => {
+      const prof = profById[m.user_id] || {};
+      const snap = latestByUser[m.user_id];
+      const totalValue = Number(snap?.total_value || 0);
+      const totalCost  = Number(snap?.total_cost  || 0);
+      const gain       = totalValue - totalCost;
+      const gainPct    = totalCost > 0 ? (gain / totalCost) * 100 : 0;
+      const holdings   = (snap?.breakdown?.holdings || []);
+      const topHolding = [...holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0))[0];
+      return {
+        userId: m.user_id,
+        role:   m.role,
+        name:   m.display_name || prof.display_name || prof.email?.split('@')[0] || 'Member',
+        email:  prof.email || '',
+        planTier: prof.plan_tier || 'free',
+        isSelf:   m.user_id === _supaUser.id,
+        snapDate: snap?.snapshot_date,
+        totalValue, totalCost, gain, gainPct,
+        holdingsCount: holdings.length,
+        topHolding,
+        hasData: !!snap
+      };
+    });
+
+    // Aggregate totals (only over members with data)
+    const visibleWithData = memberRows.filter(m => m.hasData);
+    const householdValue = visibleWithData.reduce((s, m) => s + m.totalValue, 0);
+    const householdCost  = visibleWithData.reduce((s, m) => s + m.totalCost, 0);
+    const householdGain  = householdValue - householdCost;
+    const householdGainPct = householdCost > 0 ? (householdGain / householdCost) * 100 : 0;
+    const totalHoldings  = visibleWithData.reduce((s, m) => s + m.holdingsCount, 0);
+
+    // Privacy note if user can only see themselves (e.g. teen/child/viewer)
+    const onlySeeSelf = memberRows.length > 1 && visibleWithData.every(m => m.isSelf);
+    const noDataYet   = visibleWithData.length === 0;
+
+    // ── Render ────────────────────────────────────────────────────
+    wrap.innerHTML = `
+      <!-- Household summary cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div class="metric-card">
+          <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Household value</div>
+          <div class="text-2xl font-bold mt-1" style="color:#22d3ee;">${sym}${fmt(householdValue)}</div>
+          <div class="text-xs neutral mt-1">Across ${visibleWithData.length} member${visibleWithData.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Household return</div>
+          <div class="text-2xl font-bold mt-1 ${householdGain >= 0 ? 'pos' : 'neg'}">${householdGain >= 0 ? '+' : ''}${sym}${fmt(Math.abs(householdGain))}</div>
+          <div class="text-xs ${householdGain >= 0 ? 'pos' : 'neg'} mt-1">${householdGain >= 0 ? '+' : ''}${fmt(Math.abs(householdGainPct))}%</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Members</div>
+          <div class="text-2xl font-bold mt-1" style="color:#c8d6ef;">${memberRows.length}</div>
+          <div class="text-xs neutral mt-1">${memberRows.filter(m => m.role === 'owner').length} owner · ${memberRows.filter(m => m.role === 'adult').length} adult${memberRows.filter(m => m.role === 'adult').length === 1 ? '' : 's'}${memberRows.filter(m => m.role === 'teen').length ? ' · ' + memberRows.filter(m => m.role === 'teen').length + ' teen' : ''}${memberRows.filter(m => m.role === 'child').length ? ' · ' + memberRows.filter(m => m.role === 'child').length + ' child' : ''}${memberRows.filter(m => m.role === 'viewer').length ? ' · ' + memberRows.filter(m => m.role === 'viewer').length + ' viewer' : ''}</div>
+        </div>
+        <div class="metric-card">
+          <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Total holdings</div>
+          <div class="text-2xl font-bold mt-1" style="color:#818cf8;">${totalHoldings}</div>
+          <div class="text-xs neutral mt-1">Across the household</div>
+        </div>
+      </div>
+
+      ${onlySeeSelf ? `<div class="card p-3 mb-4" style="background:rgba(168,139,250,0.08);border:1px solid rgba(168,139,250,0.25);">
+        <div class="text-xs" style="color:#a78bfa;line-height:1.5;">
+          <i class="fas fa-shield-alt mr-1"></i><b>Privacy note:</b> Your role (${fam.role}) only allows viewing your own data. Other family members' portfolios remain private.
+        </div>
+      </div>` : ''}
+
+      ${noDataYet ? `<div class="card p-6 text-center mb-4">
+        <i class="fas fa-clock text-3xl mb-2 block" style="opacity:0.3;"></i>
+        <div class="text-sm" style="color:#c8d6ef;margin-bottom:4px;">No snapshots yet</div>
+        <div class="text-xs neutral">Daily snapshots are recorded automatically when members open the app. Come back tomorrow.</div>
+      </div>` : ''}
+
+      <!-- Allocation by member chart -->
+      ${visibleWithData.length > 1 ? `
+        <div class="card p-5 mb-6">
+          <div class="section-title mb-3"><i class="fas fa-chart-pie" style="color:#22d3ee;"></i> Allocation by member</div>
+          <div style="height:240px;"><canvas id="familyAllocChart"></canvas></div>
+        </div>
+      ` : ''}
+
+      <!-- Per-member breakdown cards -->
+      <div class="card p-5">
+        <div class="section-title mb-3"><i class="fas fa-user-friends" style="color:#22d3ee;"></i> Members</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          ${memberRows.map(m => {
+            const def = FAMILY_ROLE_DEFS[m.role] || { label: m.role, color: '#94a3b8' };
+            const weight = householdValue > 0 ? (m.totalValue / householdValue) * 100 : 0;
+            return `<div class="card2" style="padding:14px;border-left:3px solid ${def.color};">
+              <div class="flex items-start justify-between gap-2 mb-2">
+                <div style="min-width:0;flex:1;">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold text-sm" style="color:#c8d6ef;">${_escape(m.name)}</span>
+                    ${m.isSelf ? '<span class="text-xs neutral">(you)</span>' : ''}
+                    <span style="font-size:10px;padding:1px 7px;border-radius:9999px;background:${def.color}22;color:${def.color};border:1px solid ${def.color}44;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;">${def.label}</span>
+                  </div>
+                  <div class="text-xs neutral mt-0.5" style="font-size:10px;">${_escape(m.email)}</div>
+                </div>
+              </div>
+              ${m.hasData ? `
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                  <div>
+                    <div class="text-xs neutral" style="font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">Value</div>
+                    <div class="font-bold mono mt-0.5" style="font-size:16px;">${sym}${fmt(m.totalValue)}</div>
+                    <div class="text-xs neutral mt-0.5">${weight > 0 ? fmt(weight) + '% of household' : ''}</div>
+                  </div>
+                  <div>
+                    <div class="text-xs neutral" style="font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">Return</div>
+                    <div class="font-bold mono mt-0.5 ${m.gain >= 0 ? 'pos' : 'neg'}" style="font-size:16px;">${m.gain >= 0 ? '+' : ''}${fmt(Math.abs(m.gainPct))}%</div>
+                    <div class="text-xs ${m.gain >= 0 ? 'pos' : 'neg'} mt-0.5">${m.gain >= 0 ? '+' : ''}${sym}${fmt(Math.abs(m.gain))}</div>
+                  </div>
+                </div>
+                ${m.topHolding ? `
+                  <div class="mt-3 pt-2" style="border-top:1px solid rgba(30,45,74,0.5);">
+                    <div class="text-xs neutral" style="font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">Top holding</div>
+                    <div class="text-sm mt-0.5" style="color:#c8d6ef;">${_escape(m.topHolding.symbol)} <span class="text-xs neutral">· ${sym}${fmt(m.topHolding.currentValue)}</span></div>
+                  </div>` : ''}
+                <div class="text-xs neutral mt-2" style="font-size:10px;">${m.holdingsCount} holding${m.holdingsCount === 1 ? '' : 's'} · last snapshot ${m.snapDate || '–'}</div>
+              ` : `
+                <div class="text-xs neutral mt-2" style="font-style:italic;">${m.isSelf ? 'No snapshot recorded yet — refresh prices to generate one.' : 'No data visible (privacy / no snapshots yet)'}</div>
+              `}
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Footer note -->
+      <div class="text-xs neutral mt-4" style="font-size:11px;line-height:1.6;">
+        <i class="fas fa-info-circle mr-1"></i>
+        Each member tracks their own portfolio, taxes, and AI agents independently. NZ FIF threshold ($50k) applies per person, not per household.
+        ${fam.role === 'owner' || fam.role === 'adult' ? ' · <button onclick="openModal(\'settingsModal\')" style="background:none;border:none;color:#22d3ee;cursor:pointer;text-decoration:underline;font-size:11px;padding:0;">Manage members</button>' : ''}
+      </div>
+    `;
+
+    // Render the allocation chart
+    if (visibleWithData.length > 1) {
+      _renderFamilyAllocChart(memberRows.filter(m => m.hasData));
+    }
+  } catch(e) {
+    wrap.innerHTML = `<div class="card p-6 text-center" style="color:#f87171;">
+      <i class="fas fa-exclamation-triangle text-2xl mb-2 block"></i>
+      Couldn't load family data: ${_escape(e.message)}
+    </div>`;
+  }
+}
+
+function _renderFamilyAllocChart(memberRows) {
+  const ctx = document.getElementById('familyAllocChart');
+  if (!ctx) return;
+  if (_familyViewChartObj) { try { _familyViewChartObj.destroy(); } catch(e) {} }
+  // Distinct colours — use role colours if available, else cycle a palette
+  const palette = ['#22d3ee','#34d399','#fbbf24','#60a5fa','#a78bfa','#f87171','#fb923c','#c4b5fd'];
+  const labels = memberRows.map(m => m.name);
+  const data   = memberRows.map(m => m.totalValue);
+  const colors = memberRows.map((m, i) => {
+    const def = FAMILY_ROLE_DEFS[m.role];
+    return def?.color || palette[i % palette.length];
+  });
+  _familyViewChartObj = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#0a1120', borderWidth: 2 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (c) => {
+              const sym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+              const total = c.dataset.data.reduce((a,b) => a+b, 0);
+              const pct = total > 0 ? (c.parsed / total * 100).toFixed(1) : 0;
+              return `${c.label}: ${sym}${fmt(c.parsed)} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function switchFamilyView(familyId) {
+  _activeFamilyId = familyId;
+  // Persist
+  if (_supabase && _supaUser) {
+    _supabase.from('profiles').update({ active_family_id: familyId }).eq('id', _supaUser.id).then(() => {});
+    if (_userProfile) _userProfile.active_family_id = familyId;
+  }
+  loadFamilyAggregateView();
+}
+
+function refreshFamilyView() {
+  loadFamilyAggregateView();
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -4947,7 +5577,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','admin'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -4960,6 +5590,7 @@ function _showSectionCore(name, el) {
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
   if (name === 'news') { loadHeadlines(); loadNews(); }
+  if (name === 'family') loadFamilyAggregateView();
   if (name === 'tax') refreshFIF();
 }
 
@@ -5245,6 +5876,12 @@ function closeModal(id) {
   if (id === 'viewModal' && _holdingChartObj) {
     try { _holdingChartObj.destroy(); } catch(e) {}
     _holdingChartObj = null;
+  }
+  // promptModal — resolve any pending Promise as null (cancel) on dismiss
+  if (id === 'promptModal' && _promptModalCallback) {
+    const cb = _promptModalCallback;
+    _promptModalCallback = null;
+    cb(null);
   }
 }
 

@@ -129,6 +129,38 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.7b (Polished Family + Aggregate View)
+
+**Reusable styled modals (replaces native prompt/confirm/alert)**
+- [x] `#promptModal` HTML scaffold + `showFormModal({title, icon, description, fields, submitLabel})` Promise API
+- [x] `showConfirm({title, description, danger})` for yes/no
+- [x] `showInfo({title, body, actions})` for alerts with optional buttons
+- [x] Escape key + close X resolve null (cancel) for any pending modal
+
+**Family popup polish (no functional changes, pure UX)**
+- [x] Create Family — styled modal with name field
+- [x] Invite by email — single modal with email + role dropdown (was 2× prompt)
+- [x] Generate code — styled modal with role select → styled code-display
+      modal with Copy code / Copy link / Done actions
+- [x] Enter invite code — styled modal with code field
+- [x] Remove member / leave family — styled danger confirm
+- [x] Revoke invite — styled danger confirm
+
+**Aggregate household view (v0.7b)**
+- [x] New "Family" nav link in sidebar (visible only when in 1+ families)
+- [x] New `#section-family` with picker for multi-family + refresh + manage
+- [x] `loadFamilyAggregateView()` fetches family roster + profile emails +
+      each member's most-recent snapshot via RLS (adults see all, others
+      see only themselves)
+- [x] 4-card household summary: total value · return $ + % · members
+      breakdown · total holdings
+- [x] Allocation-by-member doughnut chart (Chart.js, role-coloured)
+- [x] Per-member breakdown cards: role chip, value, % of household, return,
+      top holding, last snapshot date
+- [x] Privacy note for non-adult roles ("you only see your own data")
+- [x] Empty-state guidance: "no snapshots yet, come back tomorrow"
+- [x] Footer note clarifying FIF is per-person, links to manage members
+
 ### 2026-05-16 session — Documentation baseline
 
 **Doc set refresh (v0.7-docs)**

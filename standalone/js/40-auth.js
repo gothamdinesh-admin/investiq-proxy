@@ -37,6 +37,13 @@ function updateAuthUI() {
     if (accountLink) accountLink.style.display = '';
     // If we already know admin state (re-render after checkAdminStatus), re-apply it
     if (_isAdmin) updateAdminVisibility();
+    // Family nav link — visible when user is in 1+ families. _myFamilies is
+    // populated lazily by renderFamilySection; check active_family_id as a
+    // cheap proxy on first render.
+    const familyNav = document.getElementById('familyNavLink');
+    if (familyNav) {
+      familyNav.style.display = (_userProfile?.active_family_id || (typeof _myFamilies !== 'undefined' && _myFamilies.length)) ? '' : 'none';
+    }
   } else if (hasSupaConfig) {
     // Supabase configured but not logged in — show gate
     if (badge)      badge.style.display = 'none';
@@ -44,6 +51,8 @@ function updateAuthUI() {
     if (gate)       gate.style.display = 'flex';
     if (accountLink) accountLink.style.display = 'none';
     _isAdmin = false; // reset admin flag on any sign-out / gate show
+    const familyNav = document.getElementById('familyNavLink');
+    if (familyNav) familyNav.style.display = 'none';
   } else {
     // No Supabase config — local mode, no gate
     if (badge)      badge.style.display = 'none';
