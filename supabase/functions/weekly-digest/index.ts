@@ -193,14 +193,29 @@ async function digestForUser(userId: string, email: string): Promise<DigestResul
   return { email, ok: send.ok, reason: send.error };
 }
 
+// CORS — the admin "Send Test Digest" button calls this from the browser,
+// which triggers a preflight on requests with Authorization headers. Without
+// these the browser drops the response and you get "Failed to fetch".
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin":  "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+  "Access-Control-Max-Age":       "86400"
+};
+
 serve(async (req) => {
+  // Preflight — no auth check, just CORS headers.
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   // Shared-secret gate — only the cron job (or admin) can invoke this.
   // Edge Functions are public by default; this prevents drive-by sends.
   const authHeader = req.headers.get("Authorization") || "";
   const provided = authHeader.replace(/^Bearer\s+/i, "");
   if (CRON_SECRET && provided !== CRON_SECRET) {
     return new Response(JSON.stringify({ error: "unauthorised" }), {
-      status: 401, headers: { "Content-Type": "application/json" }
+      status: 401, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
     });
   }
 
@@ -213,7 +228,7 @@ serve(async (req) => {
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 500, headers: { "Content-Type": "application/json" }
+      status: 500, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
     });
   }
 
@@ -234,6 +249,6 @@ serve(async (req) => {
     failed:    results.filter(r => !r.ok).length,
     details:   results
   }), {
-    status: 200, headers: { "Content-Type": "application/json" }
+    status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" }
   });
 });
