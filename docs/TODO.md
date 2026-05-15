@@ -28,16 +28,12 @@ The recent barrage of fixes needs user verification before building more on top.
 
 ### Killer UX upgrade
 
-- [ ] **Holding detail page** — click any holding → full-screen view with:
-  - 1-year Yahoo price chart (already have the data pipe via /api/market)
-  - Complete lot history with per-lot P&L
-  - Per-holding AI analysis button (uses existing Claude setup, runs single agent per holding)
-  - Related news headlines (needs a news proxy endpoint)
-  - Est: full day.
+- [x] **Holding detail page** — DONE 2026-05-15. Click any holding → 880px modal with:
+  4-card stat row (value/return/avg cost/today), 1y price chart with 1M/3M/6M/1Y/5Y range toggle (via new /api/history yfinance route), per-lot P&L table (each lot's individual gain $ + %), AI Deep-Dive card (Sonnet, ~220 words, 4 sections incl. stance), latest 5 news stories. Chart.js instance destroyed on modal close to prevent canvas leaks.
 
 ### Retention & engagement
 
-- [ ] **Benchmark overlay on performance chart** — NZX 50 and S&P 500 lines plotted against your portfolio % return. Every serious investor expects this. Needs historical index data — Yahoo has `^NZ50` and `^GSPC` already. Est: 3 hours.
+- [x] **Benchmark overlay on performance chart** — DONE 2026-05-15. Performance tab now has 5 toggleable benchmarks: NZX 50, S&P 500, NASDAQ, FTSE 100, ASX 200 (NZX + S&P on by default). `% Return` mode normalises portfolio + benchmarks to start = 0% on a shared axis. `NZ$ Value` mode shows absolute (benchmarks hidden, incomparable). Meta line under the chart summarises: your return + delta vs each benchmark in percentage points.
 - [ ] **Price alerts** — "NVDA drops 5%, email me." Uses Supabase scheduled function (now available on Pro). Est: half day.
 - [x] **Weekly email digest** — DONE 2026-05-15. Supabase Edge Function (`supabase/functions/weekly-digest/`) pulls latest + 7-day-old snapshot, computes deltas + top/worst mover, sends styled HTML via Resend. Settings toggle wired to `profiles.digest_opt_in`. **Activation pending:** user must run `supabase functions deploy weekly-digest`, set RESEND_API_KEY / FROM_EMAIL / CRON_SECRET secrets, and run `setup.sql` for the pg_cron schedule.
 
@@ -133,7 +129,14 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
-### 2026-05-15 session
+### 2026-05-15 session — Release v0.5 (Holding Detail + Benchmarks)
+
+**Killer UX (v0.5)**
+- [x] Holding Detail page — full modal with 1y chart, per-lot P&L, AI Deep-Dive, news
+- [x] Benchmark overlay — NZX 50 / S&P 500 / NASDAQ / FTSE / ASX 200 on Performance chart
+- [x] New /api/history proxy route (yfinance, LSE-pence normalised, 30-min cache)
+
+### 2026-05-15 session — Release v0.4 (News + Brief)
 
 **Architectural**
 - [x] **JS modular split** — index.html went from ~7,170 → 5,720 lines. Eight self-contained files in `standalone/js/` (00-config, 10-helpers, 20-state, 30-cloud, 40-auth, 50-portfolio, 60-import, 70-ai) totalling ~1,728 lines. Each module pre-loaded via `<script src>` before the inline script; forward refs resolve lazily.
