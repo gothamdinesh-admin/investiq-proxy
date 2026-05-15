@@ -279,6 +279,173 @@
 
       /* Bottom tab bar — shown only on mobile */
       #mobileTabBar { display: flex !important; }
+
+      /* ═══════════════════════════════════════════════════════════════
+         MOBILE UX PASS — tap targets, sticky summary, card-flow tables
+         Goal: phone-checking should feel native, not "desktop site, shrunk"
+         ═══════════════════════════════════════════════════════════════ */
+
+      /* Tap targets — iOS HIG / Material both require ≥44px. Buttons
+         inside table rows were 28-32px, too small to hit reliably. */
+      .btn-sm, .btn.btn-sm { min-height: 40px !important; min-width: 40px !important; padding: 8px 12px !important; }
+      .btn-sm i { font-size: 14px; }
+      .nav-link { min-height: 44px; }
+      input.input, select.input, textarea.input { font-size: 16px !important; /* prevents iOS zoom-on-focus */ }
+
+      /* Sticky portfolio summary — keep total value + score visible while
+         scrolling. The slim sidebar already sits at top; pin it. */
+      .sidebar {
+        position: sticky !important;
+        top: 0;
+        z-index: 50;
+        backdrop-filter: blur(8px);
+        background: rgba(15,23,41,0.95) !important;
+      }
+
+      /* Holdings DETAILED table: convert grid row to stacked card so users
+         don't have to horizontal-scroll. Each row becomes a self-contained
+         card with the key facts laid out vertically. Uses CSS-only — no JS
+         changes — so renderDetailedHoldings keeps its desktop layout. */
+      #section-holdings .card { overflow: visible !important; }
+      #section-holdings #holdingsDetailedHeader { display: none !important; }
+      #section-holdings #holdingsDetailed .table-row {
+        display: block !important;
+        grid-template-columns: none !important;
+        padding: 14px !important;
+        margin-bottom: 10px;
+        border-radius: 12px !important;
+        background: rgba(10,17,32,0.98) !important;
+        border: 1px solid #1e2d4a !important;
+      }
+      /* First cell (symbol + platform) — top of card */
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(1) {
+        margin-bottom: 12px;
+      }
+      /* Cells 2-7 (quantity, avg cost, cost basis, current px, market, return)
+         → 3-col grid below the symbol. Hide the explicit "text-right" since
+         we're flowing them as labelled stats. */
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(n+2):nth-child(-n+7) {
+        display: inline-block !important;
+        width: 32%;
+        text-align: left !important;
+        padding: 6px 0;
+        font-size: 12px;
+        vertical-align: top;
+      }
+      /* Add pseudo-labels above the values so users know what they are */
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(2)::before { content: 'Units'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(3)::before { content: 'Avg cost'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(4)::before { content: 'Invested'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(5)::before { content: 'Price'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(6)::before { content: 'Value'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(7)::before { content: 'Return'; }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(n+2):nth-child(-n+7)::before {
+        display: block;
+        font-size: 10px;
+        color: #4a6080;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+      }
+      /* Action buttons (last cell) — full-width row of equal buttons */
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(8) {
+        display: flex !important;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(30,45,74,0.6);
+      }
+      #section-holdings #holdingsDetailed .table-row > div:nth-child(8) .btn {
+        flex: 1;
+        margin: 0 !important;
+      }
+
+      /* NZ Tax (FIF) table — same card pattern. */
+      #section-tax #fifHoldingsTable .table-header { display: none !important; }
+      #section-tax #fifHoldingsTable .table-row {
+        display: block !important;
+        grid-template-columns: none !important;
+        padding: 12px !important;
+        margin-bottom: 8px;
+        border-radius: 10px !important;
+        background: rgba(10,17,32,0.98) !important;
+        border: 1px solid #1e2d4a !important;
+      }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(1) { margin-bottom: 8px; }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(n+2) {
+        display: inline-block !important;
+        width: 49%;
+        text-align: left !important;
+        font-size: 12px;
+        padding: 4px 0;
+      }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(2)::before { content: 'Country'; }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(3)::before { content: 'Cost NZD'; }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(4)::before { content: 'Market NZD'; }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(5)::before { content: 'FDR 5%'; }
+      #section-tax #fifHoldingsTable .table-row > div:nth-child(n+2)::before {
+        display: block;
+        font-size: 10px;
+        color: #4a6080;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+      }
+
+      /* Watchlist table — same card pattern. */
+      #section-watchlist #watchlistRows .table-row {
+        display: block !important;
+        grid-template-columns: none !important;
+        padding: 12px !important;
+        margin-bottom: 8px;
+        border-radius: 10px !important;
+        background: rgba(10,17,32,0.98) !important;
+        border: 1px solid #1e2d4a !important;
+      }
+      #section-watchlist .card > .table-header { display: none !important; }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(1) { margin-bottom: 8px; }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(n+2):nth-child(-n+4) {
+        display: inline-block !important;
+        width: 32%;
+        text-align: left !important;
+        font-size: 12px;
+        padding: 4px 0;
+      }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(2)::before { content: 'Price'; }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(3)::before { content: 'Day %'; }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(4)::before { content: 'Added'; }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(n+2):nth-child(-n+4)::before {
+        display: block;
+        font-size: 10px;
+        color: #4a6080;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+      }
+      #section-watchlist #watchlistRows .table-row > div:nth-child(5) {
+        display: block !important;
+        margin-top: 10px;
+        text-align: right !important;
+      }
+
+      /* Search inputs above tables — full width on mobile */
+      #section-holdings input[type="text"],
+      #section-holdings select { width: 100%; margin-bottom: 8px; }
+
+      /* Page section headers — reduce font size, tighter spacing */
+      h2.text-xl { font-size: 18px !important; }
+      .text-2xl { font-size: 22px !important; }
+
+      /* Toast: bottom-left so it doesn't collide with mobile tab bar */
+      #toastContainer {
+        bottom: 80px !important;
+        right: 12px !important;
+        left: 12px !important;
+        max-width: calc(100vw - 24px) !important;
+      }
+
+      /* Charts — taller on mobile so they're readable when rotated */
+      canvas { max-height: 260px !important; }
     }
 
     /* Bottom tab bar — hidden by default, shown on mobile */
