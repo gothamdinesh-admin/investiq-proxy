@@ -129,6 +129,28 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Security & Safety audit
+
+**New doc + memory rule**
+- [x] `docs/SECURITY.md` — comprehensive risk register across cyber / data /
+      cost / compliance / operational / future-proofing dimensions. Lists 5
+      Critical, 10 High, 10 Medium, 8 Acceptable risks. Plus a "what we
+      have right" inventory + pre-change checklist + remediation calendar.
+- [x] MEMORY.md updated with safety-first behavioural rule (now Rule #1,
+      above the "two strikes and out" rule). Mandates 7-dimension audit
+      before any non-trivial change.
+- [x] PROJECT_CONTEXT.md + ROLES.md cross-reference SECURITY.md
+- [x] Reality-check inventory: no real secrets found in tracked files
+      (only placeholder text + .env in .gitignore + render.yaml uses
+      sync:false for ANTHROPIC_API_KEY)
+
+**Critical actions surfaced (do this week):**
+- [ ] C1 — Anthropic spend cap (5 min, Console → Limits)
+- [ ] C2 — Supabase + Netlify billing alerts (10 min)
+- [ ] C3 — Verify SUPABASE_SERVICE_ROLE_KEY not leaked anywhere (10 min)
+- [ ] C4 — Daily DB backup Edge Function (1 hour)
+- [ ] C5 — Sentry frontend SDK (30 min)
+
 ### 2026-05-16 session — Release v0.7c (Price Alerts)
 
 **Price Alerts foundation**

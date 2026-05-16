@@ -179,6 +179,7 @@ To revert to a tag: `git checkout <tag>`. To compare: `git diff <tag>..HEAD`.
 | "How does it work technically?" | `ARCHITECTURE.md` |
 | "Where is function X?" | `CODE_MAP.md` |
 | "Will this scale to N users?" | `SCALING.md` |
+| "What are the security/safety risks?" | `SECURITY.md` |
 | "Who owns which decisions?" | `ROLES.md` |
 | "What's next?" | `TODO.md` |
 | "What should I check before committing?" | `SELF_CHECK.md` |
