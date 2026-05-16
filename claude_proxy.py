@@ -295,6 +295,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
             sym = (params.get("symbol", [""])[0] or "").strip()
             period = (params.get("period", ["1y"])[0] or "1y").strip()
             self._fetch_history(sym, period)
+        elif parsed.path == "/api/nz-fund":
+            # NZ Managed Fund / KiwiSaver unit price scraper.
+            # Tries multiple sources in order of reliability:
+            #   1. Harbour Asset Management direct (if a Harbour fund)
+            #   2. (Future) Sorted.org.nz Smart Investor for all NZ funds
+            #   ?code=HARBOUR-AE  — InvestIQ short code
+            #   ?provider=Harbour Asset Management  — fund provider name
+            #   ?name=Australasian Equity Fund  — fund full name (helps matching)
+            code     = (params.get("code", [""])[0] or "").strip()
+            provider = (params.get("provider", [""])[0] or "").strip()
+            name     = (params.get("name", [""])[0] or "").strip()
+            self._fetch_nz_fund(code, provider, name)
         else:
             self._json(404, {"error": "Not found"})
 
@@ -603,6 +615,171 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(200, payload)
         except Exception as e:
             self._json(502, {"error": f"Yahoo history failed: {e}"})
+
+    # ── NZ Managed Fund unit-price scraping ──────────────────────
+    # Yahoo doesn't track NZ-domiciled unit trusts. Until users can self-
+    # populate prices manually we scrape provider sites + Sorted.org.nz.
+    # Cached aggressively (12h) — unit prices change once per day.
+    def _fetch_nz_fund(self, code, provider, name):
+        if not (code or provider or name):
+            return self._json(400, {"error": "code, provider, or name required"})
+        cache_key = f"nz-fund:{code}:{provider}:{name}".lower()
+        cached = cache_get(cache_key)
+        if cached:
+            return self._json(200, cached)
+
+        # Try Harbour first if it's clearly a Harbour fund
+        is_harbour = (
+            "harbour" in code.lower()
+            or "harbour" in provider.lower()
+        )
+        result = None
+        if is_harbour:
+            result = self._scrape_harbour(code, name)
+
+        # (Future) Add scrapers for Milford, Generate, Fisher, Sorted.org.nz
+        # generic fallback. For now Harbour-only as the proof-of-concept.
+
+        if result and result.get("price"):
+            cache_set(cache_key, result, ttl_seconds=43200)  # 12h
+            return self._json(200, result)
+        self._json(404, {"error": "Fund not found via any source",
+                          "tried": ["harbour" if is_harbour else None]})
+
+    def _scrape_harbour(self, code, name):
+        """Scrape Harbour Asset Management's public unit-prices page.
+
+        Source: https://www.harbourasset.co.nz/our-funds/unit-prices/
+        ToS: page is publicly published (Harbour is required by NZ FMA to
+        publish daily unit prices for retail funds). We hit it at most
+        twice per 12h per fund via the cache layer.
+
+        Returns: {price, asOf, currency, source, fund_name} or None
+        """
+        try:
+            import urllib.request as _ur
+            from html.parser import HTMLParser
+            url = "https://www.harbourasset.co.nz/our-funds/unit-prices/"
+            req = _ur.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (InvestIQ Portfolio Tracker; +https://investiq-nz.netlify.app)",
+                "Accept": "text/html"
+            })
+            with _ur.urlopen(req, timeout=10) as r:
+                html = r.read().decode("utf-8", errors="ignore")
+
+            # The unit-prices page renders as a table with rows of:
+            #   Fund name | Application price | Withdrawal price | Date
+            # We extract all rows and try to match the user's requested fund.
+            class HarbourParser(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.in_table = False
+                    self.in_row = False
+                    self.in_cell = False
+                    self.current_row = []
+                    self.current_cell = ""
+                    self.rows = []
+                    self.as_of_date = None
+
+                def handle_starttag(self, tag, attrs):
+                    if tag == "table": self.in_table = True
+                    elif tag == "tr" and self.in_table:
+                        self.in_row = True
+                        self.current_row = []
+                    elif tag in ("td", "th") and self.in_row:
+                        self.in_cell = True
+                        self.current_cell = ""
+
+                def handle_endtag(self, tag):
+                    if tag == "table": self.in_table = False
+                    elif tag == "tr" and self.in_row:
+                        if self.current_row:
+                            self.rows.append(self.current_row)
+                        self.in_row = False
+                    elif tag in ("td", "th") and self.in_cell:
+                        self.current_row.append(self.current_cell.strip())
+                        self.in_cell = False
+
+                def handle_data(self, data):
+                    if self.in_cell:
+                        self.current_cell += data
+
+            parser = HarbourParser()
+            parser.feed(html)
+
+            # Find the row matching the user's fund. Match strategy:
+            # 1. Exact name match (case-insensitive)
+            # 2. Substring match on fund name
+            # 3. Code-derived match (HARBOUR-AE → "Australasian Equity")
+            code_hints = {
+                "HARBOUR-AE":            ["australasian equity"],
+                "HARBOUR-GROWTH":        ["growth"],
+                "HARBOUR-INCOME":        ["income", "active income"],
+                "HARBOUR-NZ-EQUITY":     ["nz equity", "core nz equity"],
+                "HARBOUR-CORPORATE":     ["corporate bond"],
+                "HARBOUR-INVESTMENT":    ["investment grade", "credit"],
+                "HARBOUR-LISTED-PROP":   ["listed property"],
+                "HARBOUR-T-RES":         ["t rowe", "global equity"]
+            }
+            hints = code_hints.get(code.upper(), [])
+            search_terms = [name.lower()] + hints if name else hints
+
+            best_row = None
+            for row in parser.rows:
+                if len(row) < 3:
+                    continue
+                fund_name_raw = row[0].lower()
+                for term in search_terms:
+                    if term and term.lower() in fund_name_raw:
+                        best_row = row
+                        break
+                if best_row:
+                    break
+
+            if not best_row:
+                # No match — return the available fund names so the user
+                # knows what's there (helps with adding the right code)
+                available = [r[0] for r in parser.rows if r and len(r) >= 2 and r[0]][:20]
+                return {
+                    "price": None,
+                    "error": f"No matching fund. Available Harbour funds: {', '.join(available[:8])}",
+                    "available": available,
+                    "source": "harbourasset.co.nz"
+                }
+
+            # Parse the price. Harbour publishes Application + Withdrawal +
+            # Mid prices; we use Mid (or fall back to Application).
+            import re as _re
+            price = None
+            for cell in best_row[1:]:
+                m = _re.search(r"([\d,]+\.\d+)", cell or "")
+                if m:
+                    try:
+                        price = float(m.group(1).replace(",", ""))
+                        break
+                    except ValueError:
+                        continue
+            if not price:
+                return {"price": None, "error": "Found row but couldn't parse price", "raw": best_row}
+
+            # Try to find the as-of date — often the last cell
+            as_of = None
+            for cell in reversed(best_row):
+                m = _re.search(r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})", cell or "")
+                if m:
+                    as_of = m.group(1)
+                    break
+
+            return {
+                "price":     round(price, 4),
+                "asOf":      as_of,
+                "currency":  "NZD",
+                "source":    "harbourasset.co.nz",
+                "fund_name": best_row[0]
+            }
+        except Exception as e:
+            print(f"  ⚠ Harbour scrape failed: {e}")
+            return {"price": None, "error": f"scrape failed: {e}", "source": "harbourasset.co.nz"}
 
     # ── Yahoo Finance ticker search (typeahead) ───────────────────
     def _yahoo_search(self, query):

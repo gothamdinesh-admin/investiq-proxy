@@ -4728,11 +4728,19 @@ async function setHoldingChartRange(period) {
         ctx.parentElement.appendChild(placeholder);
       }
       placeholder.style.display = 'flex';
+      // Detect if we can attempt an auto-fetch — currently only Harbour
+      // funds are supported (more providers + Sorted.org.nz fallback
+      // planned). Show the auto-refresh button when applicable.
+      const isHarbour = (h.provider || '').toLowerCase().includes('harbour') ||
+                        (h.symbol || '').toLowerCase().includes('harbour');
       placeholder.innerHTML = `
         <i class="fas fa-piggy-bank" style="font-size:36px;color:rgba(34,211,238,0.4);margin-bottom:10px;"></i>
         <div class="text-sm" style="color:#c8d6ef;margin-bottom:6px;">${h.provider ? _escape(h.provider) : 'Unit-priced fund'}</div>
         <div class="text-xs neutral" style="margin-bottom:10px;">Manual price · ${ageBadge}</div>
-        <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 14px;"><i class="fas fa-edit mr-1"></i>Update unit price</button>
+        <div class="flex items-center gap-2 flex-wrap" style="justify-content:center;">
+          ${isHarbour ? `<button onclick="autoRefreshFundPrice('${h.id}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 14px;background:#22d3ee;"><i class="fas fa-bolt mr-1"></i>Auto-refresh from Harbour</button>` : ''}
+          <button onclick="editHolding('${h.id}')" class="btn btn-sm ${isHarbour ? 'btn-secondary' : 'btn-primary'}" style="font-size:11px;padding:6px 14px;"><i class="fas fa-edit mr-1"></i>Update manually</button>
+        </div>
       `;
     }
     return;
@@ -6672,6 +6680,63 @@ async function deleteAlert(alertId) {
     logActivity('alert_deleted', { alert_id: alertId });
     renderAlertsSection();
   } catch(e) { toast.error('Delete failed: ' + e.message); }
+}
+
+// Auto-refresh a NZ fund's unit price from the provider's website via the
+// new /api/nz-fund proxy route. Currently only Harbour supported; falls
+// back gracefully if the scrape fails. Surfaces the available fund names
+// when a code doesn't match so the user knows what to add.
+async function autoRefreshFundPrice(holdingId) {
+  const h = state.portfolio.find(x => x.id === holdingId);
+  if (!h) return;
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  if (!proxyBase) return toast.error('No proxy URL set');
+
+  toast.info(`Fetching unit price from ${h.provider || 'provider'}…`);
+  try {
+    const url = `${proxyBase}/api/nz-fund?code=${encodeURIComponent(h.symbol)}&provider=${encodeURIComponent(h.provider || '')}&name=${encodeURIComponent(h.name || '')}`;
+    const res = await fetch(url, {
+      headers: proxyHeaders(),
+      signal: AbortSignal.timeout(15000)
+    });
+    const data = await res.json();
+    if (!res.ok || !data.price) {
+      // Help the user pick the right code by showing what we found
+      if (data.available?.length) {
+        await showInfo({
+          title: 'Fund not matched on Harbour\'s page',
+          icon: 'fa-info-circle',
+          iconColor: '#fbbf24',
+          description: `Couldn't match "${_escape(h.symbol)}" to any fund. <b>Edit this holding</b> and try one of these exact names as the symbol or display name:`,
+          body: `<div style="background:rgba(251,191,36,0.06);padding:10px;border-radius:6px;font-size:11px;color:#94a3b8;line-height:1.7;max-height:200px;overflow-y:auto;">${data.available.map(n => `• ${_escape(n)}`).join('<br>')}</div>`,
+          actions: [{ key: 'ok', label: 'Got it', variant: 'primary', flex: true }]
+        });
+      } else {
+        toast.error(data.error || 'Could not fetch price');
+      }
+      return;
+    }
+
+    // Update the holding's price + manual-price-date in memory and cloud
+    const target = state.portfolio.find(x => x.id === holdingId);
+    if (!target) return;
+    target.currentPrice = data.price;
+    target.manualPriceDate = new Date().toISOString().slice(0, 10);
+    target.dayChange = null;
+    target.dayChangePct = null;
+    // If we picked up the canonical name from Harbour, store it for next time
+    if (data.fund_name && !target.name) target.name = data.fund_name;
+    saveState();
+    renderAll();
+    toast.success(`Updated to NZ$${data.price.toFixed(4)} per unit${data.asOf ? ' (as of ' + data.asOf + ')' : ''}`);
+    logActivity('fund_price_refreshed', { symbol: h.symbol, price: data.price, source: data.source });
+    // Re-render the Holding Detail modal so the placeholder updates
+    if (_currentHoldingId === holdingId) {
+      viewHolding(holdingId);
+    }
+  } catch(e) {
+    toast.error('Fetch failed: ' + e.message);
+  }
 }
 
 // Called from Holding Detail modal — opens the alert modal seeded with
