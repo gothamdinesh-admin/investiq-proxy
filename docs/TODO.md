@@ -129,6 +129,24 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Pitch brief for Harbour + wider firms
+
+- [x] `docs/PITCH_BRIEF.md` — 13-section strategic narrative covering:
+      exec summary, what's built (status table), competitive moat vs
+      Sharesight/Yahoo/Sheets/Hatch, architecture credibility, roadmap
+      by horizon (90d / 90-180d / 180-365d), business model 3 paths
+      (consumer freemium, B2B white-label, affiliate), why Harbour
+      specifically (with 3-level partnership ask: pilot, white-label,
+      strategic investment), wider TAM (NZ + AU expansion), AI moats
+      over time (public → Vault → fine-tuned), honest risks, what
+      to lift for different audiences (Harbour leadership / technical /
+      consumer investors / conferences), open questions still figuring
+      out (name/brand, solo-dev dependency, pricing precision).
+
+Designed as source material — user pulls sections into slides /
+leave-behinds / written pitches for different audiences. Not the
+deck itself.
+
 ### 2026-05-16 session — End-to-end testing rule + portable CLAUDE.md
 
 - [x] End-to-end testing now enshrined as MEMORY.md Behavioural Rule #2:
