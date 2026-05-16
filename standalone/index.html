@@ -90,16 +90,18 @@
     }
 
     [data-theme="light"] {
-      /* Surfaces — slate scale, no pure white */
-      --bg:               #f8fafc;       /* slate-50, gentle on eyes */
+      /* Surfaces — slate scale. Body bg is slate-100, not slate-50 — gives
+         enough contrast to white cards that they read as cards, not a flat
+         sea of bg. Pure white reserved for cards + inputs (max contrast). */
+      --bg:               #eef2f7;       /* slate-150, between 100 and 200 */
       --bg-panel:         #ffffff;
       --bg-panel-2:       #f1f5f9;       /* slate-100 */
       --bg-input:         #ffffff;
-      --bg-deep:          #f1f5f9;
-      --bg-hover:         #e2e8f0;
-      /* Borders — slate-200 / 300, subtle */
-      --border:           #e2e8f0;
-      --border-strong:    #cbd5e1;
+      --bg-deep:          #f8fafc;
+      --bg-hover:         #f1f5f9;
+      /* Borders — bumped to slate-300 / 400 for visible separation on white */
+      --border:           #cbd5e1;       /* slate-300 — visible on white */
+      --border-strong:    #94a3b8;       /* slate-400 — hover/active */
       /* Text — slate-900, not pure black */
       --text-primary:     #0f172a;
       --text-secondary:   #475569;
@@ -140,6 +142,20 @@
     .card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; transition: background 0.25s, border-color 0.25s; }
     .card2 { background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.25s, border-color 0.25s; }
 
+    /* Nav button labels — show on wide screens, hide on narrow.
+       Keeps icon-only buttons clean on smaller laptops; full labels on
+       wide monitors. Also hides the decorative tagline + last-updated
+       timestamp progressively. */
+    .nav-label { margin-left: 6px; }
+    @media (max-width: 1280px) {
+      #navTagline { display: none; }
+    }
+    @media (max-width: 1100px) {
+      .nav-label { display: none; }
+      .nav-sep { display: none; }
+      #lastUpdated { display: none; }
+    }
+
     /* ═══════════════════════════════════════════════════════════════════
        LIGHT-MODE OVERRIDES via attribute selectors targeting inline hex.
        This is the pragmatic compromise: we don't migrate every inline
@@ -172,7 +188,12 @@
     /* Common selectors targeting class-based / explicit components */
     [data-theme="light"] nav { background: rgba(255,255,255,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
-    [data-theme="light"] .metric-card { background: var(--bg-panel) !important; border: 1px solid var(--border) !important; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+    /* Cards lift off the bg with subtle shadows + thicker borders in light
+       mode. Without this they melted into the bg-50 background — the
+       "everything looks flat" feedback. */
+    [data-theme="light"] .card { box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 1px 2px rgba(15,23,42,0.04); }
+    [data-theme="light"] .card2 { box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+    [data-theme="light"] .metric-card { background: var(--bg-panel) !important; border: 1px solid var(--border) !important; box-shadow: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04); }
     [data-theme="light"] .input { background: var(--bg-input) !important; border: 1px solid var(--border-strong) !important; color: var(--text-primary) !important; }
     [data-theme="light"] .input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
     [data-theme="light"] .input::placeholder { color: var(--text-muted) !important; }
@@ -1124,38 +1145,41 @@
       </div>
       <span class="font-bold text-lg gradient-text">InvestIQ</span>
     </div>
-    <span class="text-xs neutral px-2 py-1 rounded" style="background:#141e33;">Personal Portfolio Dashboard</span>
+    <span id="navTagline" class="text-xs neutral px-2 py-1 rounded" style="background:var(--bg-panel-2);">Personal Portfolio Dashboard</span>
   </div>
-  <div class="flex items-center gap-3">
-    <span id="lastUpdated" class="text-xs neutral">Not yet updated</span>
-    <div id="supaUserBadge" style="display:none;align-items:center;gap:8px;">
+  <div class="flex items-center" style="gap:8px;">
+    <span id="lastUpdated" class="text-xs neutral" style="white-space:nowrap;">Not yet updated</span>
+    <div id="supaUserBadge" style="display:none;align-items:center;gap:6px;">
       <button id="syncIndicator" onclick="forceSyncFromCloud()" class="text-xs" style="display:none;background:rgba(52,211,153,0.1);color:#34d399;border:1px solid rgba(52,211,153,0.25);padding:3px 8px;border-radius:9999px;cursor:pointer;font-size:10px;letter-spacing:0.3px;" title="Click to force-pull latest from cloud">Not synced</button>
       <span id="adminBadge" style="display:none;align-items:center;gap:4px;padding:2px 8px;border-radius:9999px;background:rgba(251,191,36,0.15);color:#fbbf24;font-size:10px;font-weight:600;border:1px solid rgba(251,191,36,0.3);letter-spacing:0.5px;text-transform:uppercase;">
         <i class="fas fa-shield-alt" style="font-size:9px;"></i>Admin
       </span>
-      <span id="supaUserEmail" class="text-xs" style="color:#818cf8;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-      <button onclick="signOut()" class="btn btn-sm btn-secondary" style="padding:4px 8px;font-size:11px;">
-        <i class="fas fa-sign-out-alt mr-1"></i>Logout
+      <button onclick="signOut()" class="btn btn-sm btn-secondary" style="padding:6px 10px;font-size:11px;" title="Sign out">
+        <i class="fas fa-sign-out-alt"></i>
       </button>
     </div>
     <div id="supaSignInBadge" style="display:none;">
-      <button onclick="openModal('authModal')" class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);font-size:11px;padding:4px 10px;">
-        <i class="fas fa-cloud mr-1"></i>Sign In / Sync
+      <button onclick="openModal('authModal')" class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#34d399;border:1px solid rgba(52,211,153,0.3);font-size:11px;padding:5px 10px;">
+        <i class="fas fa-cloud mr-1"></i>Sign In
       </button>
     </div>
-    <button onclick="refreshAll()" class="btn btn-sm btn-secondary" id="refreshBtn">
-      <i class="fas fa-sync-alt mr-1"></i> Refresh
+    <!-- Divider between status + actions -->
+    <span class="nav-sep" style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <button onclick="refreshAll()" class="btn btn-sm btn-secondary" id="refreshBtn" title="Refresh prices" style="padding:6px 10px;">
+      <i class="fas fa-sync-alt"></i><span class="nav-label">Refresh</span>
     </button>
-    <button onclick="openModal('agentsModal')" class="btn btn-sm" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);">
-      <i class="fas fa-robot mr-1"></i> AI Agents
+    <button onclick="openModal('agentsModal')" class="btn btn-sm" title="AI Agents" style="background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);padding:6px 10px;">
+      <i class="fas fa-robot"></i><span class="nav-label">AI</span>
     </button>
-    <button onclick="openModal('helpModal')" class="btn btn-sm btn-secondary" title="Help & FAQ">
+    <!-- Divider before utility cluster -->
+    <span class="nav-sep" style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <button onclick="openModal('helpModal')" class="btn btn-sm btn-secondary" title="Help & FAQ" style="padding:6px 10px;">
       <i class="fas fa-question-circle"></i>
     </button>
-    <button onclick="toggleTheme()" id="themeToggleBtn" class="btn btn-sm btn-secondary" title="Toggle light / dark mode">
+    <button onclick="toggleTheme()" id="themeToggleBtn" class="btn btn-sm btn-secondary" title="Toggle light / dark mode" style="padding:6px 10px;">
       <i id="themeToggleIcon" class="fas fa-moon"></i>
     </button>
-    <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Settings">
+    <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Settings" style="padding:6px 10px;">
       <i class="fas fa-cog"></i>
     </button>
   </div>
@@ -3603,12 +3627,18 @@ function renderOverviewGreeting(metrics) {
   // Time-aware greeting
   const hour = new Date().getHours();
   const greetingWord = hour < 5 ? 'Working late' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 22 ? 'Good evening' : 'Late one';
-  const name = _userProfile?.display_name
-            || state.settings.name?.split(' ')[0]
-            || _supaUser?.email?.split('@')[0]
-            || 'there';
-  // Capitalize first letter, strip trailing portfolio-y suffix
-  const niceName = String(name).charAt(0).toUpperCase() + String(name).slice(1).replace(/'s? portfolio$/i, '').trim();
+  // Priority: explicit display_name → email username → "there".
+  // Do NOT fall back to state.settings.name — that's the PORTFOLIO name
+  // (defaults to "My Portfolio"), not the USER name. Was producing
+  // "Good evening, My".
+  let name = _userProfile?.display_name?.trim()
+          || (_supaUser?.email?.split('@')[0] || '').trim()
+          || 'there';
+  // Strip any obvious non-name suffixes/numbers from email-derived names
+  // (e.g. "gothamdinesh.admin" → "Gothamdinesh", "john123" → "John")
+  name = name.replace(/[._].*$/, '').replace(/\d+$/, '').trim() || 'there';
+  // Title-case first letter only
+  const niceName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
   text.textContent = `${greetingWord}, ${niceName}`;
 
   // Headline storytelling — lead with the most interesting number
