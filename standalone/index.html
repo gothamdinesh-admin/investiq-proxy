@@ -1541,24 +1541,39 @@
 
     <!-- DIVIDENDS SECTION (placeholder — full feature pending) -->
     <div id="section-dividends" style="display:none;">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-coins" style="color:#fbbf24;"></i> Dividends
           </h2>
-          <div class="text-xs neutral mt-1">Track cash dividends received across all platforms, in your base currency.</div>
+          <div class="text-xs neutral mt-1">
+            Cash dividends, DRIPs, special distributions, returns of capital. NZ tax fields built in
+            (foreign withholding + imputation credits). YTD totals · per-holding history · IR3-ready export (coming).
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="divPeriodFilter" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="loadDividends()">
+            <option value="ytd">This year (YTD)</option>
+            <option value="ly">Last year</option>
+            <option value="all">All time</option>
+            <option value="12m">Last 12 months</option>
+          </select>
+          <select id="divHoldingFilter" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="loadDividends()">
+            <option value="">All holdings</option>
+          </select>
+          <button onclick="addDividendPrompt()" class="btn btn-sm btn-primary"><i class="fas fa-plus mr-1"></i>Add dividend</button>
+          <button onclick="exportDividendsCSV()" class="btn btn-sm btn-secondary" title="Download CSV"><i class="fas fa-download"></i></button>
         </div>
       </div>
-      <div class="card" style="padding:32px;text-align:center;">
-        <i class="fas fa-coins" style="font-size:48px;color:rgba(251,191,36,0.3);"></i>
-        <h3 class="text-lg font-semibold mt-4 mb-2">Dividend tracking — coming soon</h3>
-        <div class="text-sm neutral mb-4" style="max-width:520px;margin:0 auto;">
-          Planned: per-holding dividend ledger (ex-date, pay-date, gross, NZ RWT / foreign tax withheld),
-          12-month rolling yield, FX-converted totals, and CSV export ready for IR3 line 17.
-        </div>
-        <div class="text-xs neutral" style="opacity:0.7;">
-          This sits behind the FIF check in priority — divs aren't useful until you can also see them on the dashboard.
-          If you want it sooner, drop me a note in the Admin → Diagnostics panel.
+
+      <!-- Summary cards -->
+      <div id="divSummaryCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6"></div>
+
+      <!-- Ledger table -->
+      <div class="card p-5">
+        <div class="section-title mb-3"><i class="fas fa-list" style="color:#fbbf24;"></i> Dividend ledger</div>
+        <div id="divContent">
+          <div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
         </div>
       </div>
     </div>
@@ -2440,6 +2455,7 @@
     <!-- ACTION BUTTONS -->
     <div class="flex gap-3 mt-2 flex-wrap">
       <button id="viewEditBtn" class="btn btn-primary flex-1" style="min-width:120px;"><i class="fas fa-edit mr-1"></i>Edit</button>
+      <button onclick="addDividendForCurrentHolding()" class="btn btn-secondary" title="Record a dividend payment" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);"><i class="fas fa-coins mr-1"></i>Dividend</button>
       <button onclick="setAlertForCurrentHolding()" class="btn btn-secondary" title="Set price alert" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);"><i class="fas fa-bell mr-1"></i>Alert</button>
       <button id="viewIgnoreBtn" class="btn btn-secondary"></button>
       <button id="viewDeleteBtn" class="btn btn-danger"><i class="fas fa-trash mr-1"></i>Delete</button>
@@ -5630,6 +5646,330 @@ function refreshFamilyView() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// DIVIDEND TRACKING (v0.8a)
+//
+// Per-payment cash-dividend / DRIP / special-distribution ledger with
+// NZ tax fields built in. Reads from `dividends` table (migration 012).
+// RLS: own-rows-only (tax data is personal even within a family).
+//
+// Display logic: gross + withholding shown in native currency of the
+// payment, totals FX-converted to user's base currency for summary cards.
+//
+// Future: IR3 line 17 export (foreign dividends), imputation credit
+// reconciliation, projected next-payment dates from history.
+// ═══════════════════════════════════════════════════════════════════════
+const DIV_TYPE_LABELS = {
+  cash:              'Cash dividend',
+  drip:              'DRIP (reinvested)',
+  special:           'Special distribution',
+  return_of_capital: 'Return of capital',
+  interest:          'Interest income'
+};
+
+async function loadDividends() {
+  if (!_supabase || !_supaUser) return;
+  const content = document.getElementById('divContent');
+  const cards   = document.getElementById('divSummaryCards');
+  if (!content || !cards) return;
+
+  // Populate the per-holding filter dropdown from state.portfolio
+  const filterSel = document.getElementById('divHoldingFilter');
+  if (filterSel) {
+    const current = filterSel.value;
+    const symbols = [...new Set((state.portfolio || []).map(h => h.symbol).filter(Boolean))].sort();
+    filterSel.innerHTML = '<option value="">All holdings</option>' +
+      symbols.map(s => `<option value="${_escape(s)}" ${s === current ? 'selected' : ''}>${_escape(s)}</option>`).join('');
+  }
+
+  const period = document.getElementById('divPeriodFilter')?.value || 'ytd';
+  const symbolFilter = document.getElementById('divHoldingFilter')?.value || '';
+
+  // Date range from period
+  const today = new Date();
+  let fromDate;
+  if (period === 'ytd') fromDate = new Date(today.getFullYear(), 0, 1);
+  else if (period === 'ly') {
+    fromDate = new Date(today.getFullYear() - 1, 0, 1);
+  }
+  else if (period === '12m') {
+    fromDate = new Date(today);
+    fromDate.setFullYear(fromDate.getFullYear() - 1);
+  }
+  // else 'all' → no date filter
+  const toDate = period === 'ly' ? new Date(today.getFullYear() - 1, 11, 31) : null;
+
+  // Build query
+  let query = _supabase.from('dividends')
+    .select('*')
+    .order('pay_date', { ascending: false });
+  if (fromDate) query = query.gte('pay_date', fromDate.toISOString().slice(0, 10));
+  if (toDate)   query = query.lte('pay_date', toDate.toISOString().slice(0, 10));
+  if (symbolFilter) query = query.eq('symbol', symbolFilter);
+
+  const { data: divs, error } = await query;
+  if (error) {
+    content.innerHTML = `<div class="text-xs" style="color:#f87171;">Couldn't load dividends: ${_escape(error.message)}</div>`;
+    cards.innerHTML = '';
+    return;
+  }
+
+  _renderDividendSummary(divs || []);
+  _renderDividendTable(divs || []);
+}
+
+function _renderDividendSummary(divs) {
+  const cards = document.getElementById('divSummaryCards');
+  if (!cards) return;
+  const baseCcy = state.settings.currency || 'NZD';
+  const baseSym = CURRENCY_SYMBOLS[baseCcy] || 'NZ$';
+
+  // Aggregate in user's base currency using current FX
+  let grossBase = 0, withheldBase = 0, imputeBase = 0, count = divs.length;
+  const byHolding = {};
+  divs.forEach(d => {
+    const fx = getFxRate(d.currency || 'NZD', baseCcy);
+    const grossInBase    = Number(d.gross_amount || 0) * fx;
+    const withheldInBase = Number(d.withholding_tax || 0) * fx;
+    const imputeInBase   = Number(d.imputation_credit || 0) * fx;
+    grossBase    += grossInBase;
+    withheldBase += withheldInBase;
+    imputeBase   += imputeInBase;
+    if (!byHolding[d.symbol]) byHolding[d.symbol] = { symbol: d.symbol, gross: 0, count: 0 };
+    byHolding[d.symbol].gross += grossInBase;
+    byHolding[d.symbol].count += 1;
+  });
+  const netBase = grossBase - withheldBase;
+  const topPayer = Object.values(byHolding).sort((a,b) => b.gross - a.gross)[0];
+
+  cards.innerHTML = `
+    <div class="metric-card">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Total income</div>
+      <div class="text-2xl font-bold mt-1" style="color:#fbbf24;">${baseSym}${fmt(grossBase)}</div>
+      <div class="text-xs neutral mt-1">${count} payment${count === 1 ? '' : 's'}, gross</div>
+    </div>
+    <div class="metric-card">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">After withholding</div>
+      <div class="text-2xl font-bold mt-1" style="color:#34d399;">${baseSym}${fmt(netBase)}</div>
+      <div class="text-xs neutral mt-1">${baseSym}${fmt(withheldBase)} withheld at source</div>
+    </div>
+    <div class="metric-card">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Imputation credits</div>
+      <div class="text-2xl font-bold mt-1" style="color:#818cf8;">${baseSym}${fmt(imputeBase)}</div>
+      <div class="text-xs neutral mt-1">NZ-company tax credits</div>
+    </div>
+    <div class="metric-card">
+      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Top payer</div>
+      <div class="text-2xl font-bold mt-1" style="color:#c8d6ef;">${topPayer ? _escape(topPayer.symbol) : '–'}</div>
+      <div class="text-xs neutral mt-1">${topPayer ? baseSym + fmt(topPayer.gross) + ' from ' + topPayer.count + ' payment' + (topPayer.count === 1 ? '' : 's') : 'No data'}</div>
+    </div>
+  `;
+}
+
+function _renderDividendTable(divs) {
+  const wrap = document.getElementById('divContent');
+  if (!wrap) return;
+  if (!divs.length) {
+    wrap.innerHTML = `
+      <div class="text-center py-8">
+        <i class="fas fa-coins text-3xl mb-3 block" style="opacity:0.3;color:#fbbf24;"></i>
+        <div class="text-sm" style="color:#c8d6ef;margin-bottom:4px;">No dividends recorded for this period</div>
+        <div class="text-xs neutral mb-4">Add payments as they arrive. NZ tax fields (withholding + imputation) are optional but make IR3 export easier later.</div>
+        <button onclick="addDividendPrompt()" class="btn btn-sm btn-primary"><i class="fas fa-plus mr-1"></i>Add your first dividend</button>
+      </div>`;
+    return;
+  }
+  const cols = '1fr 1.5fr 1fr 1.2fr 1fr 1fr 100px';
+  wrap.innerHTML = `
+    <div class="table-header" style="display:grid;grid-template-columns:${cols};font-size:10px;">
+      <span>Pay date</span>
+      <span>Holding</span>
+      <span>Type</span>
+      <span class="text-right">Gross</span>
+      <span class="text-right">Withheld</span>
+      <span class="text-right">Imputation</span>
+      <span class="text-right">Actions</span>
+    </div>
+    ${divs.map(d => {
+      const sym = CURRENCY_SYMBOLS[d.currency] || (d.currency + ' ');
+      const typeDef = DIV_TYPE_LABELS[d.div_type] || d.div_type;
+      const typeColor = d.div_type === 'drip' ? '#a78bfa'
+                      : d.div_type === 'special' ? '#fbbf24'
+                      : d.div_type === 'return_of_capital' ? '#fb923c'
+                      : d.div_type === 'interest' ? '#34d399'
+                      : '#94a3b8';
+      return `<div class="table-row" style="display:grid;grid-template-columns:${cols};font-size:12px;">
+        <span class="text-xs neutral">${d.pay_date}</span>
+        <span style="min-width:0;overflow:hidden;">
+          <span class="font-semibold" style="color:#c8d6ef;">${_escape(d.symbol)}</span>
+          ${d.platform ? `<span class="text-xs neutral"> · ${_escape(d.platform)}</span>` : ''}
+          ${d.notes ? `<div class="text-xs neutral" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_escape(d.notes)}">${_escape(d.notes)}</div>` : ''}
+        </span>
+        <span style="font-size:11px;color:${typeColor};">${typeDef}</span>
+        <span class="text-right mono">${sym}${fmt(d.gross_amount)}</span>
+        <span class="text-right mono neutral">${d.withholding_tax > 0 ? sym + fmt(d.withholding_tax) : '–'}</span>
+        <span class="text-right mono neutral">${d.imputation_credit > 0 ? sym + fmt(d.imputation_credit) : '–'}</span>
+        <span class="text-right">
+          <button onclick="editDividendPrompt('${d.id}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 6px;" title="Edit"><i class="fas fa-edit"></i></button>
+          <button onclick="deleteDividend('${d.id}')" class="btn btn-sm" style="font-size:10px;padding:3px 6px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete"><i class="fas fa-trash"></i></button>
+        </span>
+      </div>`;
+    }).join('')}`;
+}
+
+// Open the add/edit dividend modal. `prefill` may contain { symbol, currency, platform }
+async function addDividendPrompt(prefill = {}) {
+  await openDividendModal({ ...prefill }, null);
+}
+
+async function editDividendPrompt(divId) {
+  const { data, error } = await _supabase.from('dividends').select('*').eq('id', divId).single();
+  if (error || !data) return toast.error('Could not load dividend');
+  await openDividendModal(data, divId);
+}
+
+async function openDividendModal(values, editingId) {
+  const isEdit = !!editingId;
+  // Holdings dropdown for symbol auto-fill
+  const symbolList = [...new Set((state.portfolio || []).map(h => h.symbol).filter(Boolean))].sort();
+  const symbolOptions = symbolList.length
+    ? [{ value: '', label: '— Or pick from your holdings —' }, ...symbolList.map(s => {
+        const h = state.portfolio.find(x => x.symbol === s);
+        return { value: s, label: `${s} (${h?.platform || ''}, ${h?.currency || ''})` };
+      })]
+    : null;
+
+  const result = await showFormModal({
+    title:    isEdit ? 'Edit dividend' : 'Add dividend',
+    icon:     'fa-coins',
+    iconColor:'#fbbf24',
+    description: isEdit ? '' : 'Record a dividend, DRIP, special distribution, or return of capital. Withholding + imputation fields are optional but help with NZ tax later.',
+    fields: [
+      { name: 'symbol', label: 'Ticker / Fund code', value: values.symbol || '', required: true,
+        placeholder: 'e.g. NVDA, HARBOUR-AE, ANZ.NZ',
+        hint: 'Use the same code as your holding so per-holding views aggregate correctly.' },
+      ...(symbolOptions ? [{ name: 'symbolPicker', type: 'select', label: '', value: '',
+        options: symbolOptions,
+        hint: 'Picking here auto-fills the symbol + currency + platform above (after submit, edit).' }] : []),
+      { name: 'pay_date', type: 'date', label: 'Pay date', value: values.pay_date || new Date().toISOString().slice(0, 10), required: true,
+        hint: 'When the money landed in your account. Tax year = NZ April-to-March based on this.' },
+      { name: 'ex_date',  type: 'date', label: 'Ex-date (optional)', value: values.ex_date || '' },
+      { name: 'gross_amount', type: 'number', label: 'Gross amount', value: values.gross_amount || '', required: true,
+        placeholder: 'e.g. 24.50', hint: 'Total before any withholding. Native currency of the payment.' },
+      { name: 'currency', type: 'select', label: 'Currency', value: values.currency || (values.symbol && state.portfolio.find(h => h.symbol === values.symbol)?.currency) || 'NZD',
+        options: ['NZD','USD','AUD','GBP','EUR','SGD','INR','AED'].map(c => ({ value: c, label: c })) },
+      { name: 'withholding_tax', type: 'number', label: 'Withholding tax (foreign, optional)', value: values.withholding_tax || '',
+        placeholder: '0.00', hint: 'Tax withheld at source. US: 15%, UK: 0%, AU: 30%. Reduces what you actually got.' },
+      { name: 'imputation_credit', type: 'number', label: 'Imputation credit (NZ only, optional)', value: values.imputation_credit || '',
+        placeholder: '0.00', hint: 'NZ-company tax credit attached to fully-imputed dividends. Usually on the dividend statement.' },
+      { name: 'div_type', type: 'select', label: 'Type', value: values.div_type || 'cash',
+        options: Object.entries(DIV_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l })) },
+      { name: 'platform', label: 'Platform (optional)', value: values.platform || '',
+        placeholder: 'e.g. eToro, Sharesies, Harbour' },
+      { name: 'notes', type: 'textarea', rows: 2, label: 'Notes (optional)', value: values.notes || '',
+        placeholder: 'e.g. "Q1 special distribution"' }
+    ],
+    submitLabel:   isEdit ? 'Save changes' : 'Add dividend',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+
+  // If user picked from the dropdown, override symbol + currency + platform
+  if (result.symbolPicker) {
+    result.symbol = result.symbolPicker;
+    const h = state.portfolio.find(x => x.symbol === result.symbolPicker);
+    if (h) {
+      result.currency = result.currency || h.currency;
+      result.platform = result.platform || h.platform;
+    }
+  }
+
+  const gross = parseFloat(result.gross_amount);
+  if (!isFinite(gross) || gross <= 0) return toast.warning('Gross amount must be > 0');
+
+  const row = {
+    symbol:            (result.symbol || '').toUpperCase().trim(),
+    pay_date:          result.pay_date,
+    ex_date:           result.ex_date || null,
+    gross_amount:      gross,
+    currency:          result.currency || 'NZD',
+    withholding_tax:   parseFloat(result.withholding_tax)   || 0,
+    imputation_credit: parseFloat(result.imputation_credit) || 0,
+    div_type:          result.div_type || 'cash',
+    platform:          result.platform || null,
+    notes:             result.notes || null,
+    source:            'manual'
+  };
+
+  try {
+    if (editingId) {
+      const { error } = await _supabase.from('dividends').update(row).eq('id', editingId);
+      if (error) throw error;
+      toast.success('Dividend updated');
+      logActivity('dividend_updated', { id: editingId, symbol: row.symbol, gross: row.gross_amount });
+    } else {
+      const { error } = await _supabase.from('dividends').insert(row);
+      if (error) throw error;
+      toast.success(`Dividend recorded · ${CURRENCY_SYMBOLS[row.currency] || row.currency}${fmt(row.gross_amount)} from ${row.symbol}`);
+      logActivity('dividend_added', { symbol: row.symbol, gross: row.gross_amount, currency: row.currency });
+    }
+    loadDividends();
+  } catch(e) {
+    toast.error('Could not save: ' + e.message);
+  }
+}
+
+async function deleteDividend(divId) {
+  const ok = await showConfirm({
+    title: 'Delete dividend?',
+    icon: 'fa-trash',
+    iconColor: '#f87171',
+    description: 'This permanently removes the record. If you imported from CSV, re-import to restore.',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    const { error } = await _supabase.from('dividends').delete().eq('id', divId);
+    if (error) throw error;
+    toast.success('Dividend deleted');
+    loadDividends();
+  } catch(e) { toast.error('Delete failed: ' + e.message); }
+}
+
+// CSV export for accountant / IR3 prep
+async function exportDividendsCSV() {
+  const { data: divs, error } = await _supabase
+    .from('dividends')
+    .select('*')
+    .order('pay_date', { ascending: false });
+  if (error) return toast.error('Export failed: ' + error.message);
+  if (!divs?.length) return toast.warning('No dividends to export');
+  const headers = ['pay_date','ex_date','symbol','platform','div_type','currency','gross_amount','withholding_tax','imputation_credit','notes','source'];
+  const esc = (v) => `"${(v == null ? '' : String(v)).replace(/"/g, '""')}"`;
+  const rows = divs.map(d => headers.map(h => esc(d[h])).join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'investiq-dividends-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  toast.success(`Exported ${divs.length} dividend records`);
+  logActivity('dividends_exported', { count: divs.length });
+}
+
+// Called from Holding Detail modal — opens the add-dividend modal seeded
+// with the current holding's symbol, currency, and platform.
+function addDividendForCurrentHolding() {
+  const h = state.portfolio.find(x => x.id === _currentHoldingId);
+  if (!h) return;
+  addDividendPrompt({
+    symbol:   h.symbol,
+    currency: h.currency || 'USD',
+    platform: h.platform || ''
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // PRICE ALERTS (v0.7c)
 //
 // User-defined triggers stored in price_alerts table. Background scheduled
@@ -5983,6 +6323,7 @@ function _showSectionCore(name, el) {
   if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
   if (name === 'news') { loadHeadlines(); loadNews(); }
   if (name === 'family') loadFamilyAggregateView();
+  if (name === 'dividends') loadDividends();
   if (name === 'tax') refreshFIF();
 }
 

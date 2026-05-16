@@ -129,6 +129,43 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.8a (Dividend tracking)
+
+**NZ dividend ledger — biggest NZ-specific moat unlocked**
+- [x] Migration 012_dividends.sql: new `dividends` table with NZ tax
+      fields built in (withholding_tax for foreign source, imputation_credit
+      for NZ companies, div_type covering cash/drip/special/return_of_capital/
+      interest). RLS own-rows-only (tax data personal even within family).
+      Indices on (user_id), (user_id, symbol), (user_id, pay_date).
+      Auto-touching updated_at. SECURITY-INVOKER view dividends_ytd_summary
+      pre-aggregates current-year totals by currency.
+- [x] Frontend Dividends page (replaces 'coming soon' placeholder):
+      4-card summary (total income, after-withholding, imputation credits,
+      top payer) + filter row (period: YTD/last year/12mo/all + per-holding)
+      + Add dividend button + CSV export button + full ledger table with
+      type chips (color-coded by cash/drip/special/etc.).
+- [x] Add/edit modal driven by showFormModal: symbol field with
+      auto-fill picker from holdings, pay_date, ex_date, gross_amount,
+      currency, withholding_tax, imputation_credit, div_type, platform,
+      notes. Picking from the holdings dropdown auto-fills symbol +
+      currency + platform on save.
+- [x] Holding Detail modal: new 'Dividend' button (amber) opens the
+      add-dividend modal pre-seeded with current holding's symbol +
+      currency + platform — one-click per-holding dividend record.
+- [x] CSV export: full ledger to investiq-dividends-YYYY-MM-DD.csv,
+      headers match the DB columns for accountant / IR3 prep workflow.
+- [x] Activity log entries: dividend_added, dividend_updated,
+      dividend_deleted, dividends_exported.
+
+**Activation pending (user runs):**
+- Paste supabase/migrations/012_dividends.sql into SQL Editor
+
+**Future (v0.8b):**
+- IR3 line 17 export formatter (foreign-sourced dividends)
+- Imputation credit reconciliation report
+- Next-payment date forecast from history
+- CSV import (eToro / Sharesies dividend exports)
+
 ### 2026-05-16 session — Pitch brief for Harbour + wider firms
 
 - [x] `docs/PITCH_BRIEF.md` — 13-section strategic narrative covering:
