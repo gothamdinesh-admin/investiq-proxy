@@ -2704,10 +2704,20 @@ function showFormModal(opts) {
       if (f.type === 'static') {
         return `<div style="margin-bottom:12px;padding:12px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;${f.style || ''}">${f.html || _escape(f.value || '')}</div>`;
       }
-      // default: text / email / number / password
+      // default: text / email / number / password / date
+      // Number inputs need step="any" or they reject decimal entries — the
+      // default is step=1 which silently bounces 0.45 etc.
+      const stepAttr  = f.type === 'number' ? `step="${f.step || 'any'}"` : '';
+      const minAttr   = f.type === 'number' && f.min  != null ? `min="${f.min}"`  : '';
+      const inputmode = f.type === 'number' ? 'inputmode="decimal"' : '';
+      const dataList  = f.datalist ? `list="${id}-list"` : '';
+      const dataListEl = f.datalist
+        ? `<datalist id="${id}-list">${f.datalist.map(d => `<option value="${_escape(d)}">`).join('')}</datalist>`
+        : '';
       return `<div style="margin-bottom:12px;">
         ${f.label ? `<label for="${id}" style="display:block;font-size:12px;color:#94a3b8;margin-bottom:4px;">${_escape(f.label)}</label>` : ''}
-        <input type="${f.type || 'text'}" id="${id}" name="${f.name}" class="input" placeholder="${_escape(f.placeholder || '')}" value="${val}" ${req} autocomplete="${f.autocomplete || 'off'}">
+        <input type="${f.type || 'text'}" id="${id}" name="${f.name}" class="input" placeholder="${_escape(f.placeholder || '')}" value="${val}" ${req} ${stepAttr} ${minAttr} ${inputmode} ${dataList} autocomplete="${f.autocomplete || 'off'}">
+        ${dataListEl}
         ${f.hint ? `<div style="font-size:11px;color:#4a6080;margin-top:4px;">${_escape(f.hint)}</div>` : ''}
       </div>`;
     }).join('');
@@ -5829,65 +5839,111 @@ async function editDividendPrompt(divId) {
 
 async function openDividendModal(values, editingId) {
   const isEdit = !!editingId;
-  // Holdings dropdown for symbol auto-fill
-  const symbolList = [...new Set((state.portfolio || []).map(h => h.symbol).filter(Boolean))].sort();
-  const symbolOptions = symbolList.length
-    ? [{ value: '', label: '— Or pick from your holdings —' }, ...symbolList.map(s => {
-        const h = state.portfolio.find(x => x.symbol === s);
-        return { value: s, label: `${s} (${h?.platform || ''}, ${h?.currency || ''})` };
-      })]
-    : null;
+
+  // Build the symbol autocomplete: user's own holdings first, then a curated
+  // list of well-known NZ ETFs / managed funds / KiwiSaver schemes so users
+  // can record dividends from things they're not currently tracking yet.
+  const userSymbols = [...new Set((state.portfolio || []).map(h => h.symbol).filter(Boolean))];
+  const NZ_INCOME_FUND_CODES = [
+    // NZX-listed dividend stocks (common payers)
+    'SPK.NZ', 'AIR.NZ', 'MEL.NZ', 'MCY.NZ', 'CEN.NZ', 'GNE.NZ',
+    'IFT.NZ', 'EBO.NZ', 'MFT.NZ', 'RYM.NZ', 'FPH.NZ', 'ATM.NZ',
+    // NZ ETFs
+    'NZG.NZ', 'NZB.NZ', 'NZP.NZ', 'TWN.NZ', 'TWF.NZ',
+    // Harbour funds
+    'HARBOUR-AE', 'HARBOUR-INCOME', 'HARBOUR-GROWTH',
+    // Milford
+    'MILFORD-AG', 'MILFORD-DI', 'MILFORD-CG',
+    // Other NZ managed funds
+    'GENERATE-GROWTH', 'GENERATE-BALANCED', 'FISHER-GROWTH',
+    'SIMPLICITY-GROWTH', 'BOOSTER-GROWTH', 'PATHFINDER-GROWTH',
+    'KERNEL-S&P500', 'KERNEL-NZ20', 'INVESTNOW-NZX50'
+  ];
+  const allSymbols = [...new Set([...userSymbols, ...NZ_INCOME_FUND_CODES])].sort();
+
+  // Pre-pick currency from the chosen symbol (if it's a known holding)
+  const guessCurrency = (sym) => {
+    const h = state.portfolio.find(x => x.symbol === sym);
+    if (h) return h.currency || 'USD';
+    if (/\.NZ$|^HARBOUR|^MILFORD|^GENERATE|^FISHER|^SIMPLICITY|^BOOSTER|^PATHFINDER|^KERNEL|^INVESTNOW/.test(sym)) return 'NZD';
+    if (/\.AX$/.test(sym)) return 'AUD';
+    if (/\.L$|\.IL$/.test(sym)) return 'GBP';
+    return 'USD';
+  };
 
   const result = await showFormModal({
     title:    isEdit ? 'Edit dividend' : 'Add dividend',
     icon:     'fa-coins',
     iconColor:'#fbbf24',
-    description: isEdit ? '' : 'Record a dividend, DRIP, special distribution, or return of capital. Withholding + imputation fields are optional but help with NZ tax later.',
+    description: isEdit ? '' : 'Record a cash dividend, DRIP, special distribution, return of capital, or interest payment. Foreign withholding + NZ imputation fields are optional but make tax time easier later.',
     fields: [
-      { name: 'symbol', label: 'Ticker / Fund code', value: values.symbol || '', required: true,
-        placeholder: 'e.g. NVDA, HARBOUR-AE, ANZ.NZ',
-        hint: 'Use the same code as your holding so per-holding views aggregate correctly.' },
-      ...(symbolOptions ? [{ name: 'symbolPicker', type: 'select', label: '', value: '',
-        options: symbolOptions,
-        hint: 'Picking here auto-fills the symbol + currency + platform above (after submit, edit).' }] : []),
-      { name: 'pay_date', type: 'date', label: 'Pay date', value: values.pay_date || new Date().toISOString().slice(0, 10), required: true,
-        hint: 'When the money landed in your account. Tax year = NZ April-to-March based on this.' },
-      { name: 'ex_date',  type: 'date', label: 'Ex-date (optional)', value: values.ex_date || '' },
-      { name: 'gross_amount', type: 'number', label: 'Gross amount', value: values.gross_amount || '', required: true,
-        placeholder: 'e.g. 24.50', hint: 'Total before any withholding. Native currency of the payment.' },
-      { name: 'currency', type: 'select', label: 'Currency', value: values.currency || (values.symbol && state.portfolio.find(h => h.symbol === values.symbol)?.currency) || 'NZD',
-        options: ['NZD','USD','AUD','GBP','EUR','SGD','INR','AED'].map(c => ({ value: c, label: c })) },
-      { name: 'withholding_tax', type: 'number', label: 'Withholding tax (foreign, optional)', value: values.withholding_tax || '',
-        placeholder: '0.00', hint: 'Tax withheld at source. US: 15%, UK: 0%, AU: 30%. Reduces what you actually got.' },
-      { name: 'imputation_credit', type: 'number', label: 'Imputation credit (NZ only, optional)', value: values.imputation_credit || '',
-        placeholder: '0.00', hint: 'NZ-company tax credit attached to fully-imputed dividends. Usually on the dividend statement.' },
+      // Combined symbol field with type-ahead — autocompletes from your
+      // holdings + a curated list of common NZ dividend payers + funds.
+      { name: 'symbol', label: 'Ticker / Fund code',
+        value: values.symbol || '',
+        placeholder: 'Type or pick — e.g. NVDA, SPK.NZ, HARBOUR-AE',
+        datalist: allSymbols,
+        hint: 'Start typing to see your holdings + common NZ funds. Use the same code as your holding so per-holding aggregates work.' },
+
+      // Pay date first since it's the most important field
+      { name: 'pay_date', type: 'date', label: 'Pay date (when money arrived)',
+        value: values.pay_date || new Date().toISOString().slice(0, 10), required: true,
+        hint: 'NZ tax year = April to March, based on this date.' },
+
+      // Currency BEFORE amounts so the user sees "in NZD" / "in USD" context
+      { name: 'currency', type: 'select', label: 'Currency of the payment',
+        value: values.currency || guessCurrency(values.symbol || ''),
+        options: ['NZD','USD','AUD','GBP','EUR','SGD','INR','AED'].map(c => ({ value: c, label: c })),
+        hint: 'Native currency of the dividend. Amounts below are in this currency, not converted.' },
+
+      { name: 'gross_amount', type: 'number', label: 'Gross amount (before any tax)',
+        value: values.gross_amount || '', required: true,
+        placeholder: '0.00',
+        hint: 'Total declared by the company, before any tax withheld. E.g. NVDA pays $0.04 × 10 shares = enter "0.40". Accepts decimals.' },
+
+      { name: 'withholding_tax', type: 'number', label: 'Foreign withholding tax (optional)',
+        value: values.withholding_tax || '',
+        placeholder: '0.00',
+        hint: 'Tax the foreign country took before you saw it. US dividends: typically 15% of gross. UK: 0%. AU: 30%. Leave blank for NZ.' },
+
+      { name: 'imputation_credit', type: 'number', label: 'NZ imputation credit (optional)',
+        value: values.imputation_credit || '',
+        placeholder: '0.00',
+        hint: 'NZ tax credit attached to dividends from NZ-listed companies. Shown on your dividend statement. Leave blank for foreign dividends.' },
+
       { name: 'div_type', type: 'select', label: 'Type', value: values.div_type || 'cash',
         options: Object.entries(DIV_TYPE_LABELS).map(([v, l]) => ({ value: v, label: l })) },
+
       { name: 'platform', label: 'Platform (optional)', value: values.platform || '',
         placeholder: 'e.g. eToro, Sharesies, Harbour' },
-      { name: 'notes', type: 'textarea', rows: 2, label: 'Notes (optional)', value: values.notes || '',
-        placeholder: 'e.g. "Q1 special distribution"' }
+
+      { name: 'ex_date',  type: 'date', label: 'Ex-date (optional, advanced)',
+        value: values.ex_date || '',
+        hint: 'Day the dividend was declared. To get the dividend you had to own the stock the day before this. Usually 2-3 weeks before pay date. Leave blank if you don\'t have it — pay date is the only one tax law cares about.' },
+
+      { name: 'notes', type: 'textarea', rows: 2, label: 'Notes (optional)',
+        value: values.notes || '',
+        placeholder: 'e.g. "Q1 2026 distribution"' }
     ],
     submitLabel:   isEdit ? 'Save changes' : 'Add dividend',
     submitVariant: 'primary'
   });
   if (!result) return;
 
-  // If user picked from the dropdown, override symbol + currency + platform
-  if (result.symbolPicker) {
-    result.symbol = result.symbolPicker;
-    const h = state.portfolio.find(x => x.symbol === result.symbolPicker);
-    if (h) {
-      result.currency = result.currency || h.currency;
-      result.platform = result.platform || h.platform;
-    }
-  }
+  // Validation: symbol must be present
+  const sym = (result.symbol || '').toUpperCase().trim();
+  if (!sym) return toast.warning('Symbol / ticker code is required — type or pick one');
+  result.symbol = sym;
+
+  // If the picked symbol matches a holding, fill in platform if blank
+  const holdingMatch = state.portfolio.find(h => h.symbol === sym);
+  if (holdingMatch && !result.platform) result.platform = holdingMatch.platform || '';
 
   const gross = parseFloat(result.gross_amount);
   if (!isFinite(gross) || gross <= 0) return toast.warning('Gross amount must be > 0');
 
   const row = {
-    symbol:            (result.symbol || '').toUpperCase().trim(),
+    symbol:            result.symbol,
     pay_date:          result.pay_date,
     ex_date:           result.ex_date || null,
     gross_amount:      gross,
@@ -6618,8 +6674,25 @@ function closeModal(id) {
   }
 }
 
+// Modal backdrop close — only when the click STARTS and ENDS on the overlay,
+// AND the modal is "non-sticky". Form modals (addModal, settingsModal,
+// agentsModal, promptModal, connectionsModal) are sticky to prevent accidental
+// data loss. Read-only modals (viewModal) close on backdrop click normally.
+const STICKY_MODALS = new Set(['addModal','promptModal','settingsModal','agentsModal','connectionsModal','authModal']);
+let _modalMouseDownTarget = null;
+document.addEventListener('mousedown', (e) => {
+  const overlay = e.target.closest('.modal-overlay');
+  _modalMouseDownTarget = overlay && e.target === overlay ? overlay : null;
+});
 function closeModalBg(e, id) {
-  if (e.target === e.currentTarget) closeModal(id);
+  // Ignore if the modal is sticky (form input — protect the user's data)
+  if (STICKY_MODALS.has(id)) return;
+  // Require BOTH mousedown AND mouseup on the overlay backdrop (not bubbled
+  // from dragging out of the modal). Prevents accidental closes during
+  // text selection or drag-from-inside.
+  if (e.target !== e.currentTarget) return;
+  if (_modalMouseDownTarget !== e.currentTarget) return;
+  closeModal(id);
 }
 
 // Escape key dismisses the topmost open modal
