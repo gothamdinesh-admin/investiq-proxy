@@ -1710,6 +1710,9 @@
           <button onclick="adminTestDigest()" class="btn btn-sm" style="background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);">
             <i class="fas fa-envelope mr-1"></i>Send Test Digest
           </button>
+          <button onclick="adminTestSentry()" class="btn btn-sm" style="background:rgba(168,139,250,0.1);color:#a78bfa;border:1px solid rgba(168,139,250,0.3);">
+            <i class="fas fa-bug mr-1"></i>Test Sentry
+          </button>
           <button onclick="adminClearCloudRow()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);">
             <i class="fas fa-trash-alt mr-1"></i>Reset Cloud Portfolio
           </button>
@@ -8048,6 +8051,57 @@ async function adminTestSupabase() {
 // pipeline (Edge Function deployed, RESEND_API_KEY set, profiles row has
 // digest_opt_in=true) without waiting for the Sunday cron. Requires the
 // admin to know the CRON_SECRET (asked via prompt — not stored anywhere).
+// Verify Sentry plumbing: fires a tagged test event so the user can see it
+// in their Sentry dashboard within ~30s. No actual error thrown — uses
+// Sentry.captureMessage which is the explicit "log this on purpose" API.
+function adminTestSentry() {
+  _adminClearOutput();
+  _adminLog('🔍 Checking Sentry setup…\n');
+  const dsn = PLATFORM_CONFIG.sentryDsn || '';
+  if (!dsn) {
+    _adminLog('✗ Sentry DSN is blank in PLATFORM_CONFIG.sentryDsn');
+    _adminLog('\n  Steps to enable:');
+    _adminLog('  1. Sign up at https://sentry.io (free 5k events/mo)');
+    _adminLog('  2. Create a JavaScript project → copy DSN');
+    _adminLog('  3. Edit standalone/js/00-config.js → paste DSN into sentryDsn field');
+    _adminLog('  4. Commit + push → wait for Netlify deploy');
+    _adminLog('  5. Reload this page → run Test Sentry again');
+    return;
+  }
+  _adminLog(`✓ DSN configured (length ${dsn.length})`);
+  if (!window.Sentry) {
+    _adminLog('✗ window.Sentry is undefined — SDK script never loaded');
+    _adminLog('  CDN may be blocked by browser extension / network');
+    _adminLog('  Check DevTools Network tab for browser.sentry-cdn.com');
+    return;
+  }
+  _adminLog('✓ Sentry SDK is loaded');
+  if (!_sentryInitialised) {
+    _adminLog('⚠ initSentry() hasn\'t completed yet — retrying in 1s…');
+    setTimeout(adminTestSentry, 1000);
+    return;
+  }
+  _adminLog('✓ Sentry initialised\n');
+  _adminLog('🚀 Sending a tagged test event to your Sentry dashboard…');
+  try {
+    window.Sentry.captureMessage('InvestIQ Sentry test event', {
+      level: 'info',
+      tags:  { source: 'admin-test-button', timestamp: new Date().toISOString() }
+    });
+    _adminLog('✓ Event sent.\n');
+    _adminLog('Within 30 seconds you should see this in your Sentry dashboard:');
+    _adminLog('  Project → Issues → "InvestIQ Sentry test event"');
+    _adminLog('  Tags will include: source=admin-test-button');
+    _adminLog('\nIf nothing appears in ~2 min:');
+    _adminLog('  - Check DSN is correct (no extra spaces, full URL)');
+    _adminLog('  - Check Sentry project quota not exhausted');
+    _adminLog('  - Check DevTools Network tab → look for "ingest.sentry.io"');
+    _adminLog('    requests with 200 status');
+  } catch(e) {
+    _adminLog('✗ captureMessage threw: ' + e.message);
+  }
+}
+
 async function adminTestDigest() {
   _adminClearOutput();
   const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
