@@ -2047,6 +2047,22 @@
         </div>
       </div>
 
+      <!-- ═══════════ PRICE ALERTS ═══════════ -->
+      <div id="alertsSection" style="display:none;">
+        <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-bell" style="color:#fbbf24;"></i>
+              <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Price Alerts</span>
+            </div>
+            <button onclick="createAlertPrompt()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-plus mr-1"></i>New alert</button>
+          </div>
+          <div id="alertsContent">
+            <div class="text-xs neutral text-center py-3"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══════════ PLAN (paywall placeholders) ═══════════ -->
       <div id="planSection" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
@@ -2414,6 +2430,7 @@
     <!-- ACTION BUTTONS -->
     <div class="flex gap-3 mt-2 flex-wrap">
       <button id="viewEditBtn" class="btn btn-primary flex-1" style="min-width:120px;"><i class="fas fa-edit mr-1"></i>Edit</button>
+      <button onclick="setAlertForCurrentHolding()" class="btn btn-secondary" title="Set price alert" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);"><i class="fas fa-bell mr-1"></i>Alert</button>
       <button id="viewIgnoreBtn" class="btn btn-secondary"></button>
       <button id="viewDeleteBtn" class="btn btn-danger"><i class="fas fa-trash mr-1"></i>Delete</button>
       <button onclick="closeModal('viewModal')" class="btn btn-secondary">Close</button>
@@ -4498,13 +4515,16 @@ function populateSettingsForm() {
   if (digestSection) digestSection.style.display = _supaUser ? 'block' : 'none';
   if (digestToggle)  digestToggle.checked = !!_userProfile?.digest_opt_in;
 
-  // Family + Plan sections — both visible only when signed in
+  // Family + Alerts + Plan sections — all visible only when signed in
   const familySection = document.getElementById('familySection');
+  const alertsSection = document.getElementById('alertsSection');
   const planSection   = document.getElementById('planSection');
   if (familySection) familySection.style.display = _supaUser ? 'block' : 'none';
+  if (alertsSection) alertsSection.style.display = _supaUser ? 'block' : 'none';
   if (planSection)   planSection.style.display   = _supaUser ? 'block' : 'none';
   if (_supaUser) {
     renderFamilySection();
+    renderAlertsSection();
     renderPlanSection();
   }
 
@@ -5534,6 +5554,248 @@ function switchFamilyView(familyId) {
 
 function refreshFamilyView() {
   loadFamilyAggregateView();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PRICE ALERTS (v0.7c)
+//
+// User-defined triggers stored in price_alerts table. Background scheduled
+// Edge Function check-price-alerts runs every 30 min and sends Resend
+// emails for any active alert whose condition just became true (with
+// cooldown to prevent spam).
+//
+// Two scopes:
+//   - 'ticker'     → triggered by one symbol's price or day-change %
+//   - 'portfolio'  → triggered by user's whole portfolio value or day %
+//
+// Four conditions:
+//   - above         price/value > threshold
+//   - below         price/value < threshold
+//   - day_rise_pct  single-day % gain ≥ threshold
+//   - day_drop_pct  single-day % loss ≥ threshold (positive number)
+// ═══════════════════════════════════════════════════════════════════════
+const ALERT_CONDITION_LABELS = {
+  above:        'rises above',
+  below:        'drops below',
+  day_rise_pct: 'rises % in a day',
+  day_drop_pct: 'drops % in a day'
+};
+
+function formatAlertSummary(a) {
+  const sym = CURRENCY_SYMBOLS[a.currency] || (a.scope === 'portfolio' ? (CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$') : '$');
+  if (a.condition === 'day_rise_pct') return `Day rise ≥ ${a.threshold}%`;
+  if (a.condition === 'day_drop_pct') return `Day drop ≥ ${a.threshold}%`;
+  const label = a.condition === 'above' ? 'rises above' : 'drops below';
+  return `${label} ${sym}${a.threshold}`;
+}
+
+async function renderAlertsSection() {
+  const wrap = document.getElementById('alertsContent');
+  if (!wrap || !_supabase || !_supaUser) return;
+  const { data: alerts, error } = await _supabase
+    .from('price_alerts')
+    .select('id, scope, symbol, condition, threshold, currency, active, last_fired_at, fire_count, cooldown_hours, note, created_at')
+    .order('created_at', { ascending: false });
+  if (error) {
+    wrap.innerHTML = `<div class="text-xs" style="color:#f87171;">Couldn't load alerts: ${_escape(error.message)}</div>`;
+    return;
+  }
+  if (!alerts?.length) {
+    wrap.innerHTML = `
+      <div style="background:#0a1120;border:1px dashed #1e2d4a;border-radius:10px;padding:14px;text-align:center;">
+        <div class="text-sm" style="color:#c8d6ef;margin-bottom:6px;">No alerts set up yet</div>
+        <div class="text-xs neutral mb-3" style="line-height:1.5;">Get an email when NVDA drops below your number, or when your whole portfolio swings &gt;5% in a day. Cooldown prevents spam — same alert fires at most every 24h.</div>
+        <button onclick="createAlertPrompt()" class="btn btn-sm btn-primary" style="font-size:12px;padding:6px 14px;"><i class="fas fa-bell mr-1"></i>Create your first alert</button>
+      </div>`;
+    return;
+  }
+  wrap.innerHTML = `<div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:10px;padding:10px;">
+    ${alerts.map(a => {
+      const target = a.scope === 'portfolio' ? '<i class="fas fa-briefcase mr-1" style="color:#22d3ee;"></i>Portfolio' : `<i class="fas fa-chart-line mr-1" style="color:#60a5fa;"></i>${_escape(a.symbol)}`;
+      const lastFired = a.last_fired_at ? ` · fired ${timeSince(new Date(a.last_fired_at))}` : '';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #1e2d4a;gap:8px;flex-wrap:wrap;">
+        <div style="min-width:0;flex:1;">
+          <div class="text-sm" style="color:${a.active ? '#c8d6ef' : '#4a6080'};">${target} · ${formatAlertSummary(a)}</div>
+          <div class="text-xs neutral" style="font-size:10px;">Cooldown ${a.cooldown_hours}h${lastFired}${a.note ? ' · ' + _escape(a.note) : ''}</div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="toggleAlert('${a.id}', ${!a.active})" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="${a.active ? 'Pause' : 'Activate'}"><i class="fas fa-${a.active ? 'pause' : 'play'}"></i></button>
+          <button onclick="editAlertPrompt('${a.id}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Edit"><i class="fas fa-edit"></i></button>
+          <button onclick="deleteAlert('${a.id}')" class="btn btn-sm" style="font-size:10px;padding:3px 8px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="text-xs neutral mt-2" style="font-size:11px;line-height:1.5;">
+    <i class="fas fa-info-circle mr-1"></i>Alerts check every 30 min in the background. You'll get an email when a condition triggers (capped by cooldown).
+  </div>`;
+}
+
+// Open the alert create/edit modal. `prefill` may contain { symbol, currency, currentPrice }
+// to seed the form (used by "Set alert" button in Holding Detail).
+async function createAlertPrompt(prefill = {}) {
+  await openAlertModal({ ...prefill }, null);
+}
+
+async function editAlertPrompt(alertId) {
+  const { data, error } = await _supabase.from('price_alerts').select('*').eq('id', alertId).single();
+  if (error || !data) return toast.error('Could not load alert: ' + (error?.message || 'not found'));
+  await openAlertModal(data, alertId);
+}
+
+async function openAlertModal(values, editingId) {
+  const isEdit = !!editingId;
+  // Pre-decide scope/symbol options
+  const portfolioOpt = { value: 'portfolio', label: 'Whole portfolio' };
+  const symbolList = [...new Set(state.portfolio.map(h => h.symbol).filter(Boolean))].sort();
+  const tickerOpts = symbolList.map(s => ({ value: `ticker:${s}`, label: `${s} (${state.portfolio.find(h => h.symbol === s)?.name || s})` }));
+  // Show seeded symbol first when applicable
+  const seededTarget = values.scope === 'portfolio' ? 'portfolio'
+                     : values.symbol ? `ticker:${values.symbol}`
+                     : (tickerOpts[0]?.value || 'portfolio');
+
+  const result = await showFormModal({
+    title: isEdit ? 'Edit alert' : 'New price alert',
+    icon: 'fa-bell',
+    iconColor: '#fbbf24',
+    description: 'Get an email when this condition triggers. Cooldown prevents spam — same alert fires at most every N hours.',
+    fields: [
+      {
+        name: 'target',
+        type: 'select',
+        label: 'What to watch',
+        value: seededTarget,
+        options: [portfolioOpt, ...tickerOpts],
+        hint: tickerOpts.length ? `Pick a holding or your whole portfolio.` : 'Add some holdings first — then you can also set per-ticker alerts.'
+      },
+      {
+        name: 'condition',
+        type: 'select',
+        label: 'When',
+        value: values.condition || 'below',
+        options: [
+          { value: 'above', label: 'Rises above (price/value)' },
+          { value: 'below', label: 'Drops below (price/value)' },
+          { value: 'day_rise_pct', label: 'Rises % in a single day' },
+          { value: 'day_drop_pct', label: 'Drops % in a single day' }
+        ]
+      },
+      {
+        name: 'threshold',
+        type: 'number',
+        label: 'Threshold',
+        value: values.threshold || values.currentPrice || '',
+        placeholder: values.currentPrice ? `e.g. ${(values.currentPrice * 0.9).toFixed(2)}` : 'e.g. 150 or 5',
+        required: true,
+        hint: 'Number only. For % conditions enter a percentage (e.g. 5 = 5%).'
+      },
+      {
+        name: 'cooldown_hours',
+        type: 'select',
+        label: 'Cooldown',
+        value: String(values.cooldown_hours || 24),
+        options: [
+          { value: '1',  label: '1 hour' },
+          { value: '6',  label: '6 hours' },
+          { value: '24', label: '24 hours (default)' },
+          { value: '72', label: '3 days' },
+          { value: '168',label: '1 week' }
+        ],
+        hint: 'Maximum frequency for the same alert to fire.'
+      },
+      {
+        name: 'note',
+        label: 'Note (optional)',
+        value: values.note || '',
+        placeholder: 'e.g. "Thesis broken if this hits"',
+        hint: 'Visible in the email when fired.'
+      }
+    ],
+    submitLabel: isEdit ? 'Save changes' : 'Create alert',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+
+  const target = result.target || '';
+  const scope  = target === 'portfolio' ? 'portfolio' : 'ticker';
+  const symbol = target.startsWith('ticker:') ? target.slice(7) : null;
+  const threshold = parseFloat(result.threshold);
+  if (!isFinite(threshold) || threshold <= 0) return toast.warning('Threshold must be a positive number');
+  const condition = result.condition;
+  const cooldown_hours = parseInt(result.cooldown_hours) || 24;
+  const note = (result.note || '').trim() || null;
+
+  // Currency hint — for ticker alerts, pull from the holding; default NZD for portfolio
+  let currency = null;
+  if (scope === 'ticker' && symbol) {
+    const h = state.portfolio.find(x => x.symbol === symbol);
+    currency = h?.currency || 'USD';
+  } else {
+    currency = state.settings.currency || 'NZD';
+  }
+
+  try {
+    if (editingId) {
+      const { error } = await _supabase.from('price_alerts').update({
+        scope, symbol, condition, threshold, currency, cooldown_hours, note
+      }).eq('id', editingId);
+      if (error) throw error;
+      toast.success('Alert updated');
+      logActivity('alert_updated', { alert_id: editingId, scope, symbol, condition });
+    } else {
+      const { error } = await _supabase.from('price_alerts').insert({
+        scope, symbol, condition, threshold, currency, cooldown_hours, note
+      });
+      if (error) throw error;
+      toast.success(scope === 'ticker' ? `Alert set for ${symbol}` : 'Portfolio alert set');
+      logActivity('alert_created', { scope, symbol, condition, threshold });
+    }
+    renderAlertsSection();
+  } catch(e) {
+    toast.error('Could not save alert: ' + e.message);
+  }
+}
+
+async function toggleAlert(alertId, makeActive) {
+  try {
+    const { error } = await _supabase.from('price_alerts').update({ active: makeActive }).eq('id', alertId);
+    if (error) throw error;
+    toast.success(makeActive ? 'Alert activated' : 'Alert paused');
+    renderAlertsSection();
+  } catch(e) { toast.error('Toggle failed: ' + e.message); }
+}
+
+async function deleteAlert(alertId) {
+  const ok = await showConfirm({
+    title: 'Delete alert?',
+    icon: 'fa-trash',
+    iconColor: '#f87171',
+    description: 'This permanently removes the alert. You can recreate it later from scratch.',
+    confirmLabel: 'Delete',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
+  try {
+    const { error } = await _supabase.from('price_alerts').delete().eq('id', alertId);
+    if (error) throw error;
+    toast.success('Alert deleted');
+    logActivity('alert_deleted', { alert_id: alertId });
+    renderAlertsSection();
+  } catch(e) { toast.error('Delete failed: ' + e.message); }
+}
+
+// Called from Holding Detail modal — opens the alert modal seeded with
+// the current holding's symbol, currency, and current price.
+function setAlertForCurrentHolding() {
+  const h = state.portfolio.find(x => x.id === _currentHoldingId);
+  if (!h) return;
+  createAlertPrompt({
+    scope:        'ticker',
+    symbol:       h.symbol,
+    currency:     h.currency || 'USD',
+    currentPrice: h.currentPrice
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════

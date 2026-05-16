@@ -129,6 +129,34 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.7c (Price Alerts)
+
+**Price Alerts foundation**
+- [x] Migration 011_price_alerts.sql: new `price_alerts` table with scope
+      (ticker/portfolio), condition (above/below/day_rise_pct/day_drop_pct),
+      threshold, currency, cooldown_hours, fire_count tracking, RLS
+      (own-rows-only), auth.uid() default on user_id.
+- [x] Edge Function check-price-alerts: scheduled every 30 min via pg_cron.
+      Reads all active off-cooldown alerts, batch-fetches current prices
+      from Render `/api/market`, evaluates each condition, sends styled
+      HTML email via Resend, marks last_fired_at + increments fire_count.
+      X-Cron-Secret gate (same pattern as weekly-digest). Portfolio-scope
+      alerts pull latest + prior investiq_snapshots for day-% calc.
+- [x] Frontend Settings → Alerts section: list with toggle/edit/delete
+      per alert, "+ New alert" button → modal with scope (Whole portfolio
+      OR specific ticker dropdown from your holdings), condition select,
+      threshold number, cooldown select (1h/6h/24h/3d/1w), optional note.
+- [x] Holding Detail modal: new "Alert" button (amber, bell icon) opens
+      the same modal pre-seeded with current symbol + currency + current
+      price as the threshold placeholder.
+- [x] Activity log entries: alert_created, alert_updated, alert_deleted.
+
+**Activation pending (user runs):**
+- Run migration 011_price_alerts.sql in Supabase SQL Editor
+- Deploy check-price-alerts Edge Function via Dashboard (Verify JWT OFF)
+- Set PROXY_URL + PROXY_SECRET secrets on the Edge Function
+- Run check-price-alerts/setup.sql to schedule the cron
+
 ### 2026-05-16 session — Release v0.7b (Polished Family + Aggregate View)
 
 **Reusable styled modals (replaces native prompt/confirm/alert)**
