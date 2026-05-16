@@ -43,16 +43,72 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
+    /* ═══════════════════════════════════════════════════════════════════
+       THEME — CSS variables. Default = dark. [data-theme="light"] on <html>
+       flips to light mode. Variables cover the highest-impact surfaces;
+       individual hard-coded hex values throughout the rest of the file
+       still need migration but the big visual surfaces switch correctly.
+       ═══════════════════════════════════════════════════════════════════ */
+    :root {
+      --bg:            #080d1a;
+      --bg-panel:      #0f1729;
+      --bg-panel-2:    #141e33;
+      --bg-input:      #141e33;
+      --border:        #1e2d4a;
+      --border-strong: #2a3f60;
+      --text-primary:  #c8d6ef;
+      --text-secondary:#94a3b8;
+      --text-muted:    #4a6080;
+      --accent:        #6366f1;
+      --accent-hover:  #5254cc;
+      --scrollbar-bg:  #0f1729;
+      --scrollbar-fg:  #1e2d4a;
+    }
+
+    [data-theme="light"] {
+      --bg:            #f7f8fb;
+      --bg-panel:      #ffffff;
+      --bg-panel-2:    #f1f5f9;
+      --bg-input:      #ffffff;
+      --border:        #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text-primary:  #0f172a;
+      --text-secondary:#475569;
+      --text-muted:    #94a3b8;
+      --accent:        #6366f1;
+      --accent-hover:  #4f46e5;
+      --scrollbar-bg:  #f1f5f9;
+      --scrollbar-fg:  #cbd5e1;
+    }
+
     * { box-sizing: border-box; }
-    body { font-family: 'Inter', -apple-system, sans-serif; background: #080d1a; color: #c8d6ef; margin: 0; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0f1729; }
-    ::-webkit-scrollbar-thumb { background: #1e2d4a; border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-fg); border-radius: 3px; }
 
     .mono { font-family: 'JetBrains Mono', monospace; }
-    .glass { background: rgba(15,23,41,0.85); backdrop-filter: blur(12px); border: 1px solid #1e2d4a; }
-    .card { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 12px; }
-    .card2 { background: #141e33; border: 1px solid #1e2d4a; border-radius: 8px; }
+    .glass { background: var(--bg-panel); backdrop-filter: blur(12px); border: 1px solid var(--border); }
+    .card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; transition: background 0.25s, border-color 0.25s; }
+    .card2 { background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.25s, border-color 0.25s; }
+
+    /* Light-mode-only overrides for elements that look wrong with just the
+       variables flipped — many descendants still use hard-coded hex values
+       throughout the file. These are the high-traffic surfaces. */
+    [data-theme="light"] nav { background: rgba(255,255,255,0.95) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
+    [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
+    [data-theme="light"] .metric-card { background: var(--bg-panel) !important; border: 1px solid var(--border) !important; }
+    [data-theme="light"] .input { background: var(--bg-input) !important; border: 1px solid var(--border) !important; color: var(--text-primary) !important; }
+    [data-theme="light"] .table-row { color: var(--text-primary) !important; border-bottom: 1px solid var(--border); }
+    [data-theme="light"] .table-header { color: var(--text-secondary) !important; border-bottom: 1px solid var(--border-strong) !important; }
+    [data-theme="light"] .nav-link { color: var(--text-secondary) !important; }
+    [data-theme="light"] .nav-link.active, [data-theme="light"] .nav-link:hover { background: #e0e7ff !important; color: var(--accent) !important; }
+    [data-theme="light"] .modal { background: var(--bg-panel) !important; color: var(--text-primary); border: 1px solid var(--border); }
+    [data-theme="light"] .modal-overlay { background: rgba(15,23,42,0.45) !important; }
+    [data-theme="light"] .neutral { color: var(--text-secondary) !important; }
+    [data-theme="light"] .btn-secondary { background: var(--bg-panel-2) !important; color: var(--text-primary) !important; border: 1px solid var(--border) !important; }
+    [data-theme="light"] .btn-secondary:hover { background: #e2e8f0 !important; }
+    [data-theme="light"] .tag { color: inherit; }
 
     .pos { color: #34d399; }
     .neg { color: #f87171; }
@@ -991,6 +1047,9 @@
     <button onclick="openModal('helpModal')" class="btn btn-sm btn-secondary" title="Help & FAQ">
       <i class="fas fa-question-circle"></i>
     </button>
+    <button onclick="toggleTheme()" id="themeToggleBtn" class="btn btn-sm btn-secondary" title="Toggle light / dark mode">
+      <i id="themeToggleIcon" class="fas fa-moon"></i>
+    </button>
     <button onclick="openModal('settingsModal')" class="btn btn-sm btn-secondary" title="Settings">
       <i class="fas fa-cog"></i>
     </button>
@@ -1101,6 +1160,17 @@
     <!-- OVERVIEW SECTION -->
     <div id="section-overview">
 
+      <!-- Personalised greeting strip — time-aware + portfolio headline -->
+      <div id="overviewGreeting" class="mb-5" style="display:none;">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 id="greetingText" class="text-2xl font-bold" style="color:var(--text-primary, #c8d6ef);"></h1>
+            <div id="greetingSubtext" class="text-sm neutral mt-1"></div>
+          </div>
+          <div id="greetingBadges" class="flex items-center gap-2 flex-wrap"></div>
+        </div>
+      </div>
+
       <!-- Summary metrics row -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="metric-card blue fadeIn">
@@ -1161,16 +1231,32 @@
         </div>
       </div>
 
-      <!-- Holdings table (overview) -->
-      <div class="card mb-6">
-        <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid #1e2d4a;">
-          <div class="section-title">
-            <i class="fas fa-briefcase" style="color:#fbbf24;"></i>
-            Holdings
+      <!-- Today's biggest moves — compact horizontal strip -->
+      <div id="todaysMovesCard" class="card mb-6" style="padding:18px 20px;display:none;">
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+          <div class="section-title" style="margin:0;">
+            <i class="fas fa-bolt" style="color:#fbbf24;"></i>
+            Today's biggest moves
           </div>
-          <button onclick="openModal('addModal')" class="btn btn-sm btn-primary">
-            <i class="fas fa-plus mr-1"></i>Add
-          </button>
+          <span class="text-xs neutral">Click to see details</span>
+        </div>
+        <div id="todaysMovesContent" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- Top holdings preview — replaces the duplicate full table -->
+      <div class="card mb-6">
+        <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border, #1e2d4a);">
+          <div class="section-title" style="margin:0;">
+            <i class="fas fa-briefcase" style="color:#fbbf24;"></i>
+            Top holdings
+            <span id="holdingsCountLabel" class="text-xs neutral ml-2"></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="showSection('holdings', document.querySelector('.nav-link[onclick*=\'holdings\']'))" class="btn btn-sm btn-secondary" style="font-size:11px;padding:5px 12px;">View all <i class="fas fa-arrow-right ml-1"></i></button>
+            <button onclick="openModal('addModal')" class="btn btn-sm btn-primary" style="font-size:11px;padding:5px 12px;">
+              <i class="fas fa-plus mr-1"></i>Add
+            </button>
+          </div>
         </div>
         <div id="holdingsTableWrap">
           <div class="table-header" style="display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
@@ -2551,6 +2637,53 @@ const toast = (() => {
 })();
 
 // ═══════════════════════════════════════════════════════════════════════
+// THEME — light / dark mode toggle.
+//
+// Persistence chain: localStorage 'investiq_theme' (fastest, sync) →
+// state.settings.theme (cloud-sync via existing saveState) → defaults
+// to 'dark' if neither exists. CSS variables in <style> handle the
+// actual colour swap when [data-theme] changes on <html>.
+//
+// Called in init() AFTER loadState() so user preference is honoured.
+// ═══════════════════════════════════════════════════════════════════════
+function applyTheme(theme) {
+  const t = (theme === 'light') ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  const icon = document.getElementById('themeToggleIcon');
+  if (icon) icon.className = (t === 'light') ? 'fas fa-sun' : 'fas fa-moon';
+  try { localStorage.setItem('investiq_theme', t); } catch(e) {}
+}
+
+function loadInitialTheme() {
+  let theme = 'dark';
+  try {
+    theme = localStorage.getItem('investiq_theme')
+         || state.settings?.theme
+         || 'dark';
+  } catch(e) {}
+  applyTheme(theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  // Persist to settings for cloud sync across devices
+  if (state && state.settings) {
+    state.settings.theme = next;
+    try { saveState(); } catch(e) {}
+  }
+  // Tell any active Chart.js instances to redraw — they read CSS vars
+  // for ticks/grid so they pick up the new colours automatically on a
+  // re-render. Force a render by calling renderAll if metrics exist.
+  try { renderAll(); } catch(e) {}
+  if (typeof loadSnapshotChart === 'function' && currentSection === 'performance') {
+    try { loadSnapshotChart(); } catch(e) {}
+  }
+  toast.success(`Switched to ${next} mode`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // SENTRY ERROR MONITORING (Security C5)
 //
 // Initialised early in init(). DSN comes from PLATFORM_CONFIG.sentryDsn.
@@ -3332,6 +3465,8 @@ function normalizeHoldingLots(h) {
 // ===== RENDER FUNCTIONS =====
 function renderAll() {
   const metrics = getMetrics();
+  renderOverviewGreeting(metrics);
+  renderTodaysMoves(metrics);
   renderSummaryCards(metrics);
   renderSidebar(metrics);
   renderHoldingsTable(metrics);
@@ -3344,6 +3479,87 @@ function renderAll() {
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
+}
+
+// Personalised greeting on Overview — time-aware + portfolio headline.
+// Tiny dopamine touch: makes the dashboard feel "yours" not generic.
+function renderOverviewGreeting(metrics) {
+  const wrap = document.getElementById('overviewGreeting');
+  const text = document.getElementById('greetingText');
+  const sub  = document.getElementById('greetingSubtext');
+  const badges = document.getElementById('greetingBadges');
+  if (!wrap || !text || !sub) return;
+  if (!metrics.holdings?.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+
+  // Time-aware greeting
+  const hour = new Date().getHours();
+  const greetingWord = hour < 5 ? 'Working late' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : hour < 22 ? 'Good evening' : 'Late one';
+  const name = _userProfile?.display_name
+            || state.settings.name?.split(' ')[0]
+            || _supaUser?.email?.split('@')[0]
+            || 'there';
+  // Capitalize first letter, strip trailing portfolio-y suffix
+  const niceName = String(name).charAt(0).toUpperCase() + String(name).slice(1).replace(/'s? portfolio$/i, '').trim();
+  text.textContent = `${greetingWord}, ${niceName}`;
+
+  // Headline storytelling — lead with the most interesting number
+  const sym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+  const dayPct = metrics.totalValue > 0 ? (metrics.totalDayChange / (metrics.totalValue - metrics.totalDayChange)) * 100 : 0;
+  const daySign = metrics.totalDayChange >= 0 ? '+' : '−';
+  const totalSign = metrics.totalGain >= 0 ? 'up' : 'down';
+  let storyParts = [];
+  if (metrics.totalDayChange != null && Math.abs(metrics.totalDayChange) >= 0.01) {
+    storyParts.push(`<span style="color:${metrics.totalDayChange >= 0 ? '#34d399' : '#f87171'};">${daySign}${sym}${fmt(Math.abs(metrics.totalDayChange))}</span> today`);
+  }
+  storyParts.push(`<span style="color:${metrics.totalGain >= 0 ? '#34d399' : '#f87171'};">${totalSign} ${fmt(Math.abs(metrics.totalGainPct))}%</span> all-time`);
+  sub.innerHTML = `Your portfolio is ${storyParts.join(' · ')}`;
+
+  // Right-side badges: holdings count + date
+  const today = new Date().toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
+  badges.innerHTML = `
+    <span class="text-xs neutral" style="padding:4px 10px;border-radius:9999px;background:rgba(129,140,248,0.1);color:#818cf8;border:1px solid rgba(129,140,248,0.25);"><i class="fas fa-briefcase mr-1"></i>${metrics.holdings.length} holdings</span>
+    <span class="text-xs neutral" style="padding:4px 10px;border-radius:9999px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);"><i class="far fa-calendar mr-1"></i>${today}</span>
+  `;
+}
+
+// Today's biggest moves — 3-card horizontal strip. Only shows if at least
+// one holding has a meaningful (>0.5%) day change. Visceral dopamine touch
+// that gives the user something fresh every market day.
+function renderTodaysMoves(metrics) {
+  const card = document.getElementById('todaysMovesCard');
+  const wrap = document.getElementById('todaysMovesContent');
+  if (!card || !wrap) return;
+  const movers = metrics.holdings
+    .filter(h => h.dayChangePct != null && Math.abs(h.dayChangePct) >= 0.5)
+    .sort((a, b) => Math.abs(b.dayChangePct) - Math.abs(a.dayChangePct))
+    .slice(0, 3);
+  if (!movers.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const sym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+  wrap.innerHTML = movers.map(h => {
+    const pct = h.dayChangePct;
+    const isUp = pct >= 0;
+    const color = isUp ? '#34d399' : '#f87171';
+    const bg    = isUp ? 'rgba(52,211,153,0.08)' : 'rgba(248,113,113,0.08)';
+    const arrow = isUp ? '▲' : '▼';
+    const dayAmt = h.dayChange ? Math.abs(h.dayChange * (h.quantity || 1) * (h.fxRate || 1)) : 0;
+    return `<div onclick="viewHolding('${_escape(h.id)}')" style="cursor:pointer;padding:14px 16px;border-radius:10px;background:${bg};border:1px solid ${color}33;transition:transform 0.15s, border-color 0.15s;" onmouseover="this.style.transform='translateY(-2px)';this.style.borderColor='${color}'" onmouseout="this.style.transform='';this.style.borderColor='${color}33'">
+      <div class="flex items-center justify-between gap-2">
+        <div style="min-width:0;">
+          <div class="font-semibold text-sm" style="color:var(--text-primary, #c8d6ef);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.symbol)}</div>
+          <div class="text-xs neutral" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.name || h.symbol)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div class="font-bold mono text-sm" style="color:${color};">${arrow} ${isUp ? '+' : '-'}${fmt(Math.abs(pct))}%</div>
+          <div class="text-xs neutral" style="font-size:10px;">${isUp ? '+' : '-'}${sym}${fmt(dayAmt)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function renderPlatformBreakdown(metrics) {
@@ -3481,11 +3697,29 @@ function renderHoldingsTable(metrics) {
   const isMobile = window.matchMedia('(max-width: 768px)').matches;
   const header = document.querySelector('#section-overview .table-header');
 
+  // Update the "X holdings · view all" label
+  const countLbl = document.getElementById('holdingsCountLabel');
+  if (countLbl) {
+    countLbl.textContent = metrics.holdings.length
+      ? `· top 5 of ${metrics.holdings.length}`
+      : '';
+  }
+
   if (!metrics.holdings.length) {
     document.getElementById('holdingsRows').innerHTML = renderEmptyHoldings();
     if (header) header.style.display = '';
     return;
   }
+
+  // Overview shows only the top 5 by current value — full list is on Holdings tab
+  const fullMetricsHoldings = metrics.holdings;
+  metrics = {
+    ...metrics,
+    holdings: [...metrics.holdings]
+      .filter(h => !h.ignored)
+      .sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0))
+      .slice(0, 5)
+  };
 
   if (isMobile) {
     if (header) header.style.display = 'none';
@@ -8907,6 +9141,9 @@ async function init() {
   if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);
 
   loadState();
+  // Apply theme AFTER loadState (so state.settings.theme is available) and
+  // BEFORE any renders (so first paint matches user preference).
+  loadInitialTheme();
   autoNormalizeTickers(false);    // auto-fix BTC/ETH aliases from localStorage
   healDuplicates();               // heal any dups that snuck into localStorage
   updateAdminDiagnostics();

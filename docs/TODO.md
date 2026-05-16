@@ -129,6 +129,58 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.8b (Overview decongestion + Theme)
+
+User feedback: Overview holdings duplication felt crowded; wanted
+psychological-design principles applied + dark/light mode toggle.
+
+**Overview decongestion**
+- [x] Removed full holdings table from Overview (was duplicating the
+      Holdings tab). Replaced with "Top 5 holdings" preview card +
+      'View all 60 →' CTA routing to Holdings tab.
+- [x] holdingsCountLabel shows context: "· top 5 of 60"
+- [x] New "Today's biggest moves" card: 3-card horizontal strip of
+      holdings with day change ≥0.5%, sorted by absolute move. Each
+      card is clickable → opens Holding Detail. Color-coded (green
+      for gains, red for losses) with hover lift micro-animation.
+      Hides entirely on days with no significant moves.
+
+**Personalised greeting strip**
+- [x] Time-aware: "Good morning" / "Good afternoon" / "Good evening" /
+      "Working late" / "Late one" based on local hour.
+- [x] First-name greeting from _userProfile.display_name → settings.name
+      → email username → 'there' fallback.
+- [x] Story-first sub-headline: "Your portfolio is +NZ\$285 today · up
+      27.92% all-time" with green/red colour coding (not just numbers).
+- [x] Right-side badges: holdings count + today's date (en-NZ locale).
+- [x] Auto-hides when portfolio empty (no false dopamine).
+
+**Light / Dark theme infrastructure**
+- [x] CSS variables in :root: --bg, --bg-panel, --bg-panel-2, --bg-input,
+      --border, --border-strong, --text-primary, --text-secondary,
+      --text-muted, --accent, --scrollbar-bg/fg. Cover the highest-impact
+      surfaces. Hard-coded hex still scattered elsewhere — incremental
+      migration deferred.
+- [x] [data-theme="light"] override block defines light palette
+      (white + slate scale + indigo accent). Plus targeted overrides
+      for nav, sidebar, metric-card, input, table-row, table-header,
+      nav-link, modal, modal-overlay, neutral, btn-secondary, tag.
+- [x] Theme toggle button in header (sun/moon icon). Click cycles
+      light ↔ dark. Persists to localStorage 'investiq_theme' + cloud-
+      synced via state.settings.theme.
+- [x] loadInitialTheme() called in init() AFTER loadState() — so first
+      paint matches user preference, no flash of wrong theme.
+- [x] Toast confirms switch. Charts auto-redraw to pick up new colours.
+- [x] body has 0.25s transition on background/color for smooth switch.
+
+**Known light-mode rough edges (incremental fix-list)**
+- Some inline `style="background:#0a1120"` etc. throughout don't pick up
+  vars yet — visible mostly on dividend cards, alerts list, family roster.
+- Chart.js tick + grid colors still hardcoded #4a6080 / #1a2540 —
+  readable in both modes but could be tuned per-theme.
+- Sentry / Resend test panels (admin) read OK but neutral grey on grey
+  background in light mode is dull.
+
 ### 2026-05-16 session — Release v0.8a (Dividend tracking)
 
 **NZ dividend ledger — biggest NZ-specific moat unlocked**
