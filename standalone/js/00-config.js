@@ -29,7 +29,7 @@ const PLATFORM_CONFIG = {
   // Paste your Sentry frontend DSN here (looks like https://<key>@<id>.ingest.sentry.io/<project>).
   // Leave blank to disable; the SDK no-ops without a DSN.
   // Free tier covers ~5k events/month — plenty for this app's scale.
-  sentryDsn:     ''
+  sentryDsn:     'https://1645072bacece09fa8d47fd71a3f4ce5@o4511397337432064.ingest.de.sentry.io/4511397340512336'
 };
 
 // Currency symbol lookup — used by fmtCurrency.
