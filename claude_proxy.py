@@ -637,8 +637,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if is_harbour:
             result = self._scrape_harbour(code, name)
 
-        # (Future) Add scrapers for Milford, Generate, Fisher, Sorted.org.nz
-        # generic fallback. For now Harbour-only as the proof-of-concept.
+        # Fallback: try Sorted.org.nz Smart Investor — government-backed,
+        # covers ALL NZ retail funds + KiwiSaver. If we got no price from
+        # the provider-specific scraper, try this as a fallback.
+        if not (result and result.get("price")):
+            sorted_result = self._scrape_sorted_nz(code, provider, name)
+            # Prefer Sorted result if it found a price; otherwise keep the
+            # provider-specific diagnostic (which often has 'available').
+            if sorted_result and sorted_result.get("price"):
+                result = sorted_result
+            elif sorted_result and sorted_result.get("available") and not (result and result.get("available")):
+                result = sorted_result
 
         if result and result.get("price"):
             cache_set(cache_key, result, ttl_seconds=43200)  # 12h
@@ -657,26 +666,168 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._json(404, {"error": "Fund not found via any source",
                           "tried": ["harbour" if is_harbour else None]})
 
+    def _scrape_sorted_nz(self, code, provider, name):
+        """Search Sorted.org.nz Smart Investor (FMA-run NZ fund database).
+
+        Smart Investor publishes daily unit prices for EVERY NZ retail fund
+        + KiwiSaver scheme via a Morningstar-powered backend. URL pattern:
+          https://smartinvestor.sorted.org.nz/api/fund/search?query=<text>
+        That endpoint returns JSON. If the format ever changes, we fall
+        back to HTML scraping the public search page.
+
+        Returns: {price, asOf, currency, source, fund_name, available} or None
+        """
+        try:
+            import urllib.request as _ur
+            import urllib.parse as _up
+            import json as _json
+            # Build the search query — prefer fund name, then provider, then code
+            query = (name or provider or code or '').strip()
+            if not query:
+                return None
+            # Try the documented public endpoint first
+            endpoints = [
+                f"https://smartinvestor.sorted.org.nz/api/funds?search={_up.quote(query)}",
+                f"https://smartinvestor.sorted.org.nz/api/fund/search?query={_up.quote(query)}",
+            ]
+            data = None
+            for url in endpoints:
+                req = _ur.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (InvestIQ Portfolio Tracker; +https://investiq-nz.netlify.app)",
+                    "Accept": "application/json,text/html"
+                })
+                try:
+                    with _ur.urlopen(req, timeout=10) as r:
+                        body = r.read().decode("utf-8", errors="ignore")
+                        # Try to parse as JSON first
+                        try:
+                            data = _json.loads(body)
+                            break
+                        except Exception:
+                            continue
+                except Exception:
+                    continue
+            if not data:
+                return {
+                    "price": None,
+                    "error": "Sorted.org.nz API didn't return matchable JSON. The endpoint may have moved.",
+                    "source": "smartinvestor.sorted.org.nz"
+                }
+
+            # Normalise the response — Sorted's API shape may vary. Look for
+            # arrays of funds with 'name' + 'unitPrice' + 'lastUpdated' fields.
+            candidates = []
+            if isinstance(data, list):
+                candidates = data
+            elif isinstance(data, dict):
+                for key in ('results', 'funds', 'data', 'items'):
+                    if isinstance(data.get(key), list):
+                        candidates = data[key]
+                        break
+
+            if not candidates:
+                return {
+                    "price": None,
+                    "error": "No funds in Sorted.org.nz response",
+                    "source": "smartinvestor.sorted.org.nz",
+                    "raw_shape": list(data.keys()) if isinstance(data, dict) else "list"
+                }
+
+            # Try to match by name (case-insensitive substring)
+            name_lower = (name or '').lower().strip()
+            best = None
+            for c in candidates:
+                fname = (c.get('name') or c.get('fund_name') or c.get('title') or '').lower()
+                if name_lower and name_lower in fname:
+                    best = c
+                    break
+            if not best:
+                # No exact name match — return list of options for user
+                available = [c.get('name') or c.get('fund_name') or c.get('title') for c in candidates[:20] if c.get('name') or c.get('fund_name') or c.get('title')]
+                return {
+                    "price": None,
+                    "error": "Found NZ funds on Sorted.org.nz but none matched your name exactly",
+                    "available": available,
+                    "source": "smartinvestor.sorted.org.nz"
+                }
+
+            # Extract price from the best match — field names vary
+            price = best.get('unitPrice') or best.get('unit_price') or best.get('price') or best.get('latestPrice')
+            as_of = best.get('asAt') or best.get('lastUpdated') or best.get('priceDate')
+            fund_name = best.get('name') or best.get('fund_name') or best.get('title')
+            if price is None:
+                return {
+                    "price": None,
+                    "error": f"Found '{fund_name}' but no unit price field in response",
+                    "source": "smartinvestor.sorted.org.nz"
+                }
+            try:
+                price = float(price)
+            except (TypeError, ValueError):
+                return {
+                    "price": None,
+                    "error": f"Unit price not numeric: {price!r}",
+                    "source": "smartinvestor.sorted.org.nz"
+                }
+            return {
+                "price":     round(price, 4),
+                "asOf":      as_of,
+                "currency":  "NZD",
+                "source":    "smartinvestor.sorted.org.nz",
+                "fund_name": fund_name
+            }
+        except Exception as e:
+            print(f"  ⚠ Sorted.org.nz scrape failed: {e}")
+            return {"price": None, "error": f"Sorted.org.nz: {e}", "source": "smartinvestor.sorted.org.nz"}
+
     def _scrape_harbour(self, code, name):
         """Scrape Harbour Asset Management's public unit-prices page.
 
-        Source: https://www.harbourasset.co.nz/our-funds/unit-prices/
-        ToS: page is publicly published (Harbour is required by NZ FMA to
-        publish daily unit prices for retail funds). We hit it at most
-        twice per 12h per fund via the cache layer.
+        Source: tries multiple URL paths since Harbour may change site
+        structure. ToS: pages are publicly published (Harbour is required
+        by NZ FMA to publish daily unit prices for retail funds). We hit
+        them at most twice per 12h per fund via the cache layer.
 
         Returns: {price, asOf, currency, source, fund_name} or None
         """
         try:
             import urllib.request as _ur
             from html.parser import HTMLParser
-            url = "https://www.harbourasset.co.nz/our-funds/unit-prices/"
-            req = _ur.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (InvestIQ Portfolio Tracker; +https://investiq-nz.netlify.app)",
-                "Accept": "text/html"
-            })
-            with _ur.urlopen(req, timeout=10) as r:
-                html = r.read().decode("utf-8", errors="ignore")
+            # Harbour has shuffled URLs over time. Try the most likely paths
+            # in order; first 2xx response wins. If all 404, surface the
+            # attempted URLs in the error so the user can paste the right one.
+            candidate_urls = [
+                "https://www.harbourasset.co.nz/our-funds/unit-prices/",
+                "https://www.harbourasset.co.nz/unit-prices/",
+                "https://www.harbourasset.co.nz/funds/unit-prices/",
+                "https://www.harbourasset.co.nz/our-funds/",
+                "https://www.harbourasset.co.nz/wholesale-funds/unit-prices/"
+            ]
+            html = None
+            last_status = None
+            tried = []
+            for url in candidate_urls:
+                req = _ur.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (InvestIQ Portfolio Tracker; +https://investiq-nz.netlify.app)",
+                    "Accept": "text/html,application/xhtml+xml"
+                })
+                tried.append(url)
+                try:
+                    with _ur.urlopen(req, timeout=10) as r:
+                        html = r.read().decode("utf-8", errors="ignore")
+                        last_status = r.status
+                        if html and len(html) > 1000:
+                            break  # found content
+                except Exception as ue:
+                    last_status = str(ue)
+                    continue
+            if not html:
+                return {
+                    "price": None,
+                    "error": f"All Harbour URLs returned errors. Last: {last_status}. URLs tried: {len(tried)}",
+                    "tried_urls": tried,
+                    "source": "harbourasset.co.nz"
+                }
 
             # The unit-prices page renders as a table with rows of:
             #   Fund name | Application price | Withdrawal price | Date

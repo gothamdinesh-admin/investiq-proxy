@@ -4737,18 +4737,20 @@ async function setHoldingChartRange(period) {
         ctx.parentElement.appendChild(placeholder);
       }
       placeholder.style.display = 'flex';
-      // Detect if we can attempt an auto-fetch — currently only Harbour
-      // funds are supported (more providers + Sorted.org.nz fallback
-      // planned). Show the auto-refresh button when applicable.
+      // Try auto-fetch for any NZ fund / KiwiSaver. Backend tries Harbour
+      // direct first if it's a Harbour fund, then Sorted.org.nz (covers
+      // every NZ retail fund + KiwiSaver scheme). Worst case the user
+      // gets a helpful "here's what we found" modal.
       const isHarbour = (h.provider || '').toLowerCase().includes('harbour') ||
                         (h.symbol || '').toLowerCase().includes('harbour');
+      const sourceLabel = isHarbour ? 'Harbour direct' : 'Sorted.org.nz';
       placeholder.innerHTML = `
         <i class="fas fa-piggy-bank" style="font-size:36px;color:rgba(34,211,238,0.4);margin-bottom:10px;"></i>
         <div class="text-sm" style="color:#c8d6ef;margin-bottom:6px;">${h.provider ? _escape(h.provider) : 'Unit-priced fund'}</div>
         <div class="text-xs neutral" style="margin-bottom:10px;">Manual price · ${ageBadge}</div>
         <div class="flex items-center gap-2 flex-wrap" style="justify-content:center;">
-          ${isHarbour ? `<button onclick="autoRefreshFundPrice('${h.id}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 14px;background:#22d3ee;"><i class="fas fa-bolt mr-1"></i>Auto-refresh from Harbour</button>` : ''}
-          <button onclick="editHolding('${h.id}')" class="btn btn-sm ${isHarbour ? 'btn-secondary' : 'btn-primary'}" style="font-size:11px;padding:6px 14px;"><i class="fas fa-edit mr-1"></i>Update manually</button>
+          <button onclick="autoRefreshFundPrice('${h.id}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:6px 14px;background:#22d3ee;"><i class="fas fa-bolt mr-1"></i>Auto-refresh from ${sourceLabel}</button>
+          <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:6px 14px;"><i class="fas fa-edit mr-1"></i>Update manually</button>
         </div>
       `;
     }
