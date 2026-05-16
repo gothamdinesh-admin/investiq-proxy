@@ -23,7 +23,13 @@ const PLATFORM_CONFIG = {
   // Ollama default: http://localhost:11434/v1
   aiProvider:    'claude',
   aiProviderUrl: '',
-  aiProviderKey: ''
+  aiProviderKey: '',
+
+  // Sentry error monitoring (Security C5).
+  // Paste your Sentry frontend DSN here (looks like https://<key>@<id>.ingest.sentry.io/<project>).
+  // Leave blank to disable; the SDK no-ops without a DSN.
+  // Free tier covers ~5k events/month — plenty for this app's scale.
+  sentryDsn:     ''
 };
 
 // Currency symbol lookup — used by fmtCurrency.

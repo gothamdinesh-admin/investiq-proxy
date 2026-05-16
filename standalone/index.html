@@ -16,6 +16,13 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+
+  <!-- Sentry error monitoring (Security C5).
+       Loads the Sentry SDK from the official CDN. DSN comes from
+       PLATFORM_CONFIG.sentryDsn (00-config.js) — leave blank to disable.
+       SRI hash deferred to M8 (Subresource Integrity rollout). -->
+  <script src="https://browser.sentry-cdn.com/7.110.0/bundle.tracing.min.js"
+          crossorigin="anonymous" defer></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -2523,6 +2530,69 @@ const toast = (() => {
     warning: (msg, d) => show('warning', msg, d)
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+// SENTRY ERROR MONITORING (Security C5)
+//
+// Initialised early in init(). DSN comes from PLATFORM_CONFIG.sentryDsn.
+// If DSN is blank, SDK isn't loaded yet, or init fails, this no-ops
+// silently — never blocks the app.
+//
+// Captures: JS exceptions, unhandled promise rejections, performance
+// transactions for slow page loads. Does NOT capture: console logs (by
+// design — too noisy), user PII (we explicitly strip user_id from events).
+// ═══════════════════════════════════════════════════════════════════════
+let _sentryInitialised = false;
+
+function initSentry() {
+  if (_sentryInitialised) return;
+  const dsn = PLATFORM_CONFIG.sentryDsn || '';
+  if (!dsn) return; // disabled
+  // SDK may not have loaded yet (defer script). Try again in 500ms up to 5x.
+  if (!window.Sentry) {
+    if (initSentry._attempts == null) initSentry._attempts = 0;
+    if (initSentry._attempts >= 5) {
+      console.warn('[sentry] SDK never loaded — events not captured');
+      return;
+    }
+    initSentry._attempts++;
+    setTimeout(initSentry, 500);
+    return;
+  }
+  try {
+    window.Sentry.init({
+      dsn,
+      tracesSampleRate: 0.1,          // capture 10% of perf transactions
+      environment: location.hostname.includes('netlify.app') ? 'production' : 'dev',
+      release: 'v0.7d-hardening',     // bump on each release; helps Sentry group events
+      // Privacy: scrub user IDs + emails from breadcrumbs and events
+      beforeSend(event) {
+        // Strip personally identifiable info from request URLs
+        if (event.request?.url) {
+          event.request.url = event.request.url.replace(/[?&](email|user_id)=[^&]+/g, '$1=REDACTED');
+        }
+        // Remove email + user_id from user context (Sentry's user obj)
+        if (event.user) {
+          delete event.user.email;
+          delete event.user.id;
+          delete event.user.ip_address;
+        }
+        return event;
+      },
+      // Don't capture noise from CORS-blocked CDN scripts or extension errors
+      ignoreErrors: [
+        'ResizeObserver loop',
+        'Non-Error promise rejection captured',
+        /^Script error\.?$/,           // Cross-origin script errors with no detail
+        'Network request failed'       // Yahoo + corsproxy noise
+      ]
+    });
+    _sentryInitialised = true;
+    console.log('[sentry] initialised', { env: location.hostname });
+  } catch(e) {
+    console.warn('[sentry] init failed:', e.message);
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // REUSABLE PROMPT / CONFIRM / INFO MODAL
@@ -8358,6 +8428,12 @@ function showSkeletons() {
 }
 
 async function init() {
+  // Sentry error monitoring (Security C5). Initialise as early as possible
+  // so we capture errors during loadState/initSupabase/etc. The SDK script
+  // is loaded with `defer` so it may not be ready yet on the first paint;
+  // we re-attempt initialisation when window.Sentry shows up.
+  initSentry();
+
   // Default CSV import date picker to today
   const dateEl = document.getElementById('csvImportDate');
   if (dateEl) dateEl.value = new Date().toISOString().slice(0, 10);

@@ -129,6 +129,32 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.7d (Hardening / Critical security fixes)
+
+**Critical security work shipped**
+- [x] C3 — Service-role key audit: verified zero exposure in tracked
+      files. Only referenced via Deno.env in 3 Edge Functions where
+      Supabase auto-injects it. No references in frontend, Python proxy,
+      Render config, or migration SQL.
+- [x] C4 — Daily DB backup Edge Function (`daily-backup`): service-role
+      reads all 8 critical tables, serialises to JSON, uploads to private
+      'backups' Storage bucket (auto-created if missing). 30-day retention
+      with automatic pruning. Scheduled 14:00 UTC daily (2 AM NZ).
+      Includes RESTORE.md playbook for: per-row, per-table, and full
+      disaster-recovery scenarios.
+- [x] C5 — Sentry error monitoring: SDK loaded from CDN, initialised in
+      init() with sentryDsn from PLATFORM_CONFIG. Privacy-aware
+      beforeSend hook strips email/user_id/IP from events. Ignores
+      noisy non-actionable errors (ResizeObserver, cross-origin
+      Script error, network blips). 10% tracesSampleRate. User signs up
+      at sentry.io and pastes DSN into 00-config.js to activate.
+
+**User-action items still outstanding**
+- [ ] C1 — Anthropic spend cap. Console → Settings → Limits → monthly
+      cap + alert at 80%. Recommended: $100 USD/month.
+- [ ] C2 — Supabase + Netlify + Render billing alerts.
+- [ ] C3 — Render dashboard env var check (confirm no SERVICE_ROLE_KEY).
+
 ### 2026-05-16 session — Security & Safety audit
 
 **New doc + memory rule**
@@ -145,11 +171,11 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
       sync:false for ANTHROPIC_API_KEY)
 
 **Critical actions surfaced (do this week):**
-- [ ] C1 — Anthropic spend cap (5 min, Console → Limits)
-- [ ] C2 — Supabase + Netlify billing alerts (10 min)
-- [ ] C3 — Verify SUPABASE_SERVICE_ROLE_KEY not leaked anywhere (10 min)
-- [ ] C4 — Daily DB backup Edge Function (1 hour)
-- [ ] C5 — Sentry frontend SDK (30 min)
+- [ ] C1 — Anthropic spend cap (5 min, Console → Limits) — **user action**
+- [ ] C2 — Supabase + Netlify billing alerts (10 min) — **user action**
+- [x] C3 — Verify SUPABASE_SERVICE_ROLE_KEY not leaked anywhere — **DONE (clean — only Edge Functions reference it via Deno.env, never in code/git/Render config)**. User to confirm Render dashboard env vars don't include it.
+- [x] C4 — Daily DB backup Edge Function — **DONE (v0.7d)**. Function + setup.sql + RESTORE.md shipped. User to deploy + run setup.sql.
+- [x] C5 — Sentry frontend SDK integration — **DONE (v0.7d)**. SDK CDN script + initSentry() + PRIVACY-aware beforeSend hook. User to sign up at sentry.io and paste DSN into PLATFORM_CONFIG.sentryDsn.
 
 ### 2026-05-16 session — Release v0.7c (Price Alerts)
 
