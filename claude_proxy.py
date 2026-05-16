@@ -797,10 +797,18 @@ class ProxyHandler(BaseHTTPRequestHandler):
             # in order; first 2xx response wins. If all 404, surface the
             # attempted URLs in the error so the user can paste the right one.
             candidate_urls = [
+                # Daily retail unit prices (most complete usually)
                 "https://www.harbourasset.co.nz/our-funds/unit-prices/",
                 "https://www.harbourasset.co.nz/unit-prices/",
                 "https://www.harbourasset.co.nz/funds/unit-prices/",
+                # KiwiSaver scheme prices (separate from retail)
+                "https://www.harbourasset.co.nz/kiwisaver/unit-prices/",
+                "https://www.harbourasset.co.nz/our-funds/kiwisaver/",
+                "https://www.harbourasset.co.nz/harbour-kiwisaver-scheme/unit-prices/",
+                # Fund listings (may have prices inline)
                 "https://www.harbourasset.co.nz/our-funds/",
+                "https://www.harbourasset.co.nz/retail-funds/",
+                # Wholesale (last resort — usually month-end only)
                 "https://www.harbourasset.co.nz/wholesale-funds/unit-prices/"
             ]
             html = None
@@ -829,9 +837,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "source": "harbourasset.co.nz"
                 }
 
-            # The unit-prices page renders as a table with rows of:
-            #   Fund name | Application price | Withdrawal price | Date
-            # We extract all rows and try to match the user's requested fund.
+            # Harbour publishes several different pages for funds — retail
+            # daily unit prices, KiwiSaver scheme prices, wholesale month-end
+            # factsheets. They have different table structures. We extract
+            # all rows and filter out non-fund noise (benchmark return rows,
+            # 'Apr 30 2026' dates in fund names hint we're on a factsheet
+            # page rather than daily prices).
             class HarbourParser(HTMLParser):
                 def __init__(self):
                     super().__init__()
@@ -873,18 +884,43 @@ class ProxyHandler(BaseHTTPRequestHandler):
             # 1. Exact name match (case-insensitive)
             # 2. Substring match on fund name
             # 3. Code-derived match (HARBOUR-AE → "Australasian Equity")
+            # Wider hint table covering every Harbour fund I'm aware of.
+            # Multiple hints per code so ANY substring match wins. User's
+            # "HARBOUR EQUITY FUND" → 'equity' substring catches multiple,
+            # but the name string itself ("equity fund") matches first.
             code_hints = {
-                "HARBOUR-AE":            ["australasian equity"],
-                "HARBOUR-GROWTH":        ["growth"],
-                "HARBOUR-INCOME":        ["income", "active income"],
-                "HARBOUR-NZ-EQUITY":     ["nz equity", "core nz equity"],
-                "HARBOUR-CORPORATE":     ["corporate bond"],
-                "HARBOUR-INVESTMENT":    ["investment grade", "credit"],
-                "HARBOUR-LISTED-PROP":   ["listed property"],
-                "HARBOUR-T-RES":         ["t rowe", "global equity"]
+                "HARBOUR-EQUITY":          ["australasian equity", "nz equity", "equity fund"],
+                "HARBOUR-AE":              ["australasian equity"],
+                "HARBOUR-AEIF":            ["australasian equity income"],
+                "HARBOUR-GROWTH":          ["growth fund", "growth", "australasian equity"],
+                "HARBOUR-INCOME":          ["active income", "income fund"],
+                "HARBOUR-NZ-EQUITY":       ["nz equity", "core nz equity"],
+                "HARBOUR-NZ":              ["nz equity"],
+                "HARBOUR-CORPORATE":       ["corporate bond"],
+                "HARBOUR-CORPORATE-BOND":  ["corporate bond"],
+                "HARBOUR-CB":              ["corporate bond"],
+                "HARBOUR-INVESTMENT":      ["investment grade", "credit"],
+                "HARBOUR-CREDIT":          ["credit fund", "investment grade"],
+                "HARBOUR-LISTED-PROP":     ["listed property", "real estate"],
+                "HARBOUR-PROPERTY":        ["real estate", "listed property"],
+                "HARBOUR-REIT":            ["real estate"],
+                "HARBOUR-T-ROWE":          ["t rowe", "global equity"],
+                "HARBOUR-GLOBAL":          ["global equity", "t rowe"],
+                "HARBOUR-CASH":            ["enhanced cash", "cash fund"],
+                "HARBOUR-FIXED":           ["core fixed interest", "fixed interest"],
+                "HARBOUR-SUSTAINABLE":     ["sustainable nz shares", "sustainable"],
+                "HARBOUR-SUSTAIN":         ["sustainable"],
+                # KiwiSaver scheme funds
+                "HARBOUR-KS-GROWTH":       ["growth fund", "kiwisaver growth"],
+                "HARBOUR-KS-BALANCED":     ["balanced fund", "kiwisaver balanced"],
+                "HARBOUR-KS-CONSERVATIVE": ["conservative fund", "kiwisaver conservative"]
             }
             hints = code_hints.get(code.upper(), [])
-            search_terms = [name.lower()] + hints if name else hints
+            # Also derive hints from the symbol itself (e.g. HARBOUR-EQUITY → "equity")
+            code_words = [w for w in code.upper().split("-") if w not in ("HARBOUR", "FUND")]
+            for w in code_words:
+                hints.append(w.lower())
+            search_terms = ([name.lower()] if name else []) + hints
 
             best_row = None
             for row in parser.rows:
@@ -899,14 +935,37 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     break
 
             if not best_row:
-                # No match — return the available fund names so the user
-                # knows what's there (helps with adding the right code)
-                available = [r[0] for r in parser.rows if r and len(r) >= 2 and r[0]][:20]
+                # No match — return the cleaned list of fund names. Filter:
+                # - Drop "Benchmark return" rows (not funds)
+                # - Drop "Fund name" header rows
+                # - Drop rows with no numeric data (probably labels)
+                # - Strip trailing dates ("Apr 30, 2026") so user sees clean names
+                # - Deduplicate
+                import re as _re
+                clean = []
+                seen = set()
+                for r in parser.rows:
+                    if not r or len(r) < 2 or not r[0]:
+                        continue
+                    first = r[0].strip()
+                    low = first.lower()
+                    # Skip headers + benchmark rows + empties
+                    if low in ('fund name', 'benchmark return', '', 'name'):
+                        continue
+                    if 'benchmark' in low:
+                        continue
+                    # Strip trailing date suffixes for cleaner display
+                    cleaned_name = _re.sub(r'\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{1,2},?\s+\d{4}\s*$', '', first, flags=_re.IGNORECASE).strip()
+                    if cleaned_name in seen:
+                        continue
+                    seen.add(cleaned_name)
+                    clean.append(cleaned_name)
                 return {
                     "price": None,
-                    "error": f"No matching fund. Available Harbour funds: {', '.join(available[:8])}",
-                    "available": available,
-                    "source": "harbourasset.co.nz"
+                    "error": "No matching fund on Harbour's page. Try one of these exact names as the symbol or display name.",
+                    "available": clean[:25],
+                    "source": "harbourasset.co.nz",
+                    "url_used": next((u for u in candidate_urls if html and url == u), None)
                 }
 
             # Parse the price. Harbour publishes Application + Withdrawal +
