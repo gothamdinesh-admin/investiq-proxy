@@ -4525,9 +4525,19 @@ function onFundProviderChange() {
   }
 }
 
-function deleteHolding(id) {
+async function deleteHolding(id) {
   const h = state.portfolio.find(x => x.id === id);
-  if (!confirm('Delete this holding? This cannot be undone.')) return;
+  if (!h) return;
+  const ok = await showConfirm({
+    title: `Delete ${h.symbol}?`,
+    icon: 'fa-trash',
+    iconColor: '#f87171',
+    description: `${h.platform ? h.platform + ' · ' : ''}${(h.lots || []).length} lot${(h.lots || []).length === 1 ? '' : 's'}. This cannot be undone. Your historical snapshots stay — only the current holding row is removed.`,
+    confirmLabel: 'Delete holding',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
   state.portfolio = state.portfolio.filter(x => x.id !== id);
   saveState();
   closeModal('viewModal');
@@ -4965,7 +4975,16 @@ async function importBackup(event) {
     const text = await file.text();
     const backup = JSON.parse(text);
     if (!backup.portfolio) { toast.error('Invalid backup file.'); return; }
-    if (!confirm(`Restore backup from ${backup.exportedAt?.split('T')[0] || 'unknown date'}?\n\nThis will REPLACE your current ${state.portfolio.length} holdings with ${backup.portfolio.length} holdings from the backup.\n\nYour Claude API key will be kept.`)) return;
+    const ok = await showConfirm({
+      title: 'Restore backup?',
+      icon: 'fa-upload',
+      iconColor: '#fbbf24',
+      description: `<b>Backup date:</b> ${backup.exportedAt?.split('T')[0] || 'unknown'}<br>This will <b>replace</b> your current <b>${state.portfolio.length}</b> holdings with <b>${backup.portfolio.length}</b> from the backup. Your Claude API key + Supabase credentials stay on this device.`,
+      confirmLabel: 'Restore now',
+      confirmVariant: 'danger',
+      danger: true
+    });
+    if (!ok) return;
     const apiKey = state.settings.claudeApiKey;
     state.portfolio = backup.portfolio || [];
     state.settings = { ...state.settings, ...(backup.settings||{}), claudeApiKey: apiKey };
@@ -6717,7 +6736,16 @@ function toggleApiKeyVisibility() {
 }
 
 async function clearAllData() {
-  if (!confirm('Are you sure? This will delete ALL your portfolio data from this browser AND the cloud. This cannot be undone.')) return;
+  const ok = await showConfirm({
+    title: 'Delete ALL data?',
+    icon: 'fa-exclamation-triangle',
+    iconColor: '#f87171',
+    description: `This permanently wipes your portfolio from <b>this browser</b> AND the <b>cloud</b>. Daily snapshots also deleted. <b>Cannot be undone.</b> Use the Backup (JSON) button first if you want a local copy.`,
+    confirmLabel: 'Delete everything',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
 
   const errors = [];
   state.portfolio = [];
@@ -6756,10 +6784,17 @@ async function clearAllData() {
   closeModal('settingsModal');
 
   if (errors.length) {
-    alert('⚠ Clear completed with issues:\n\n• ' + errors.join('\n• '));
+    await showInfo({
+      title: 'Clear finished with issues',
+      icon: 'fa-exclamation-triangle',
+      iconColor: '#fbbf24',
+      description: 'Some parts of the clear didn\'t fully complete. Local data is wiped, but cloud may still have remnants. Common cause: RLS policy blocking the delete — fix from docs/SECURITY.md.',
+      body: `<div style="font-size:11px;color:#94a3b8;background:rgba(248,113,113,0.06);padding:10px;border-radius:6px;line-height:1.6;"><b>Issues:</b><ul style="margin:6px 0 0 18px;padding:0;">${errors.map(e => `<li>${_escape(e)}</li>`).join('')}</ul></div>`,
+      actions: [{ key: 'ok', label: 'Got it', variant: 'primary', flex: true }]
+    });
     console.error('[clearAllData] errors:', errors);
   } else {
-    alert('✓ All data cleared (local + cloud). Reloading…');
+    toast.success('All data cleared · reloading…', 3000);
     window.location.reload();
   }
 }
@@ -8732,7 +8767,18 @@ function renderAdminTable(users) {
 // esc moved to js/10-helpers.js
 
 async function adminApproveUser(userId, email, approve) {
-  if (!confirm(`${approve ? 'Approve' : 'Revoke approval for'} ${email}?`)) return;
+  const ok = await showConfirm({
+    title: approve ? `Approve ${email}?` : `Revoke ${email}?`,
+    icon: approve ? 'fa-user-check' : 'fa-user-slash',
+    iconColor: approve ? '#34d399' : '#f87171',
+    description: approve
+      ? `They'll get a fresh proxy secret issued and can immediately start using AI agents + alerts.`
+      : `Their proxy secret will be revoked. They keep their portfolio data but lose access to AI features and live prices until re-approved.`,
+    confirmLabel: approve ? 'Approve' : 'Revoke',
+    confirmVariant: approve ? 'primary' : 'danger',
+    danger: !approve
+  });
+  if (!ok) return;
   const updates = { is_approved: approve };
   if (approve) {
     // Generate a fresh per-user proxy secret on approval. Calls the SQL RPC
@@ -8764,10 +8810,17 @@ async function adminApproveUser(userId, email, approve) {
 // they bootstrap themselves before any approval exists).
 async function adminRotateProxySecret(userId, email) {
   const isSelf = userId === _supaUser?.id;
-  const msg = isSelf
-    ? `Generate / rotate YOUR proxy secret?\n\nThis lets your browser talk to the proxy. The new secret takes effect immediately — no sign-out needed.`
-    : `Rotate proxy secret for ${email}?\n\nTheir old secret stops working immediately. They'll get the new one automatically next time they sign in.`;
-  if (!confirm(msg)) return;
+  const ok = await showConfirm({
+    title: isSelf ? 'Rotate your proxy secret?' : `Rotate ${email}'s secret?`,
+    icon: 'fa-key',
+    iconColor: '#fbbf24',
+    description: isSelf
+      ? `This lets your browser talk to the proxy. The new secret takes effect immediately — no sign-out needed.`
+      : `Their old secret stops working immediately. They'll get the new one next time they sign in.`,
+    confirmLabel: 'Rotate',
+    confirmVariant: 'primary'
+  });
+  if (!ok) return;
   try {
     const { data: secret, error: rpcErr } = await _supabase.rpc('generate_proxy_secret');
     if (rpcErr || !secret) throw rpcErr || new Error('RPC returned no secret');
@@ -8789,19 +8842,31 @@ async function adminRotateProxySecret(userId, email) {
 }
 
 async function adminAdjustQuota(userId, email, currentMax) {
-  const newVal = prompt(`Set AI agent quota for ${email}\n(currently ${currentMax} runs total).\n\nEnter new max:`, currentMax);
-  if (newVal == null) return;
-  const n = parseInt(newVal, 10);
-  if (isNaN(n) || n < 0) { toast.error('Must be a non-negative number'); return; }
+  const result = await showFormModal({
+    title: `AI quota for ${email}`,
+    icon: 'fa-sliders-h',
+    iconColor: '#818cf8',
+    description: `Currently set to ${currentMax} total AI agent runs. Bump up if they need more, or set to 0 to disable AI for them.`,
+    fields: [
+      { name: 'max', type: 'number', label: 'New maximum runs', value: currentMax, required: true, min: 0, hint: 'Non-negative integer.' },
+      { name: 'reset', type: 'select', label: 'Reset their usage count too?', value: 'no',
+        options: [
+          { value: 'no', label: 'No — only change the cap' },
+          { value: 'yes', label: 'Yes — also reset usage_count to 0 (gives N fresh runs)' }
+        ]}
+    ],
+    submitLabel: 'Update quota',
+    submitVariant: 'primary'
+  });
+  if (!result) return;
+  const n = parseInt(result.max, 10);
+  if (isNaN(n) || n < 0) return toast.error('Must be a non-negative number');
   const updates = { ai_quota_max: n };
-  // If they want to "reset" the quota, optionally reset usage too
-  if (n > currentMax && confirm('Also reset their usage count to 0? (This effectively grants them N fresh runs.)')) {
-    updates.ai_usage_count = 0;
-  }
+  if (result.reset === 'yes') updates.ai_usage_count = 0;
   const { error } = await _supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { toast.error('Failed: ' + error.message); return; }
-  toast.success(`Quota for ${email} set to ${n}`);
-  logActivity('admin_action', { action: 'adjust_quota', target_email: email, new_max: n });
+  toast.success(`Quota for ${email} set to ${n}${result.reset === 'yes' ? ' (usage reset)' : ''}`);
+  logActivity('admin_action', { action: 'adjust_quota', target_email: email, new_max: n, reset: result.reset === 'yes' });
   loadAdminData();
 }
 
@@ -8922,8 +8987,17 @@ async function adminTestDigest() {
   const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
   if (!supaUrl) return _adminLog('✗ Supabase URL not set in PLATFORM_CONFIG');
   _adminLog('🔍 Will invoke: ' + supaUrl + '/functions/v1/weekly-digest\n');
-  const secret = prompt('Paste the CRON_SECRET you set in Supabase Function secrets.\n\n(Not stored — used only for this one request.)');
-  if (!secret) return _adminLog('✗ Cancelled — no secret entered');
+  const result = await showFormModal({
+    title: 'Test Send Digest',
+    icon: 'fa-envelope',
+    iconColor: '#60a5fa',
+    description: 'Manually fires the weekly-digest Edge Function. Paste the CRON_SECRET you set in Supabase Function secrets — used once, not stored.',
+    fields: [{ name: 'secret', type: 'password', label: 'CRON_SECRET', required: true, placeholder: 'Paste your cron secret', autocomplete: 'off' }],
+    submitLabel: 'Run digest now',
+    submitVariant: 'primary'
+  });
+  if (!result?.secret) return _adminLog('✗ Cancelled — no secret entered');
+  const secret = result.secret.trim();
 
   // Get the current user's Supabase JWT so the Verify-JWT gateway lets the
   // request through. Our function's own auth uses X-Cron-Secret separately.
@@ -9246,7 +9320,16 @@ function adminFixTickers() {
 }
 
 async function adminClearCloudRow() {
-  if (!confirm('Delete the cloud portfolio row? This wipes your cloud data. Local browser data is preserved.\n\nContinue?')) return;
+  const ok = await showConfirm({
+    title: 'Reset cloud portfolio?',
+    icon: 'fa-trash-alt',
+    iconColor: '#f87171',
+    description: 'Deletes the cloud portfolio row. Your local browser data is preserved — next save pushes it back up fresh. Useful for fixing a corrupted cloud state.',
+    confirmLabel: 'Delete cloud row',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
   _adminClearOutput();
   _adminLog('🗑 Deleting cloud portfolio row…');
   const { error } = await _supabase.from('investiq_portfolios').delete().eq('user_id', _supaUser.id);
@@ -9256,18 +9339,45 @@ async function adminClearCloudRow() {
 
 async function adminToggleAdmin(userId, makeAdmin) {
   if (!_supabase) return;
-  if (!confirm(`${makeAdmin ? 'Grant' : 'Remove'} admin access for this user?`)) return;
+  const ok = await showConfirm({
+    title: makeAdmin ? 'Grant admin access?' : 'Remove admin access?',
+    icon: 'fa-shield-alt',
+    iconColor: makeAdmin ? '#fbbf24' : '#f87171',
+    description: makeAdmin
+      ? 'Admins can see all users\' data, modify approvals, rotate proxy secrets, and run diagnostic tools. Use sparingly — admin access bypasses RLS isolation.'
+      : 'They lose access to the Admin Panel + diagnostic tools. Their own portfolio data is unchanged.',
+    confirmLabel: makeAdmin ? 'Grant admin' : 'Remove admin',
+    confirmVariant: makeAdmin ? 'primary' : 'danger',
+    danger: !makeAdmin
+  });
+  if (!ok) return;
   await _supabase.from('profiles').update({ is_admin: makeAdmin }).eq('id', userId);
+  toast.success(makeAdmin ? 'Admin granted' : 'Admin revoked');
   loadAdminData();
 }
 
 async function adminDeleteUser(userId, email) {
-  if (!confirm(`Permanently delete user ${email} and all their data? This cannot be undone.`)) return;
+  const ok = await showConfirm({
+    title: `Delete ${email}?`,
+    icon: 'fa-user-times',
+    iconColor: '#f87171',
+    description: `<b>Permanently</b> removes their portfolio data + profile row from cloud. <b>Cannot be undone.</b><br><br>Note: their <b>auth account</b> (login) survives — you'll need to manually delete it from Supabase → Authentication → Users afterward.`,
+    confirmLabel: 'Delete user data',
+    confirmVariant: 'danger',
+    danger: true
+  });
+  if (!ok) return;
   // Delete portfolio data first (cascade handles profiles)
   await _supabase.from('investiq_portfolios').delete().eq('user_id', userId);
   await _supabase.from('profiles').delete().eq('id', userId);
   // Note: deleting from auth.users requires service role key — tell admin to do it in Supabase dashboard
-  alert(`Portfolio data deleted. To fully remove the auth account, go to Supabase → Authentication → Users and delete ${email} there.`);
+  await showInfo({
+    title: 'Portfolio data deleted',
+    icon: 'fa-check-circle',
+    iconColor: '#34d399',
+    description: `${email}'s portfolio and profile row are gone. To <b>fully</b> remove their auth account (login), go to <b>Supabase Dashboard → Authentication → Users</b> and delete ${email} there.`,
+    actions: [{ key: 'ok', label: 'Got it', variant: 'primary', flex: true }]
+  });
   loadAdminData();
 }
 
