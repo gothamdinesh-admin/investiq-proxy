@@ -2066,7 +2066,7 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label>Fund Provider</label>
-              <select id="hProvider" class="input">
+              <select id="hProvider" class="input" onchange="onFundProviderChange()">
                 <option value="">— Select —</option>
                 <option>Harbour Asset Management</option>
                 <option>Milford Asset Management</option>
@@ -4409,13 +4409,21 @@ function saveHolding(e) {
   const manualPrice = parseFloat(document.getElementById('hManualPrice')?.value) || 0;
   const provider = document.getElementById('hProvider')?.value?.trim() || '';
 
+  // Belt-and-braces: if fund holding still has empty platform but a provider
+  // is set, use the provider as platform. The onFundProviderChange listener
+  // already does this on field change; this catches the edge case of edits
+  // / programmatic value-setting where the change event didn't fire.
+  let platform = document.getElementById('hPlatform').value.trim();
+  if (isFundType && !platform && provider) platform = provider;
+  if (isFundType && !platform && type === 'kiwisaver') platform = 'KiwiSaver';
+
   // Fund / KiwiSaver get NZD currency forced + country = New Zealand (FIF-exempt)
   // unless user explicitly set country elsewhere. Yahoo won't be queried.
   const meta = {
     symbol:   document.getElementById('hSymbol').value.toUpperCase().trim(),
     name:     document.getElementById('hName').value.trim(),
     type:     type,
-    platform: document.getElementById('hPlatform').value.trim(),
+    platform: platform,
     currency: isFundType ? 'NZD' : document.getElementById('hCurrency').value,
     sector:   document.getElementById('hSector').value,
     country:  document.getElementById('hCountry').value.trim() || (isFundType ? 'New Zealand' : ''),
@@ -4478,18 +4486,42 @@ function onAssetTypeChange() {
   const isFund = (t === 'fund' || t === 'kiwisaver');
   const helper = document.getElementById('fundHelperRow');
   const symHint = document.querySelector('#hSymbol + .text-xs');
+  const platform = document.getElementById('hPlatform');
   if (helper) helper.style.display = isFund ? '' : 'none';
   if (symHint) {
     symHint.innerHTML = isFund
       ? 'For NZ funds, use any short code (e.g. <b>HARBOUR-AE</b>, <b>MILFORD-AG</b>, <b>GENERATE-GROWTH</b>). Not a Yahoo ticker.'
       : 'Use Yahoo Finance symbol. For UK stocks add .L (e.g. TSCO.L)';
   }
+  // Fund / KiwiSaver: the Fund Provider IS the platform — drop the
+  // browser-level `required` so the user isn't blocked by an empty Platform
+  // field when they've already picked a provider. Validation in saveHolding
+  // still auto-fills platform from provider before submit.
+  if (platform) {
+    if (isFund) {
+      platform.removeAttribute('required');
+      platform.placeholder = 'Auto-filled from Fund Provider above';
+    } else {
+      platform.setAttribute('required', '');
+      platform.placeholder = 'e.g. Vanguard, HSBC, Coinbase';
+    }
+  }
   // Auto-fill some sensible defaults when user switches to KiwiSaver
   if (t === 'kiwisaver') {
-    const platform = document.getElementById('hPlatform');
     if (platform && !platform.value) platform.value = 'KiwiSaver';
     const sector = document.getElementById('hSector');
     if (sector && !sector.value) sector.value = 'Other';
+  }
+}
+
+// When the user picks a Fund Provider in the fund-helper row, mirror that
+// value into the Platform field (if currently empty). Saves a typing step
+// and avoids "platform is required" errors on fund holdings.
+function onFundProviderChange() {
+  const provider = document.getElementById('hProvider')?.value?.trim() || '';
+  const platform = document.getElementById('hPlatform');
+  if (platform && provider && !platform.value.trim()) {
+    platform.value = provider;
   }
 }
 
