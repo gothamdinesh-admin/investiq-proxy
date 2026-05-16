@@ -129,6 +129,30 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — End-to-end testing rule + portable CLAUDE.md
+
+- [x] End-to-end testing now enshrined as MEMORY.md Behavioural Rule #2:
+      "Pushed != working. Acceptable proof = code live + path clicked through +
+      expected output observed. For backend changes build a diagnostic surface."
+      Plus explicit regression-awareness clause.
+- [x] Verified end-to-end on Sentry: Admin → Test Sentry button fires
+      tagged event → user confirmed appears in sentry.io dashboard.
+- [x] Verified end-to-end on C4 daily backup: user confirmed 'backups'
+      bucket created in Supabase Storage.
+- [x] NEW: CLAUDE.md at repo root — portable working-agreement doc
+      Claude Code auto-loads every session. Has 10 sections:
+        1. Roles (universal)
+        2. Behavioural rules — safety-first, end-to-end, two strikes
+        3. What I will NOT do without explicit OK
+        4. What I WILL do autonomously
+        5. Trust safeguards
+        6. Communication shorthand
+        7. Failure modes learned the hard way
+        8. Doc-set pattern
+        9. Release rhythm
+        10. PROJECT-SPECIFIC section (template for other repos)
+      User can copy + adapt for any future project.
+
 ### 2026-05-16 session — Release v0.7d (Hardening / Critical security fixes)
 
 **Critical security work shipped**
