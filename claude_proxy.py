@@ -643,6 +643,17 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if result and result.get("price"):
             cache_set(cache_key, result, ttl_seconds=43200)  # 12h
             return self._json(200, result)
+        # Scraper ran but couldn't match — preserve the diagnostic info
+        # (especially the `available` list of fund names) so the frontend
+        # can surface them to the user.
+        if result and (result.get("available") or result.get("error")):
+            return self._json(200, {
+                "price": None,
+                "error": result.get("error") or "Fund not matched",
+                "available": result.get("available") or [],
+                "source": result.get("source") or "scrape",
+                "tried":  ["harbour"] if is_harbour else []
+            })
         self._json(404, {"error": "Fund not found via any source",
                           "tried": ["harbour" if is_harbour else None]})
 

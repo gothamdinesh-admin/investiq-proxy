@@ -2049,8 +2049,8 @@
           </select>
         </div>
         <div>
-          <label>Platform / Bank *</label>
-          <input type="text" id="hPlatform" class="input" placeholder="e.g. Vanguard, HSBC, Coinbase" required>
+          <label>Platform / Bank <span id="hPlatformReqMark">*</span></label>
+          <input type="text" id="hPlatform" class="input" placeholder="e.g. Vanguard, HSBC, Coinbase">
         </div>
 
         <!-- Fund-specific helper row — only shown when type=fund or kiwisaver -->
@@ -4413,9 +4413,21 @@ function saveHolding(e) {
   // is set, use the provider as platform. The onFundProviderChange listener
   // already does this on field change; this catches the edge case of edits
   // / programmatic value-setting where the change event didn't fire.
-  let platform = document.getElementById('hPlatform').value.trim();
+  const platformEl = document.getElementById('hPlatform');
+  let platform = platformEl.value.trim();
   if (isFundType && !platform && provider) platform = provider;
   if (isFundType && !platform && type === 'kiwisaver') platform = 'KiwiSaver';
+
+  // JS-only platform validation. Browser `required` was removed so the
+  // attribute timing edge case can no longer block. Now we enforce it
+  // ourselves: non-fund types still require a platform.
+  if (!isFundType && !platform) {
+    platformEl.style.borderColor = '#f87171';
+    platformEl.focus();
+    toast.warning('Platform / Bank is required for non-fund holdings');
+    return;
+  }
+  platformEl.style.borderColor = '';
 
   // Fund / KiwiSaver get NZD currency forced + country = New Zealand (FIF-exempt)
   // unless user explicitly set country elsewhere. Yahoo won't be queried.
@@ -4493,19 +4505,16 @@ function onAssetTypeChange() {
       ? 'For NZ funds, use any short code (e.g. <b>HARBOUR-AE</b>, <b>MILFORD-AG</b>, <b>GENERATE-GROWTH</b>). Not a Yahoo ticker.'
       : 'Use Yahoo Finance symbol. For UK stocks add .L (e.g. TSCO.L)';
   }
-  // Fund / KiwiSaver: the Fund Provider IS the platform — drop the
-  // browser-level `required` so the user isn't blocked by an empty Platform
-  // field when they've already picked a provider. Validation in saveHolding
-  // still auto-fills platform from provider before submit.
+  // Fund / KiwiSaver: the Fund Provider IS the platform — show no asterisk
+  // and update placeholder. Validation is JS-only (in saveHolding) so
+  // browser-level `required` never fires regardless of timing edge cases.
   if (platform) {
-    if (isFund) {
-      platform.removeAttribute('required');
-      platform.placeholder = 'Auto-filled from Fund Provider above';
-    } else {
-      platform.setAttribute('required', '');
-      platform.placeholder = 'e.g. Vanguard, HSBC, Coinbase';
-    }
+    platform.placeholder = isFund
+      ? 'Auto-filled from Fund Provider above'
+      : 'e.g. Vanguard, HSBC, Coinbase';
   }
+  const reqMark = document.getElementById('hPlatformReqMark');
+  if (reqMark) reqMark.style.display = isFund ? 'none' : '';
   // Auto-fill some sensible defaults when user switches to KiwiSaver
   if (t === 'kiwisaver') {
     if (platform && !platform.value) platform.value = 'KiwiSaver';
@@ -6699,8 +6708,10 @@ async function autoRefreshFundPrice(holdingId) {
       headers: proxyHeaders(),
       signal: AbortSignal.timeout(15000)
     });
-    const data = await res.json();
-    if (!res.ok || !data.price) {
+    // 200 with price=null is the "couldn't match but here's what we found"
+    // response. 404 is "scraper didn't run / source unreachable".
+    const data = await res.json().catch(() => ({ error: 'response not JSON' }));
+    if (!data.price) {
       // Help the user pick the right code by showing what we found
       if (data.available?.length) {
         await showInfo({
