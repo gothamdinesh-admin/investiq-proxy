@@ -129,6 +129,61 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## ✅ Recently completed (for future session context)
 
+### 2026-05-16 session — Release v0.8c (UX/UI cleanup + light-mode rework)
+
+User feedback: light mode looked bad, asked whether design choices
+were research-backed. Honest answer: prior work applied general
+UX principles (Hick's Law, F-pattern, progressive disclosure) but
+not investment-app-specific research. This session: research-backed
+UX doc + comprehensive light-mode rework.
+
+**docs/UX_DESIGN.md (NEW)**
+- [x] Research summary covering: loss aversion (Kahneman & Tversky),
+      hyperbolic discounting, anchoring effect, endowment effect,
+      choice overload (Iyengar & Lepper), Miller's 7±2.
+- [x] Competitive analysis: Wealthsimple (calm pastels), Robinhood
+      (gamification lessons learned), Sharesight (density), Hatch NZ
+      (trust signals), Empower (dashboard-first).
+- [x] Adopted principles: Calm > exciting, Story before stats,
+      Glanceability, Progressive disclosure, Loss-aversion-aware,
+      Trust signals, Variable rewards (gentle), Recognition over recall.
+- [x] Visual hierarchy F-pattern documented.
+- [x] Typography (Inter 14px body, JetBrains Mono for numbers).
+- [x] 8px baseline spacing system documented.
+- [x] Both colour palettes — dark + light — with WCAG-AAA-tested
+      hex values. Light mode uses slate scale not pure black/white.
+- [x] Asset type colors consistent across both modes (functional).
+- [x] Component decisions: cards, buttons, inputs, tags, toasts, modals,
+      charts. With rationale for each.
+- [x] Empty-state copy for every section.
+- [x] Micro-interactions (subtle hover lifts, theme transitions).
+      EXPLICITLY no confetti / no slot-machine animations — Robinhood
+      lesson called out.
+- [x] Accessibility status + future research questions.
+
+**Comprehensive theme variable system**
+- [x] Expanded CSS variables from ~12 → ~25 cover all functional
+      colors (semantic, not raw): bg / bg-panel / bg-panel-2 / bg-input
+      / bg-deep / bg-hover / border / border-strong / text-primary /
+      text-secondary / text-muted / text-inverted / accent + accent-soft /
+      color-indigo / color-blue / color-green / color-red / color-amber /
+      color-teal / color-violet / color-orange / chart-grid / chart-text /
+      scrollbar.
+- [x] Light mode tuned per research: slate-50 bg (not pure white),
+      slate-900 text (not pure black), accents shifted to -600 variants
+      (more saturated to compensate for white bg).
+- [x] Inline-style override pattern: [data-theme="light"]
+      [style*="color:#818cf8"] { color: var(--color-indigo) !important; }
+      Catches the 200+ inline hex references throughout the file without
+      needing to migrate each one. Pragmatic compromise.
+- [x] Targeted overrides for nav, sidebar, metric-card, input (focus
+      ring with accent-soft), table-row (hover bg), table-header, nav-link
+      (active state), modal (subtle shadow in light), modal-overlay,
+      neutral, btn-secondary/primary, pos/neg, all tag-{type} variants,
+      badge-pos/neg/neutral, auth gate, mobile tab bar, skeleton loaders.
+- [x] Hover state added to table-row in light mode (no equivalent in dark
+      since the design was monochrome — light mode benefits from the lift).
+
 ### 2026-05-16 session — Release v0.8b (Overview decongestion + Theme)
 
 User feedback: Overview holdings duplication felt crowded; wanted

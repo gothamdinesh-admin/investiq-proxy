@@ -44,41 +44,89 @@
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
     /* ═══════════════════════════════════════════════════════════════════
-       THEME — CSS variables. Default = dark. [data-theme="light"] on <html>
-       flips to light mode. Variables cover the highest-impact surfaces;
-       individual hard-coded hex values throughout the rest of the file
-       still need migration but the big visual surfaces switch correctly.
+       THEME — research-informed CSS variable system. See docs/UX_DESIGN.md.
+       Variables map to semantic roles (bg, text-primary, accent-green) not
+       raw hex names. Light mode tunes saturation up because white bg dilutes
+       perceived intensity. No pure black/white (eye strain — see UX_DESIGN).
        ═══════════════════════════════════════════════════════════════════ */
     :root {
-      --bg:            #080d1a;
-      --bg-panel:      #0f1729;
-      --bg-panel-2:    #141e33;
-      --bg-input:      #141e33;
-      --border:        #1e2d4a;
-      --border-strong: #2a3f60;
-      --text-primary:  #c8d6ef;
-      --text-secondary:#94a3b8;
-      --text-muted:    #4a6080;
-      --accent:        #6366f1;
-      --accent-hover:  #5254cc;
-      --scrollbar-bg:  #0f1729;
-      --scrollbar-fg:  #1e2d4a;
+      /* Surfaces */
+      --bg:               #080d1a;
+      --bg-panel:         #0f1729;
+      --bg-panel-2:       #141e33;
+      --bg-input:         #141e33;
+      --bg-deep:          #0a1120;       /* deepest, for nested insets */
+      --bg-hover:         #1a253f;
+      /* Borders */
+      --border:           #1e2d4a;
+      --border-strong:    #2a3f60;
+      /* Text */
+      --text-primary:     #c8d6ef;
+      --text-secondary:   #94a3b8;
+      --text-muted:       #4a6080;
+      --text-inverted:    #0f172a;
+      /* Accents (functional, not decorative) */
+      --accent:           #6366f1;       /* indigo — brand */
+      --accent-hover:     #5254cc;
+      --accent-soft:      rgba(99,102,241,0.12);
+      --accent-soft-2:    rgba(99,102,241,0.2);
+      --color-indigo:     #818cf8;       /* stock chips, secondary indigo accents */
+      --color-blue:       #60a5fa;       /* ETF, info */
+      --color-green:      #34d399;       /* gains */
+      --color-green-soft: rgba(52,211,153,0.12);
+      --color-red:        #f87171;       /* losses */
+      --color-red-soft:   rgba(248,113,113,0.12);
+      --color-amber:      #fbbf24;       /* dividends, warnings, highlights */
+      --color-amber-soft: rgba(251,191,36,0.12);
+      --color-teal:       #22d3ee;       /* NZ funds, family */
+      --color-violet:     #a78bfa;       /* KiwiSaver, premium */
+      --color-orange:     #fb923c;       /* real estate */
+      /* Charts */
+      --chart-grid:       rgba(30,45,74,0.4);
+      --chart-text:       #4a6080;
+      /* Scrollbar */
+      --scrollbar-bg:     #0f1729;
+      --scrollbar-fg:     #1e2d4a;
     }
 
     [data-theme="light"] {
-      --bg:            #f7f8fb;
-      --bg-panel:      #ffffff;
-      --bg-panel-2:    #f1f5f9;
-      --bg-input:      #ffffff;
-      --border:        #e2e8f0;
-      --border-strong: #cbd5e1;
-      --text-primary:  #0f172a;
-      --text-secondary:#475569;
-      --text-muted:    #94a3b8;
-      --accent:        #6366f1;
-      --accent-hover:  #4f46e5;
-      --scrollbar-bg:  #f1f5f9;
-      --scrollbar-fg:  #cbd5e1;
+      /* Surfaces — slate scale, no pure white */
+      --bg:               #f8fafc;       /* slate-50, gentle on eyes */
+      --bg-panel:         #ffffff;
+      --bg-panel-2:       #f1f5f9;       /* slate-100 */
+      --bg-input:         #ffffff;
+      --bg-deep:          #f1f5f9;
+      --bg-hover:         #e2e8f0;
+      /* Borders — slate-200 / 300, subtle */
+      --border:           #e2e8f0;
+      --border-strong:    #cbd5e1;
+      /* Text — slate-900, not pure black */
+      --text-primary:     #0f172a;
+      --text-secondary:   #475569;
+      --text-muted:       #94a3b8;
+      --text-inverted:    #ffffff;
+      /* Accents — slightly more saturated than dark to compensate for white bg */
+      --accent:           #4f46e5;       /* indigo-600 */
+      --accent-hover:     #4338ca;
+      --accent-soft:      rgba(79,70,229,0.10);
+      --accent-soft-2:    rgba(79,70,229,0.18);
+      --color-indigo:     #4f46e5;
+      --color-blue:       #2563eb;       /* blue-600 */
+      --color-green:      #059669;       /* emerald-600 */
+      --color-green-soft: rgba(5,150,105,0.10);
+      --color-red:        #dc2626;       /* red-600 */
+      --color-red-soft:   rgba(220,38,38,0.10);
+      --color-amber:      #d97706;       /* amber-600 */
+      --color-amber-soft: rgba(217,119,6,0.10);
+      --color-teal:       #0891b2;       /* cyan-600 */
+      --color-violet:     #7c3aed;       /* violet-600 */
+      --color-orange:     #ea580c;       /* orange-600 */
+      /* Charts */
+      --chart-grid:       rgba(203,213,225,0.6);
+      --chart-text:       #64748b;
+      /* Scrollbar */
+      --scrollbar-bg:     #f1f5f9;
+      --scrollbar-fg:     #cbd5e1;
     }
 
     * { box-sizing: border-box; }
@@ -92,23 +140,80 @@
     .card { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; transition: background 0.25s, border-color 0.25s; }
     .card2 { background: var(--bg-panel-2); border: 1px solid var(--border); border-radius: 8px; transition: background 0.25s, border-color 0.25s; }
 
-    /* Light-mode-only overrides for elements that look wrong with just the
-       variables flipped — many descendants still use hard-coded hex values
-       throughout the file. These are the high-traffic surfaces. */
-    [data-theme="light"] nav { background: rgba(255,255,255,0.95) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
+    /* ═══════════════════════════════════════════════════════════════════
+       LIGHT-MODE OVERRIDES via attribute selectors targeting inline hex.
+       This is the pragmatic compromise: we don't migrate every inline
+       style="color:#c8d6ef" to var(--text-primary), but CSS attribute
+       selectors override them when the user is in light mode.
+       Ordered by frequency (most-used hex first — see UX_DESIGN.md).
+       ═══════════════════════════════════════════════════════════════════ */
+    [data-theme="light"] [style*="color:#818cf8"] { color: var(--color-indigo) !important; }
+    [data-theme="light"] [style*="color:#fbbf24"] { color: var(--color-amber) !important; }
+    [data-theme="light"] [style*="color:#c8d6ef"] { color: var(--text-primary) !important; }
+    [data-theme="light"] [style*="color:#4a6080"] { color: var(--text-muted) !important; }
+    [data-theme="light"] [style*="color:#f87171"] { color: var(--color-red) !important; }
+    [data-theme="light"] [style*="color:#34d399"] { color: var(--color-green) !important; }
+    [data-theme="light"] [style*="color:#94a3b8"] { color: var(--text-secondary) !important; }
+    [data-theme="light"] [style*="color:#64748b"] { color: var(--text-secondary) !important; }
+    [data-theme="light"] [style*="color:#6366f1"] { color: var(--accent) !important; }
+    [data-theme="light"] [style*="color:#22d3ee"] { color: var(--color-teal) !important; }
+    [data-theme="light"] [style*="color:#60a5fa"] { color: var(--color-blue) !important; }
+    [data-theme="light"] [style*="color:#c4b5fd"] { color: var(--color-violet) !important; }
+    [data-theme="light"] [style*="color:#a78bfa"] { color: var(--color-violet) !important; }
+    [data-theme="light"] [style*="color:#fb923c"] { color: var(--color-orange) !important; }
+    [data-theme="light"] [style*="color:#7a9cc0"] { color: var(--text-secondary) !important; }
+    /* Dark backgrounds → swap to light backgrounds when used inline */
+    [data-theme="light"] [style*="background:#0a1120"] { background: var(--bg-panel-2) !important; }
+    [data-theme="light"] [style*="background:#0f1729"] { background: var(--bg-panel) !important; }
+    [data-theme="light"] [style*="background:#141e33"] { background: var(--bg-panel-2) !important; }
+    [data-theme="light"] [style*="background:#080d1a"] { background: var(--bg) !important; }
+    [data-theme="light"] [style*="background:#1e2d4a"] { background: var(--bg-panel-2) !important; }
+
+    /* Common selectors targeting class-based / explicit components */
+    [data-theme="light"] nav { background: rgba(255,255,255,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
-    [data-theme="light"] .metric-card { background: var(--bg-panel) !important; border: 1px solid var(--border) !important; }
-    [data-theme="light"] .input { background: var(--bg-input) !important; border: 1px solid var(--border) !important; color: var(--text-primary) !important; }
+    [data-theme="light"] .metric-card { background: var(--bg-panel) !important; border: 1px solid var(--border) !important; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+    [data-theme="light"] .input { background: var(--bg-input) !important; border: 1px solid var(--border-strong) !important; color: var(--text-primary) !important; }
+    [data-theme="light"] .input:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); }
+    [data-theme="light"] .input::placeholder { color: var(--text-muted) !important; }
     [data-theme="light"] .table-row { color: var(--text-primary) !important; border-bottom: 1px solid var(--border); }
+    [data-theme="light"] .table-row:hover { background: var(--bg-panel-2); }
     [data-theme="light"] .table-header { color: var(--text-secondary) !important; border-bottom: 1px solid var(--border-strong) !important; }
     [data-theme="light"] .nav-link { color: var(--text-secondary) !important; }
-    [data-theme="light"] .nav-link.active, [data-theme="light"] .nav-link:hover { background: #e0e7ff !important; color: var(--accent) !important; }
-    [data-theme="light"] .modal { background: var(--bg-panel) !important; color: var(--text-primary); border: 1px solid var(--border); }
+    [data-theme="light"] .nav-link.active, [data-theme="light"] .nav-link:hover { background: var(--accent-soft) !important; color: var(--accent) !important; }
+    [data-theme="light"] .modal { background: var(--bg-panel) !important; color: var(--text-primary); border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(15,23,42,0.18); }
     [data-theme="light"] .modal-overlay { background: rgba(15,23,42,0.45) !important; }
     [data-theme="light"] .neutral { color: var(--text-secondary) !important; }
     [data-theme="light"] .btn-secondary { background: var(--bg-panel-2) !important; color: var(--text-primary) !important; border: 1px solid var(--border) !important; }
-    [data-theme="light"] .btn-secondary:hover { background: #e2e8f0 !important; }
-    [data-theme="light"] .tag { color: inherit; }
+    [data-theme="light"] .btn-secondary:hover { background: var(--bg-hover) !important; }
+    [data-theme="light"] .btn-primary { background: var(--accent) !important; color: white !important; }
+    [data-theme="light"] .btn-primary:hover { background: var(--accent-hover) !important; }
+    [data-theme="light"] .pos { color: var(--color-green) !important; }
+    [data-theme="light"] .neg { color: var(--color-red) !important; }
+    /* Tag chips — keep semantic colors but tune intensity */
+    [data-theme="light"] .tag-stock { background: rgba(79,70,229,0.10); color: var(--accent); }
+    [data-theme="light"] .tag-etf { background: rgba(37,99,235,0.10); color: var(--color-blue); }
+    [data-theme="light"] .tag-crypto { background: rgba(217,119,6,0.10); color: var(--color-amber); }
+    [data-theme="light"] .tag-bond { background: rgba(5,150,105,0.10); color: var(--color-green); }
+    [data-theme="light"] .tag-cash { background: rgba(100,116,139,0.10); color: #475569; }
+    [data-theme="light"] .tag-mutualfund { background: rgba(124,58,237,0.10); color: var(--color-violet); }
+    [data-theme="light"] .tag-realestate { background: rgba(234,88,12,0.10); color: var(--color-orange); }
+    [data-theme="light"] .tag-fund { background: rgba(8,145,178,0.10); color: var(--color-teal); }
+    [data-theme="light"] .tag-kiwisaver { background: rgba(124,58,237,0.12); color: var(--color-violet); }
+    [data-theme="light"] .tag-other { background: rgba(100,116,139,0.10); color: #475569; }
+    /* Badge backgrounds */
+    [data-theme="light"] .badge-pos { background: var(--color-green-soft); color: var(--color-green); }
+    [data-theme="light"] .badge-neg { background: var(--color-red-soft); color: var(--color-red); }
+    [data-theme="light"] .badge-neutral { background: rgba(100,116,139,0.10); color: var(--text-secondary); }
+    /* Auth gate background */
+    [data-theme="light"] #authGate { background: var(--bg) !important; color: var(--text-primary) !important; }
+    /* Family invite banner (uses gradient — readable in both modes) */
+    /* Mobile tab bar */
+    [data-theme="light"] #mobileTabBar { background: var(--bg-panel) !important; border-top: 1px solid var(--border) !important; }
+    [data-theme="light"] .mob-tab { color: var(--text-secondary); }
+    [data-theme="light"] .mob-tab.active { color: var(--accent); }
+    /* Skeleton loaders */
+    [data-theme="light"] .skeleton { background: var(--bg-panel-2) !important; }
 
     .pos { color: #34d399; }
     .neg { color: #f87171; }
