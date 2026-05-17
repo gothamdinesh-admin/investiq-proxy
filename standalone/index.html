@@ -915,6 +915,54 @@
     .iq-badge::before { content: '✦'; font-size: 10px; }
 
     /* ═══════════════════════════════════════════════════════════════════
+       FAB (Floating Action Button) — desktop-only quick-actions launcher.
+       Replaces the dense sidebar action stack. On mobile the same actions
+       live in the hamburger drawer, so the FAB stays hidden. */
+    #fab { position: fixed; bottom: 24px; right: 24px; z-index: 95; }
+    .fab-btn {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--color-green));
+      color: #fff; border: none; cursor: pointer;
+      font-size: 22px; box-shadow: 0 8px 24px rgba(29,78,216,0.35);
+      transition: transform 0.2s, box-shadow 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fab-btn:hover { transform: scale(1.06); box-shadow: 0 12px 28px rgba(29,78,216,0.45); }
+    .fab-btn.open { transform: rotate(45deg); }
+    .fab-menu {
+      position: absolute; bottom: 70px; right: 0;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+      opacity: 0; transform: translateY(8px); pointer-events: none;
+      transition: opacity 0.18s, transform 0.18s;
+    }
+    .fab-menu.open { opacity: 1; transform: translateY(0); pointer-events: auto; }
+    .fab-action {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: var(--bg-panel); color: var(--text-primary);
+      border: 1px solid var(--border); padding: 9px 14px; border-radius: 999px;
+      cursor: pointer; font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+      white-space: nowrap;
+    }
+    .fab-action i { color: var(--accent); width: 16px; text-align: center; }
+    .fab-action:hover { border-color: var(--accent); background: var(--accent-soft); }
+    @media (max-width: 768px) { #fab { display: none !important; } }
+
+    /* Today's Movers strip in the sidebar */
+    .movers-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 7px 8px; border-radius: 8px;
+      cursor: pointer; transition: background 0.12s;
+      font-size: 12px;
+    }
+    .movers-row:hover { background: var(--bg-panel-2); }
+    .movers-row .sym { font-weight: 600; color: var(--text-primary); }
+    .movers-row .pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .movers-row.up   .pct { color: var(--color-green); }
+    .movers-row.down .pct { color: var(--color-red); }
+    .movers-sep { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 8px 4px; }
+
+    /* ═══════════════════════════════════════════════════════════════════
        MOBILE DRAWER — slide-in side panel surfacing every section + key
        action when the user taps the hamburger. Off-canvas, transform
        transition. Hidden on desktop (uses the regular sidebar instead). */
@@ -1479,53 +1527,34 @@
       <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i> Admin Panel</div>
     </nav>
 
-    <!-- Quick stats -->
-    <div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">Quick Stats</div>
-    <div class="space-y-3">
-      <div class="flex justify-between text-sm">
-        <span class="neutral">Holdings</span>
-        <span id="statHoldings" class="font-semibold">0</span>
-      </div>
-      <div class="flex justify-between text-sm">
-        <span class="neutral">Platforms</span>
-        <span id="statPlatforms" class="font-semibold">0</span>
-      </div>
-      <div class="flex justify-between text-sm">
-        <span class="neutral">Asset Types</span>
-        <span id="statTypes" class="font-semibold">0</span>
-      </div>
-      <div class="flex justify-between text-sm">
-        <span class="neutral">Best Performer</span>
-        <span id="statBest" class="font-semibold pos text-xs">–</span>
-      </div>
-      <div class="flex justify-between text-sm">
-        <span class="neutral">Worst Performer</span>
-        <span id="statWorst" class="font-semibold neutral text-xs">–</span>
-      </div>
+    <!-- Today's Movers — top 3 gainers + bottom 3 losers in your portfolio.
+         Replaces the old Quick Stats which mostly duplicated info shown
+         elsewhere on the Overview. Clickable: tap a row to open the
+         Holding Detail page. -->
+    <div class="text-xs neutral uppercase font-semibold mb-3 flex items-center justify-between" style="letter-spacing:0.5px;">
+      <span><i class="fas fa-fire mr-1" style="color:var(--color-amber);"></i>Today's Movers</span>
+      <span id="moversAsOf" class="neutral" style="font-size:9px;text-transform:none;letter-spacing:0;"></span>
+    </div>
+    <div id="moversList" class="space-y-1">
+      <div class="text-xs neutral py-3 text-center">No price data yet</div>
     </div>
 
-    <div class="mt-6 pt-4" style="border-top:1px solid #1e2d4a;">
-      <button onclick="openModal('addModal')" class="btn btn-primary w-full" style="width:100%;">
-        <i class="fas fa-plus mr-2"></i>Add Holding
-      </button>
-      <button onclick="openModal('connectionsModal')" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;border-color:rgba(99,102,241,0.4);color:#818cf8;">
-        <i class="fas fa-plug mr-1"></i>Connect Platforms
-      </button>
-      <button onclick="exportCSV()" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;">
-        <i class="fas fa-download mr-1"></i>Export CSV
-      </button>
-      <button onclick="exportBackup()" class="btn btn-secondary mt-2" style="width:100%;font-size:12px;border-color:rgba(52,211,153,0.4);color:#34d399;" title="Full backup — use this to move data between browsers">
-        <i class="fas fa-database mr-1"></i>Backup (JSON)
-      </button>
-      <label class="btn btn-secondary mt-2 cursor-pointer" style="width:100%;font-size:12px;border-color:rgba(52,211,153,0.4);color:#34d399;display:block;text-align:center;" title="Restore a backup from another browser or device">
-        <i class="fas fa-upload mr-1"></i>Restore Backup
-        <input type="file" accept=".json" style="display:none;" onchange="importBackup(event)">
-      </label>
-      <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="importCSV(event)">
-      <input type="file" id="etoroInput" accept=".csv" style="display:none" onchange="importEtoro(event)">
-      <input type="file" id="sharesiesInput" accept=".csv" style="display:none" onchange="importSharesies(event)">
-      <input type="file" id="harbourInput" accept=".csv" style="display:none" onchange="importHarbour(event)">
-    </div>
+    <!-- Hidden file inputs used by import flows (still referenced from
+         elsewhere — Holdings page, modals). Action buttons themselves
+         moved to the FAB. -->
+    <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+    <input type="file" id="etoroInput" accept=".csv" style="display:none" onchange="importEtoro(event)">
+    <input type="file" id="sharesiesInput" accept=".csv" style="display:none" onchange="importSharesies(event)">
+    <input type="file" id="harbourInput" accept=".csv" style="display:none" onchange="importHarbour(event)">
+    <input type="file" id="backupRestoreInput" accept=".json" style="display:none" onchange="importBackup(event)">
+
+    <!-- Hidden quick-stats nodes — kept so existing renderQuickStats()
+         calls don't throw; they're written but no longer rendered visibly. -->
+    <span id="statHoldings" style="display:none;"></span>
+    <span id="statPlatforms" style="display:none;"></span>
+    <span id="statTypes" style="display:none;"></span>
+    <span id="statBest" style="display:none;"></span>
+    <span id="statWorst" style="display:none;"></span>
   </aside>
 
   <!-- MAIN CONTENT -->
@@ -3058,6 +3087,71 @@ function loadInitialTheme() {
   applyTheme(theme);
 }
 
+// FAB (floating action button) toggle — desktop-only quick actions.
+// Optional `force` param: true = open, false = close, undefined = toggle.
+function toggleFab(force) {
+  const fab = document.getElementById('fab');
+  const btn = document.getElementById('fabBtn');
+  const menu = document.getElementById('fabMenu');
+  if (!fab || !btn || !menu) return;
+  const willOpen = (typeof force === 'boolean') ? force : !menu.classList.contains('open');
+  menu.classList.toggle('open', willOpen);
+  btn.classList.toggle('open', willOpen);
+  menu.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
+}
+// Close FAB on outside click / Escape
+document.addEventListener('click', (e) => {
+  const fab = document.getElementById('fab');
+  if (fab && !fab.contains(e.target)) toggleFab(false);
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleFab(false); });
+
+// Show the FAB on desktop once signed in (or always once portfolio loaded —
+// kept simple: visible whenever overview is reachable).
+function showFab() { const f = document.getElementById('fab'); if (f) f.style.display = 'block'; }
+
+// Render the sidebar Today's Movers strip — top 3 gainers + bottom 3 losers
+// in the user's portfolio by today's % change. Falls back to total-return %
+// when intraday isn't available. Tapping a row opens the Holding Detail.
+function renderTodaysMovers(metrics) {
+  const el = document.getElementById('moversList');
+  if (!el) return;
+  const holdings = (metrics?.holdings || []).filter(h => h && h.symbol);
+  if (!holdings.length) {
+    el.innerHTML = '<div class="text-xs neutral py-3 text-center">No price data yet</div>';
+    return;
+  }
+  // Prefer today's %, fall back to gainPct so the strip is never empty.
+  // Exclude unrealistic outliers (>500%) — usually pence/pounds issues.
+  const valid = holdings
+    .map(h => ({
+      symbol: h.symbol,
+      id: h.id,
+      pct: (typeof h.dayChangePct === 'number') ? h.dayChangePct : h.gainPct,
+      mode: (typeof h.dayChangePct === 'number') ? 'today' : 'all-time'
+    }))
+    .filter(x => typeof x.pct === 'number' && isFinite(x.pct) && Math.abs(x.pct) < 500);
+  if (!valid.length) {
+    el.innerHTML = '<div class="text-xs neutral py-3 text-center">No movers data</div>';
+    return;
+  }
+  const sorted = [...valid].sort((a, b) => b.pct - a.pct);
+  const top    = sorted.slice(0, 3).filter(x => x.pct > 0);
+  const bottom = sorted.slice(-3).reverse().filter(x => x.pct < 0);
+  const mode = valid.some(x => x.mode === 'today') ? 'today' : 'all-time';
+  const asOf = document.getElementById('moversAsOf');
+  if (asOf) asOf.textContent = mode === 'today' ? 'today' : 'all-time';
+  const row = (m) => `<div class="movers-row ${m.pct >= 0 ? 'up' : 'down'}" onclick="viewHolding('${m.id}')">
+    <span class="sym">${_escape(m.symbol)}</span>
+    <span class="pct">${m.pct >= 0 ? '+' : ''}${m.pct.toFixed(2)}%</span>
+  </div>`;
+  let html = '';
+  if (top.length)    html += `<div class="movers-sep">Gainers</div>${top.map(row).join('')}`;
+  if (bottom.length) html += `<div class="movers-sep">Losers</div>${bottom.map(row).join('')}`;
+  if (!html)         html = '<div class="text-xs neutral py-3 text-center">All flat today</div>';
+  el.innerHTML = html;
+}
+
 // Mobile drawer toggle. Optional `force` param: true = open, false = close,
 // undefined = toggle. Also mirrors admin/family/sign-out visibility from
 // the desktop sidebar each time the drawer opens, so it stays in sync.
@@ -4224,6 +4318,10 @@ function renderSidebar(metrics) {
   }
   // Attach suspicious list to state so admin tools can surface them
   state._suspiciousHoldings = suspicious;
+  // v0.10 — render the Today's Movers strip that replaced Quick Stats
+  try { renderTodaysMovers(metrics); } catch(e) { console.warn('movers render', e); }
+  // FAB visible whenever the user has data to act on
+  try { showFab(); } catch(e) {}
 }
 
 function renderSummaryCards(metrics) {
@@ -10231,6 +10329,23 @@ function showSection(name, el) {
 }
 
 </script>
+
+<!-- FLOATING ACTION BUTTON (FAB) — quick-actions launcher.
+     Bottom-right on desktop; hidden on mobile (drawer has the same actions). -->
+<div id="fab" style="display:none;">
+  <div id="fabMenu" class="fab-menu" aria-hidden="true">
+    <button class="fab-action" onclick="openModal('addModal');toggleFab(false);"><i class="fas fa-plus-circle"></i><span>Add holding</span></button>
+    <button class="fab-action" onclick="openModal('connectionsModal');toggleFab(false);"><i class="fas fa-plug"></i><span>Connect platform</span></button>
+    <button class="fab-action" onclick="refreshAll();toggleFab(false);"><i class="fas fa-sync-alt"></i><span>Refresh prices</span></button>
+    <button class="fab-action" onclick="openModal('agentsModal');toggleFab(false);"><i class="fas fa-robot"></i><span>Run AI agents</span></button>
+    <button class="fab-action" onclick="exportCSV();toggleFab(false);"><i class="fas fa-download"></i><span>Export CSV</span></button>
+    <button class="fab-action" onclick="exportBackup();toggleFab(false);"><i class="fas fa-database"></i><span>Backup JSON</span></button>
+    <button class="fab-action" onclick="document.getElementById('backupRestoreInput').click();toggleFab(false);"><i class="fas fa-upload"></i><span>Restore backup</span></button>
+  </div>
+  <button id="fabBtn" class="fab-btn" onclick="toggleFab()" title="Quick actions" aria-label="Quick actions">
+    <i class="fas fa-plus"></i>
+  </button>
+</div>
 
 <!-- MOBILE BOTTOM TAB BAR -->
 <div id="mobileTabBar">
