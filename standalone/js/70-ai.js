@@ -9,31 +9,79 @@
 
 function renderInsightsSection(results) {
   if (!results) return;
-  document.getElementById('insightsContent').innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-      <div class="insight-box">
-        <h4>🏥 Portfolio Health Agent</h4>
-        <div class="prose-sm">${formatMarkdown(results.healthAnalysis || '')}</div>
+  const score = results.portfolioScore || null;
+  const scoreColor = score == null ? 'var(--accent)' : (score >= 70 ? 'var(--color-green)' : score >= 40 ? 'var(--color-amber)' : 'var(--color-red)');
+  const scoreLabel = score == null ? 'Analysed' : (score >= 70 ? 'Healthy' : score >= 40 ? 'Moderate' : 'Needs Work');
+  const runAt = results.timestamp ? new Date(results.timestamp) : new Date();
+  const ago = (() => {
+    const sec = Math.floor((Date.now() - runAt.getTime()) / 1000);
+    if (sec < 60) return 'just now';
+    if (sec < 3600) return Math.floor(sec / 60) + ' min ago';
+    if (sec < 86400) return Math.floor(sec / 3600) + ' hr ago';
+    return Math.floor(sec / 86400) + ' days ago';
+  })();
+
+  // Hero card — Portfolio Score + Senior Advisor synthesis. This is the
+  // user's TL;DR. Everything else is detail beneath it.
+  const heroHtml = `
+    <div class="insights-hero card mb-5" style="position:relative;overflow:hidden;padding:24px;border:1px solid var(--accent-soft-2);">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--color-green),var(--color-amber));"></div>
+      <div class="flex items-center gap-4 mb-4 flex-wrap">
+        <div style="position:relative;width:96px;height:96px;flex-shrink:0;">
+          <svg width="96" height="96" viewBox="0 0 80 80" style="transform:rotate(-90deg);">
+            <circle cx="40" cy="40" r="32" fill="none" stroke="var(--border)" stroke-width="6"/>
+            <circle cx="40" cy="40" r="32" fill="none" stroke="${scoreColor}" stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="201" stroke-dashoffset="${score == null ? 0 : 201 - (score / 100) * 201}"
+              style="transition:stroke-dashoffset 1.2s ease, stroke 0.3s;"/>
+          </svg>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <span style="font-size:30px;font-weight:800;color:${scoreColor};line-height:1;">${score != null ? score : '–'}</span>
+            <span class="text-xs neutral" style="margin-top:2px;">/100</span>
+          </div>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            <span class="iq-badge">IQ</span>
+            <span class="text-xs neutral">Last run ${ago}</span>
+          </div>
+          <h3 class="text-xl font-bold" style="color:${scoreColor};margin:4px 0;">${scoreLabel}</h3>
+          <div class="text-sm neutral">Synthesised analysis from four specialist agents.</div>
+        </div>
+        <button onclick="openModal('agentsModal')" class="btn btn-primary" style="white-space:nowrap;">
+          <i class="fas fa-redo mr-1"></i>Re-run analysis
+        </button>
       </div>
-      <div class="insight-box">
-        <h4>🌍 Market Impact Agent</h4>
-        <div class="prose-sm">${formatMarkdown(results.marketAnalysis || '')}</div>
-      </div>
-    </div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="insight-box">
-        <h4>🎯 Opportunity Scout Agent</h4>
-        <div class="prose-sm">${formatMarkdown(results.opportunities || '')}</div>
-      </div>
-      <div class="insight-box" style="background:rgba(52,211,153,0.05);border-color:rgba(52,211,153,0.25);">
-        <h4 style="color:#34d399;">💼 Personal Advisor Summary</h4>
-        <div class="prose-sm">${formatMarkdown(results.finalAdvice || '')}</div>
-      </div>
+      ${results.finalAdvice ? `
+      <div style="padding-top:18px;border-top:1px solid var(--border);">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fas fa-user-tie" style="color:var(--color-green);font-size:14px;"></i>
+          <span class="font-semibold text-sm">Senior Advisor's action plan</span>
+        </div>
+        <div class="prose-sm" style="color:var(--text-body);line-height:1.7;font-size:14px;">${formatMarkdown(results.finalAdvice)}</div>
+      </div>` : ''}
     </div>`;
 
-  if (results.portfolioScore) {
-    updateScoreRing(results.portfolioScore);
-  }
+  // Per-agent detail cards. Each agent gets its own brand-colour-tinted
+  // card so they're visually distinct as you scroll.
+  const agentCard = (icon, title, color, body) => `
+    <div class="card p-5" style="border-left:3px solid ${color};">
+      <div class="flex items-center gap-2 mb-3">
+        <i class="${icon}" style="color:${color};font-size:16px;"></i>
+        <h4 class="font-semibold" style="color:${color};margin:0;">${title}</h4>
+      </div>
+      <div class="prose-sm" style="color:var(--text-body);line-height:1.7;font-size:13px;">${formatMarkdown(body || 'No output.')}</div>
+    </div>`;
+
+  document.getElementById('insightsContent').innerHTML = heroHtml + `
+    <div class="text-xs uppercase neutral font-semibold mb-3 mt-4" style="letter-spacing:0.6px;">Agent breakdown</div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      ${agentCard('fas fa-heartbeat',  'Portfolio Health',  'var(--color-green)',  results.healthAnalysis)}
+      ${agentCard('fas fa-chart-line', 'Sentiment Analyst', 'var(--color-blue)',   results.marketAnalysis)}
+      ${agentCard('fas fa-shield-alt', 'Risk Watcher',      'var(--color-amber)',  results.riskAnalysis || results.marketAnalysis)}
+      ${agentCard('fas fa-lightbulb',  'Opportunity Scout', 'var(--color-violet)', results.opportunities)}
+    </div>`;
+
+  if (score != null) updateScoreRing(score);
 }
 
 function updateScoreRing(score, source) {
@@ -41,10 +89,11 @@ function updateScoreRing(score, source) {
   if (!circle) return;
   const circumference = 201;
   const offset = circumference - (score / 100) * circumference;
+  const color = score >= 70 ? 'var(--color-green)' : score >= 40 ? 'var(--color-amber)' : 'var(--color-red)';
   circle.style.strokeDashoffset = offset;
-  circle.style.stroke = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
-  document.getElementById('scoreNum').textContent = score;
-  document.getElementById('scoreNum').style.color = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171';
+  circle.style.stroke = color;
+  const numEl = document.getElementById('scoreNum');
+  if (numEl) { numEl.textContent = score; numEl.style.color = color; }
   document.getElementById('scoreLabel').textContent = score >= 70 ? 'Healthy' : score >= 40 ? 'Moderate' : 'Needs Work';
   document.getElementById('scoreHint').textContent = source || 'Based on AI analysis';
 }
