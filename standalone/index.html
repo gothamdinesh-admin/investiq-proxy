@@ -1211,7 +1211,7 @@
   <div class="modal" style="max-width:720px;">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-xl font-bold flex items-center gap-2">
-        <i class="fas fa-question-circle" style="color:#818cf8;"></i>Help & FAQ
+        <i class="fas fa-question-circle" style="color:var(--accent);"></i>Help & FAQ
       </h2>
       <button onclick="closeModal('helpModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
     </div>
@@ -1473,10 +1473,10 @@
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
-      <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:#22d3ee;"></i> Family</div>
+      <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
-      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel</div>
+      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i> Admin Panel</div>
     </nav>
 
     <!-- Quick stats -->
@@ -1574,7 +1574,7 @@
         <!-- Allocation chart -->
         <div class="card p-5">
           <div class="section-title mb-4">
-            <i class="fas fa-chart-pie" style="color:#818cf8;"></i>
+            <i class="fas fa-chart-pie" style="color:var(--accent);"></i>
             Allocation
             <div class="flex gap-2 ml-auto">
               <span class="tab active text-xs" onclick="switchAllocTab(this,'type')">Type</span>
@@ -1592,7 +1592,7 @@
         <!-- Performance chart -->
         <div class="card p-5 lg:col-span-2">
           <div class="section-title mb-4">
-            <i class="fas fa-chart-area" style="color:#34d399;"></i>
+            <i class="fas fa-chart-area" style="color:var(--color-green);"></i>
             Performance
             <div class="flex gap-2 ml-auto">
               <span class="tab active text-xs" onclick="switchPerfTab(this,'value')">Value</span>
@@ -1609,7 +1609,7 @@
       <div id="todaysMovesCard" class="card mb-6" style="padding:18px 20px;display:none;">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div class="section-title" style="margin:0;">
-            <i class="fas fa-bolt" style="color:#fbbf24;"></i>
+            <i class="fas fa-bolt" style="color:var(--color-amber);"></i>
             Today's biggest moves
           </div>
           <span class="text-xs neutral">Click to see details</span>
@@ -1621,7 +1621,7 @@
       <div class="card mb-6">
         <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border, #1e2d4a);">
           <div class="section-title" style="margin:0;">
-            <i class="fas fa-briefcase" style="color:#fbbf24;"></i>
+            <i class="fas fa-briefcase" style="color:var(--color-amber);"></i>
             Top holdings
             <span id="holdingsCountLabel" class="text-xs neutral ml-2"></span>
           </div>
@@ -1644,7 +1644,7 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div class="card p-5">
           <div class="section-title mb-4">
-            <i class="fas fa-shield-alt" style="color:#f87171;"></i>
+            <i class="fas fa-shield-alt" style="color:var(--color-red);"></i>
             Risk Analysis
           </div>
           <div id="riskAnalysis" class="space-y-3">
@@ -1653,7 +1653,7 @@
         </div>
         <div class="card p-5">
           <div class="section-title mb-4">
-            <i class="fas fa-lightbulb" style="color:#fbbf24;"></i>
+            <i class="fas fa-lightbulb" style="color:var(--color-amber);"></i>
             Quick Insights
           </div>
           <div id="quickInsights" class="space-y-2">
@@ -1664,7 +1664,7 @@
 
       <!-- Platform Breakdown -->
       <div class="card p-5 mb-6" id="platformBreakdownCard" style="display:none;">
-        <div class="section-title mb-4"><i class="fas fa-building" style="color:#818cf8;"></i> By Platform</div>
+        <div class="section-title mb-4"><i class="fas fa-building" style="color:var(--accent);"></i> By Platform</div>
         <div id="platformBreakdown"></div>
       </div>
     </div>
@@ -1672,7 +1672,12 @@
     <!-- HOLDINGS SECTION (detailed) -->
     <div id="section-holdings" style="display:none;">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-        <h2 class="text-xl font-bold">All Holdings</h2>
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-briefcase" style="color:var(--accent);"></i>All Holdings
+          </h2>
+          <div class="text-xs neutral mt-1">Your full portfolio — units, cost, current value, return.</div>
+        </div>
         <div class="flex gap-2 flex-wrap">
           <input type="text" id="holdingsSearch" class="input" style="width:170px;" placeholder="Search..." oninput="filterHoldings()">
           <select id="holdingsTypeFilter" class="input" style="width:120px;" onchange="filterHoldings()">
@@ -1742,12 +1747,17 @@
 
     <!-- PERFORMANCE SECTION -->
     <div id="section-performance" style="display:none;">
-      <h2 class="text-xl font-bold mb-6">Performance Analysis</h2>
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2">
+          <i class="fas fa-chart-line" style="color:var(--color-green);"></i>Performance Analysis
+        </h2>
+        <div class="text-xs neutral mt-1">Portfolio value over time vs. benchmark indices.</div>
+      </div>
 
       <!-- Historical snapshot chart with benchmark overlay -->
       <div class="card p-5 mb-6">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div class="section-title"><i class="fas fa-history" style="color:#34d399;"></i> Portfolio vs Benchmarks</div>
+          <div class="section-title"><i class="fas fa-history" style="color:var(--color-green);"></i> Portfolio vs Benchmarks</div>
           <div class="flex gap-1 flex-wrap">
             <button data-snap-range="30"   onclick="setSnapshotRange(30)"   class="btn btn-sm btn-secondary">30d</button>
             <button data-snap-range="90"   onclick="setSnapshotRange(90)"   class="btn btn-sm" style="background:#6366f1;color:white;">90d</button>
@@ -1777,7 +1787,7 @@
       <div class="card p-5 mb-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="section-title"><i class="fas fa-clock" style="color:#fbbf24;"></i> Holdings at a specific date</div>
+            <div class="section-title"><i class="fas fa-clock" style="color:var(--color-amber);"></i> Holdings at a specific date</div>
             <div class="text-xs neutral mt-1">Browse your portfolio as it looked on any past snapshot date.</div>
           </div>
           <div class="flex items-center gap-2">
@@ -1794,42 +1804,47 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div class="card p-5">
-          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:#818cf8;"></i> By Asset Type</div>
+          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:var(--accent);"></i> By Asset Type</div>
           <div style="height:260px;"><canvas id="typeBarChart"></canvas></div>
         </div>
         <div class="card p-5">
-          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:#34d399;"></i> By Platform</div>
+          <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:var(--color-green);"></i> By Platform</div>
           <div style="height:260px;"><canvas id="platformBarChart"></canvas></div>
         </div>
       </div>
       <div class="card p-5">
-        <div class="section-title mb-4"><i class="fas fa-trophy" style="color:#fbbf24;"></i> Top & Bottom Performers</div>
+        <div class="section-title mb-4"><i class="fas fa-trophy" style="color:var(--color-amber);"></i> Top & Bottom Performers</div>
         <div id="performersTable" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
       </div>
     </div>
 
     <!-- MARKET SECTION -->
     <div id="section-market" style="display:none;">
-      <h2 class="text-xl font-bold mb-6">Global Market Overview</h2>
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2">
+          <i class="fas fa-globe" style="color:var(--color-teal);"></i>Global Market Overview
+        </h2>
+        <div class="text-xs neutral mt-1">Indices, commodities, currencies, and crypto at a glance.</div>
+      </div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="indicesGrid">
         <div class="card2 p-4 text-center"><div class="neutral text-xs">Loading indices...</div></div>
       </div>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <div class="card p-5">
-          <div class="section-title mb-3"><i class="fas fa-coins" style="color:#fbbf24;"></i> Commodities</div>
+          <div class="section-title mb-3"><i class="fas fa-coins" style="color:var(--color-amber);"></i> Commodities</div>
           <div id="commoditiesGrid" class="space-y-3"></div>
         </div>
         <div class="card p-5">
-          <div class="section-title mb-3"><i class="fas fa-money-bill-wave" style="color:#34d399;"></i> Currencies</div>
+          <div class="section-title mb-3"><i class="fas fa-money-bill-wave" style="color:var(--color-green);"></i> Currencies</div>
           <div id="fxGrid" class="space-y-3"></div>
         </div>
         <div class="card p-5">
-          <div class="section-title mb-3"><i class="fab fa-bitcoin" style="color:#fbbf24;"></i> Crypto</div>
+          <div class="section-title mb-3"><i class="fab fa-bitcoin" style="color:var(--color-amber);"></i> Crypto</div>
           <div id="cryptoGrid" class="space-y-3"></div>
         </div>
       </div>
       <div class="card p-5">
-        <div class="section-title mb-4"><i class="fas fa-newspaper" style="color:#818cf8;"></i> Portfolio Impact Analysis</div>
+        <div class="section-title mb-4"><i class="fas fa-newspaper" style="color:var(--accent);"></i> Portfolio Impact Analysis</div>
         <div id="marketImpact" class="neutral text-sm">Run AI Agents to see how current market conditions affect your portfolio.</div>
       </div>
     </div>
@@ -1859,7 +1874,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-eye" style="color:#818cf8;"></i>Watchlist
+            <i class="fas fa-eye" style="color:var(--accent);"></i>Watchlist
           </h2>
           <div class="text-xs neutral mt-1">Track tickers you're researching but don't own yet.</div>
         </div>
@@ -1886,7 +1901,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-newspaper" style="color:#818cf8;"></i> News
+            <i class="fas fa-newspaper" style="color:var(--accent);"></i> News
           </h2>
           <div class="text-xs neutral mt-1">Daily brief on what's moving · global + NZ headlines · per-ticker stories for your portfolio.</div>
         </div>
@@ -1894,17 +1909,18 @@
       </div>
 
       <!-- DAILY BRIEF — Haiku-summarised, top 3 bullets -->
-      <div class="card mb-6" style="border:1px solid rgba(129,140,248,0.25);background:linear-gradient(180deg,rgba(99,102,241,0.06),rgba(15,23,41,0.95));padding:18px 20px;">
+      <div class="card mb-6" style="border:1px solid var(--accent-soft-2);background:var(--bg-panel);padding:18px 20px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--color-green));"></div>
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
-            <i class="fas fa-bolt" style="color:#fbbf24;"></i>
+            <i class="fas fa-bolt" style="color:var(--color-amber);"></i>
             <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Daily Brief</h3>
             <span class="iq-badge">IQ</span>
             <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku</span>
           </div>
           <button onclick="generateDailyBrief()" id="briefRunBtn" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-magic mr-1"></i>Generate</button>
         </div>
-        <div id="dailyBriefContent" class="text-sm" style="color:#94a3b8;line-height:1.7;">
+        <div id="dailyBriefContent" class="text-sm" style="color:var(--text-body);line-height:1.7;">
           <div class="text-xs neutral">Click <b>Generate</b> to get a 3-bullet morning brief on what's moving in the markets relative to your portfolio.</div>
         </div>
         <div id="dailyBriefMeta" class="text-xs neutral mt-2" style="display:none;"></div>
@@ -1914,8 +1930,8 @@
       <div class="card mb-6" style="padding:18px 20px;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="flex items-center gap-2">
-            <i class="fas fa-globe" style="color:#34d399;"></i>
-            <h3 class="font-semibold text-sm" style="color:#c8d6ef;">Market Headlines</h3>
+            <i class="fas fa-globe" style="color:var(--color-green);"></i>
+            <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Market Headlines</h3>
             <span id="headlinesCount" class="text-xs neutral"></span>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
@@ -1937,8 +1953,8 @@
       <div class="card" style="padding:18px 20px;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="flex items-center gap-2">
-            <i class="fas fa-bullseye" style="color:#818cf8;"></i>
-            <h3 class="font-semibold text-sm" style="color:#c8d6ef;">Your Tickers</h3>
+            <i class="fas fa-bullseye" style="color:var(--accent);"></i>
+            <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Your Tickers</h3>
           </div>
           <select id="newsScopeFilter" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="loadNews()">
             <option value="all">All my tickers</option>
@@ -1958,7 +1974,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-receipt" style="color:#34d399;"></i>NZ Foreign Investment Fund (FIF) Check
+            <i class="fas fa-receipt" style="color:var(--color-green);"></i>NZ Foreign Investment Fund (FIF) Check
           </h2>
           <div class="text-xs neutral mt-1">
             NZ residents: if the <b>original cost</b> of your overseas investments exceeds NZD $50,000 at any time during the year, you generally owe FIF income tax.
@@ -1987,7 +2003,7 @@
       </div>
 
       <div class="card p-5 mb-4">
-        <div class="section-title mb-4"><i class="fas fa-globe" style="color:#818cf8;"></i> Overseas Holdings Contributing to FIF</div>
+        <div class="section-title mb-4"><i class="fas fa-globe" style="color:var(--accent);"></i> Overseas Holdings Contributing to FIF</div>
         <div id="fifHoldingsTable"></div>
       </div>
 
@@ -2008,7 +2024,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-coins" style="color:#fbbf24;"></i> Dividends
+            <i class="fas fa-coins" style="color:var(--color-amber);"></i> Dividends
           </h2>
           <div class="text-xs neutral mt-1">
             Cash dividends, DRIPs, special distributions, returns of capital. NZ tax fields built in
@@ -2035,7 +2051,7 @@
 
       <!-- Ledger table -->
       <div class="card p-5">
-        <div class="section-title mb-3"><i class="fas fa-list" style="color:#fbbf24;"></i> Dividend ledger</div>
+        <div class="section-title mb-3"><i class="fas fa-list" style="color:var(--color-amber);"></i> Dividend ledger</div>
         <div id="divContent">
           <div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
         </div>
@@ -2047,7 +2063,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-users" style="color:#22d3ee;"></i><span id="familyViewName">Family</span>
+            <i class="fas fa-users" style="color:var(--color-teal);"></i><span id="familyViewName">Family</span>
           </h2>
           <div class="text-xs neutral mt-1">Combined household view across all members. Adults see everyone's portfolios; teens/children/viewers see only their own.</div>
         </div>
@@ -2069,7 +2085,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-shield-alt" style="color:#fbbf24;"></i> Admin Panel
+            <i class="fas fa-shield-alt" style="color:var(--color-amber);"></i> Admin Panel
           </h2>
           <div class="text-xs neutral mt-1">Manage users, roles, and platform access</div>
         </div>
@@ -2119,7 +2135,7 @@
       <div class="card mb-6" style="overflow:hidden;">
         <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
           <div class="font-semibold text-sm flex items-center gap-2">
-            <i class="fas fa-satellite-dish" style="color:#818cf8;"></i>
+            <i class="fas fa-satellite-dish" style="color:var(--accent);"></i>
             Platform Diagnostics
           </div>
           <div class="text-xs neutral mt-1">Admin-only visibility for proxy, Supabase, and current session details.</div>
@@ -2165,7 +2181,7 @@
       <div class="card mb-6" style="overflow:hidden;">
         <div class="p-4" style="border-bottom:1px solid #1e2d4a;">
           <div class="font-semibold text-sm flex items-center gap-2">
-            <i class="fas fa-stethoscope" style="color:#fbbf24;"></i>
+            <i class="fas fa-stethoscope" style="color:var(--color-amber);"></i>
             Diagnostic Tools
           </div>
           <div class="text-xs neutral mt-1">One-click actions to test and heal the system.</div>
@@ -2206,7 +2222,7 @@
         <div class="p-4 flex items-center justify-between" style="border-bottom:1px solid #1e2d4a;">
           <div>
             <div class="font-semibold text-sm flex items-center gap-2">
-              <i class="fas fa-history" style="color:#34d399;"></i>
+              <i class="fas fa-history" style="color:var(--color-green);"></i>
               Activity Log
             </div>
             <div class="text-xs neutral mt-1">Recent logins, imports, agent runs, holdings changes across all users.</div>
@@ -2507,7 +2523,7 @@
       <div id="digestSection" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-envelope" style="color:#818cf8;"></i>
+            <i class="fas fa-envelope" style="color:var(--accent);"></i>
             <span class="text-xs font-semibold" style="color:#818cf8;letter-spacing:0.5px;text-transform:uppercase;">Weekly Email Digest</span>
           </div>
           <label style="display:flex;align-items:center;gap:10px;padding:12px;background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;cursor:pointer;">
@@ -2525,7 +2541,7 @@
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
-              <i class="fas fa-users" style="color:#22d3ee;"></i>
+              <i class="fas fa-users" style="color:var(--color-teal);"></i>
               <span class="text-xs font-semibold" style="color:#22d3ee;letter-spacing:0.5px;text-transform:uppercase;">Family</span>
             </div>
             <span class="text-xs neutral">Track portfolios across your household</span>
@@ -2541,7 +2557,7 @@
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
-              <i class="fas fa-bell" style="color:#fbbf24;"></i>
+              <i class="fas fa-bell" style="color:var(--color-amber);"></i>
               <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Price Alerts</span>
             </div>
             <button onclick="createAlertPrompt()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-plus mr-1"></i>New alert</button>
@@ -2556,7 +2572,7 @@
       <div id="planSection" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-crown" style="color:#fbbf24;"></i>
+            <i class="fas fa-crown" style="color:var(--color-amber);"></i>
             <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Your Plan</span>
           </div>
           <div id="planContent" class="text-xs neutral">Loading…</div>
@@ -2567,7 +2583,7 @@
       <div id="accountInfoSection" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-user-circle" style="color:#818cf8;"></i>
+            <i class="fas fa-user-circle" style="color:var(--accent);"></i>
             <span class="text-xs font-semibold" style="color:#818cf8;letter-spacing:0.5px;text-transform:uppercase;">My Account</span>
           </div>
           <div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:8px;padding:12px;">
@@ -2593,7 +2609,7 @@
       <div id="adminSettingsSection" style="display:none;">
         <div style="border-top:1px solid #fbbf24;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
-            <i class="fas fa-shield-alt" style="color:#fbbf24;"></i>
+            <i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>
             <span class="text-xs font-semibold" style="color:#fbbf24;letter-spacing:0.5px;text-transform:uppercase;">Admin · Platform Config</span>
           </div>
           <div class="text-xs mb-3" style="color:#64748b;">
@@ -2869,7 +2885,7 @@
     <div class="card mb-4" style="padding:14px;">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
-          <i class="fas fa-chart-area" style="color:#60a5fa;"></i>
+          <i class="fas fa-chart-area" style="color:var(--color-blue);"></i>
           <span class="font-semibold text-sm">Price history</span>
           <span id="holdingChartMeta" class="text-xs neutral"></span>
         </div>
@@ -2887,7 +2903,7 @@
     <!-- LOTS WITH PER-LOT P&L -->
     <div class="card mb-4" style="padding:14px;">
       <div class="flex items-center gap-2 mb-3">
-        <i class="fas fa-layer-group" style="color:#818cf8;"></i>
+        <i class="fas fa-layer-group" style="color:var(--accent);"></i>
         <span class="font-semibold text-sm">Purchase lots</span>
       </div>
       <div id="holdingLotsTable"></div>
@@ -2897,7 +2913,7 @@
     <div class="card mb-4" style="padding:14px;border:1px solid rgba(251,191,36,0.25);">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
-          <i class="fas fa-brain" style="color:#fbbf24;"></i>
+          <i class="fas fa-brain" style="color:var(--color-amber);"></i>
           <span class="font-semibold text-sm">AI Deep-Dive</span>
           <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Sonnet</span>
         </div>
@@ -2909,7 +2925,7 @@
     <!-- TICKER-SPECIFIC NEWS -->
     <div class="card mb-4" style="padding:14px;">
       <div class="flex items-center gap-2 mb-3">
-        <i class="fas fa-newspaper" style="color:#34d399;"></i>
+        <i class="fas fa-newspaper" style="color:var(--color-green);"></i>
         <span class="font-semibold text-sm">Latest news</span>
         <span id="holdingNewsMeta" class="text-xs neutral"></span>
       </div>
@@ -3135,7 +3151,7 @@ function renderNotifPanel() {
   const wrap = document.getElementById('notifList');
   if (!wrap) return;
   if (!_notifCache.length) {
-    wrap.innerHTML = `<div class="text-xs neutral text-center py-6"><i class="fas fa-check-circle mr-1" style="color:#34d399;"></i>All clear · no notifications</div>`;
+    wrap.innerHTML = `<div class="text-xs neutral text-center py-6"><i class="fas fa-check-circle mr-1" style="color:var(--color-green);"></i>All clear · no notifications</div>`;
     return;
   }
   const SEV_DEFS = {
@@ -6385,14 +6401,14 @@ async function loadFamilyAggregateView() {
       <!-- Allocation by member chart -->
       ${visibleWithData.length > 1 ? `
         <div class="card p-5 mb-6">
-          <div class="section-title mb-3"><i class="fas fa-chart-pie" style="color:#22d3ee;"></i> Allocation by member</div>
+          <div class="section-title mb-3"><i class="fas fa-chart-pie" style="color:var(--color-teal);"></i> Allocation by member</div>
           <div style="height:240px;"><canvas id="familyAllocChart"></canvas></div>
         </div>
       ` : ''}
 
       <!-- Per-member breakdown cards -->
       <div class="card p-5">
-        <div class="section-title mb-3"><i class="fas fa-user-friends" style="color:#22d3ee;"></i> Members</div>
+        <div class="section-title mb-3"><i class="fas fa-user-friends" style="color:var(--color-teal);"></i> Members</div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
           ${memberRows.map(m => {
             const def = FAMILY_ROLE_DEFS[m.role] || { label: m.role, color: '#94a3b8' };
@@ -6638,7 +6654,7 @@ function _renderDividendTable(divs) {
   if (!divs.length) {
     wrap.innerHTML = `
       <div class="text-center py-8">
-        <i class="fas fa-coins text-3xl mb-3 block" style="opacity:0.3;color:#fbbf24;"></i>
+        <i class="fas fa-coins text-3xl mb-3 block" style="opacity:0.3;color:var(--color-amber);"></i>
         <div class="text-sm" style="color:#c8d6ef;margin-bottom:4px;">No dividends recorded for this period</div>
         <div class="text-xs neutral mb-4">Add payments as they arrive. NZ tax fields (withholding + imputation) are optional but make IR3 export easier later.</div>
         <button onclick="addDividendPrompt()" class="btn btn-sm btn-primary"><i class="fas fa-plus mr-1"></i>Add your first dividend</button>
@@ -6937,7 +6953,7 @@ async function renderAlertsSection() {
   }
   wrap.innerHTML = `<div style="background:#0a1120;border:1px solid #1e2d4a;border-radius:10px;padding:10px;">
     ${alerts.map(a => {
-      const target = a.scope === 'portfolio' ? '<i class="fas fa-briefcase mr-1" style="color:#22d3ee;"></i>Portfolio' : `<i class="fas fa-chart-line mr-1" style="color:#60a5fa;"></i>${_escape(a.symbol)}`;
+      const target = a.scope === 'portfolio' ? '<i class="fas fa-briefcase mr-1" style="color:var(--color-teal);"></i>Portfolio' : `<i class="fas fa-chart-line mr-1" style="color:var(--color-blue);"></i>${_escape(a.symbol)}`;
       const lastFired = a.last_fired_at ? ` · fired ${timeSince(new Date(a.last_fired_at))}` : '';
       return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;border-bottom:1px solid #1e2d4a;gap:8px;flex-wrap:wrap;">
         <div style="min-width:0;flex:1;">
@@ -7389,7 +7405,7 @@ function renderPlanSection() {
         ${def.perks.map(p => `<li>${p}</li>`).join('')}
       </ul>
       ${familyCount > 0 && tier !== 'family' && tier !== 'admin' ? `<div class="text-xs neutral mt-2" style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.25);border-radius:6px;padding:8px;line-height:1.5;">
-        <i class="fas fa-info-circle mr-1" style="color:#22d3ee;"></i>You're in ${familyCount} ${familyCount === 1 ? 'family' : 'families'}. Family plan unlocks aggregate view + joint goals (currently free during beta).
+        <i class="fas fa-info-circle mr-1" style="color:var(--color-teal);"></i>You're in ${familyCount} ${familyCount === 1 ? 'family' : 'families'}. Family plan unlocks aggregate view + joint goals (currently free during beta).
       </div>` : ''}
       <div class="text-xs neutral mt-2" style="font-size:10px;font-style:italic;">All features currently free during beta. Paid tiers turn on once we hit 50+ active users.</div>
     </div>`;
