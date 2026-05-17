@@ -962,6 +962,18 @@
     .movers-row.down .pct { color: var(--color-red); }
     .movers-sep { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 8px 4px; }
 
+    /* News section tab pills */
+    .news-tab {
+      background: none; border: none; cursor: pointer;
+      padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-secondary); transition: background 0.15s, color 0.15s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .news-tab i { font-size: 11px; }
+    .news-tab.active { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+    .news-tab:hover:not(.active) { color: var(--text-primary); }
+
     /* ═══════════════════════════════════════════════════════════════════
        MOBILE DRAWER — slide-in side panel surfacing every section + key
        action when the user taps the hamburger. Off-canvas, transform
@@ -1951,18 +1963,24 @@
 
     <!-- NEWS SECTION — daily AI brief + multi-source headlines + per-ticker news -->
     <div id="section-news" style="display:none;">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-newspaper" style="color:var(--accent);"></i> News
           </h2>
-          <div class="text-xs neutral mt-1">Daily brief on what's moving · global + NZ headlines · per-ticker stories for your portfolio.</div>
+          <div class="text-xs neutral mt-1">Personal news + Daily Brief on the 'For You' tab; broader market headlines on 'Markets'.</div>
         </div>
         <button onclick="loadNewsAll(true)" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Refresh all</button>
       </div>
 
-      <!-- DAILY BRIEF — Haiku-summarised, top 3 bullets -->
-      <div class="card mb-6" style="border:1px solid var(--accent-soft-2);background:var(--bg-panel);padding:18px 20px;position:relative;overflow:hidden;">
+      <!-- News tab switcher — tabs filter cards via data-news-tab attribute -->
+      <div class="flex items-center gap-1 mb-5 p-1 rounded-lg" style="background:var(--bg-panel-2);width:fit-content;">
+        <button onclick="switchNewsTab('foryou')" id="newsTabForYou" class="news-tab active"><i class="fas fa-bullseye"></i> For You</button>
+        <button onclick="switchNewsTab('markets')" id="newsTabMarkets" class="news-tab"><i class="fas fa-globe"></i> Markets</button>
+      </div>
+
+      <!-- DAILY BRIEF — Haiku-summarised, top 3 bullets (For You tab) -->
+      <div class="card mb-6" data-news-tab="foryou" style="border:1px solid var(--accent-soft-2);background:var(--bg-panel);padding:18px 20px;position:relative;overflow:hidden;">
         <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--color-green));"></div>
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
@@ -1979,8 +1997,8 @@
         <div id="dailyBriefMeta" class="text-xs neutral mt-2" style="display:none;"></div>
       </div>
 
-      <!-- MARKET HEADLINES — multi-source RSS aggregator -->
-      <div class="card mb-6" style="padding:18px 20px;">
+      <!-- MARKET HEADLINES — Markets tab -->
+      <div class="card mb-6" data-news-tab="markets" style="padding:18px 20px;display:none;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="flex items-center gap-2">
             <i class="fas fa-globe" style="color:var(--color-green);"></i>
@@ -2002,8 +2020,8 @@
         </div>
       </div>
 
-      <!-- YOUR TICKERS — Yahoo per-ticker news (existing /api/news endpoint) -->
-      <div class="card" style="padding:18px 20px;">
+      <!-- YOUR TICKERS — Yahoo per-ticker news (For You tab) -->
+      <div class="card" data-news-tab="foryou" style="padding:18px 20px;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="flex items-center gap-2">
             <i class="fas fa-bullseye" style="color:var(--accent);"></i>
@@ -10353,6 +10371,20 @@ function showSection(name, el) {
   // v0.10 — render the Market Pulse personal exposure card when its
   // section opens. Cheap, recalculated from current portfolio metrics.
   if (name === 'market') { try { renderMarketExposure(); } catch(e) { console.warn('exposure', e); } }
+  if (name === 'news') { try { switchNewsTab(_currentNewsTab || 'foryou'); } catch(e) {} }
+}
+
+// News section tabs — For You (Daily Brief + your-ticker stories) vs
+// Markets (broad market headlines). Cards are tagged with data-news-tab
+// so we just show/hide them by attribute.
+let _currentNewsTab = 'foryou';
+function switchNewsTab(tab) {
+  _currentNewsTab = tab;
+  document.getElementById('newsTabForYou')?.classList.toggle('active', tab === 'foryou');
+  document.getElementById('newsTabMarkets')?.classList.toggle('active', tab === 'markets');
+  document.querySelectorAll('[data-news-tab]').forEach(el => {
+    el.style.display = (el.dataset.newsTab === tab) ? '' : 'none';
+  });
 }
 
 // Build the "Your Exposure" mini-tiles on the Market section. Pulls from
