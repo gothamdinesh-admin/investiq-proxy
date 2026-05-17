@@ -50,85 +50,89 @@
        perceived intensity. No pure black/white (eye strain — see UX_DESIGN).
        ═══════════════════════════════════════════════════════════════════ */
     :root {
+      /* InvestIQ brand palette — deep navy trust anchor, intelligent blue
+         action, emerald growth, teal-cyan data, gold for premium "IQ"
+         moments. Dark surfaces stay slightly desaturated for readability
+         (Google dark-mode guidance — saturated on dark causes eye strain). */
       /* Surfaces */
-      --bg:               #080d1a;
-      --bg-panel:         #0f1729;
-      --bg-panel-2:       #141e33;
-      --bg-input:         #141e33;
-      --bg-deep:          #0a1120;       /* deepest, for nested insets */
-      --bg-hover:         #1a253f;
+      --bg:               #07111F;       /* deep navy app bg */
+      --bg-panel:         #0F172A;       /* card surface */
+      --bg-panel-2:       #182235;       /* elevated panel */
+      --bg-input:         #182235;
+      --bg-deep:          #0B1F3A;       /* nested insets — navy */
+      --bg-hover:         #1E2A44;
       /* Borders */
-      --border:           #1e2d4a;
-      --border-strong:    #2a3f60;
+      --border:           #334155;
+      --border-strong:    #475569;
       /* Text */
-      --text-primary:     #c8d6ef;
-      --text-secondary:   #94a3b8;
-      --text-muted:       #4a6080;
-      --text-inverted:    #0f172a;
+      --text-primary:     #F8FAFC;
+      --text-secondary:   #94A3B8;
+      --text-muted:       #64748B;
+      --text-inverted:    #07111F;
       /* Accents (functional, not decorative) */
-      --accent:           #6366f1;       /* indigo — brand */
-      --accent-hover:     #5254cc;
-      --accent-soft:      rgba(99,102,241,0.12);
-      --accent-soft-2:    rgba(99,102,241,0.2);
-      --color-indigo:     #818cf8;       /* stock chips, secondary indigo accents */
-      --color-blue:       #60a5fa;       /* ETF, info */
-      --color-green:      #34d399;       /* gains */
+      --accent:           #60A5FA;       /* intelligent blue — primary CTA */
+      --accent-hover:     #3B82F6;
+      --accent-soft:      rgba(96,165,250,0.12);
+      --accent-soft-2:    rgba(96,165,250,0.22);
+      --color-indigo:     #60A5FA;       /* fold into blue for consistency */
+      --color-blue:       #60A5FA;       /* info */
+      --color-green:      #34D399;       /* gains — emerald */
       --color-green-soft: rgba(52,211,153,0.12);
-      --color-red:        #f87171;       /* losses */
+      --color-red:        #F87171;       /* losses */
       --color-red-soft:   rgba(248,113,113,0.12);
-      --color-amber:      #fbbf24;       /* dividends, warnings, highlights */
-      --color-amber-soft: rgba(251,191,36,0.12);
-      --color-teal:       #22d3ee;       /* NZ funds, family */
-      --color-violet:     #a78bfa;       /* KiwiSaver, premium */
-      --color-orange:     #fb923c;       /* real estate */
+      --color-amber:      #FCD34D;       /* premium IQ / dividends — gold */
+      --color-amber-soft: rgba(252,211,77,0.12);
+      --color-teal:       #22D3EE;       /* data accent — teal-cyan */
+      --color-violet:     #A78BFA;       /* KiwiSaver / secondary tier */
+      --color-orange:     #FB923C;       /* real estate */
       /* Charts */
-      --chart-grid:       rgba(30,45,74,0.4);
-      --chart-text:       #4a6080;
+      --chart-grid:       rgba(51,65,85,0.4);
+      --chart-text:       #64748B;
       /* Scrollbar */
-      --scrollbar-bg:     #0f1729;
-      --scrollbar-fg:     #1e2d4a;
+      --scrollbar-bg:     #0F172A;
+      --scrollbar-fg:     #334155;
     }
 
     [data-theme="light"] {
-      /* Surfaces — slate scale. Body bg is slate-100, not slate-50 — gives
-         enough contrast to white cards that they read as cards, not a flat
-         sea of bg. Pure white reserved for cards + inputs (max contrast). */
-      --bg:               #eef2f7;       /* slate-150, between 100 and 200 */
-      --bg-panel:         #ffffff;
-      --bg-panel-2:       #f1f5f9;       /* slate-100 */
-      --bg-input:         #ffffff;
-      --bg-deep:          #f8fafc;
-      --bg-hover:         #f1f5f9;
-      /* Borders — bumped to slate-300 / 400 for visible separation on white */
-      --border:           #cbd5e1;       /* slate-300 — visible on white */
-      --border-strong:    #94a3b8;       /* slate-400 — hover/active */
+      /* InvestIQ light palette — slate scale. Body bg is slate-100, not
+         slate-50 — gives enough contrast to white cards that they read as
+         cards. Pure white reserved for cards + inputs (max contrast). */
+      --bg:               #F7FAFC;
+      --bg-panel:         #FFFFFF;
+      --bg-panel-2:       #F1F5F9;
+      --bg-input:         #FFFFFF;
+      --bg-deep:          #F8FAFC;
+      --bg-hover:         #F1F5F9;
+      /* Borders — slate-300 / 400 for visible separation on white */
+      --border:           #CBD5E1;
+      --border-strong:    #94A3B8;
       /* Text — slate-900, not pure black */
-      --text-primary:     #0f172a;
+      --text-primary:     #0B1220;
       --text-secondary:   #475569;
-      --text-muted:       #94a3b8;
-      --text-inverted:    #ffffff;
-      /* Accents — slightly more saturated than dark to compensate for white bg */
-      --accent:           #4f46e5;       /* indigo-600 */
-      --accent-hover:     #4338ca;
-      --accent-soft:      rgba(79,70,229,0.10);
-      --accent-soft-2:    rgba(79,70,229,0.18);
-      --color-indigo:     #4f46e5;
-      --color-blue:       #2563eb;       /* blue-600 */
-      --color-green:      #059669;       /* emerald-600 */
-      --color-green-soft: rgba(5,150,105,0.10);
-      --color-red:        #dc2626;       /* red-600 */
+      --text-muted:       #64748B;
+      --text-inverted:    #FFFFFF;
+      /* Accents — intelligent blue primary, emerald growth, gold premium */
+      --accent:           #1D4ED8;       /* intelligent blue */
+      --accent-hover:     #1E40AF;
+      --accent-soft:      rgba(29,78,216,0.10);
+      --accent-soft-2:    rgba(29,78,216,0.18);
+      --color-indigo:     #1D4ED8;       /* fold into blue */
+      --color-blue:       #1D4ED8;
+      --color-green:      #10B981;       /* emerald */
+      --color-green-soft: rgba(16,185,129,0.12);
+      --color-red:        #DC2626;
       --color-red-soft:   rgba(220,38,38,0.10);
-      --color-amber:      #d97706;       /* amber-600 */
-      --color-amber-soft: rgba(217,119,6,0.10);
-      --color-teal:       #0891b2;       /* cyan-600 */
-      --color-violet:     #7c3aed;       /* violet-600 */
-      --color-orange:     #ea580c;       /* orange-600 */
+      --color-amber:      #F59E0B;       /* gold — premium IQ */
+      --color-amber-soft: rgba(245,158,11,0.12);
+      --color-teal:       #0E7490;       /* teal-cyan — data */
+      --color-violet:     #7C3AED;
+      --color-orange:     #EA580C;
       /* Charts */
       --chart-grid:       rgba(203,213,225,0.6);
-      --chart-text:       #64748b;
+      --chart-text:       #64748B;
       /* Scrollbar */
-      --scrollbar-bg:     #f1f5f9;
-      --scrollbar-fg:     #cbd5e1;
+      --scrollbar-bg:     #F1F5F9;
+      --scrollbar-fg:     #CBD5E1;
     }
 
     * { box-sizing: border-box; }
@@ -165,7 +169,11 @@
        ═══════════════════════════════════════════════════════════════════ */
     [data-theme="light"] [style*="color:#818cf8"] { color: var(--color-indigo) !important; }
     [data-theme="light"] [style*="color:#fbbf24"] { color: var(--color-amber) !important; }
+    [data-theme="light"] [style*="color:#fcd34d"] { color: var(--color-amber) !important; }
+    [data-theme="light"] [style*="color:#FCD34D"] { color: var(--color-amber) !important; }
     [data-theme="light"] [style*="color:#c8d6ef"] { color: var(--text-primary) !important; }
+    [data-theme="light"] [style*="color:#f8fafc"] { color: var(--text-primary) !important; }
+    [data-theme="light"] [style*="color:#F8FAFC"] { color: var(--text-primary) !important; }
     [data-theme="light"] [style*="color:#4a6080"] { color: var(--text-muted) !important; }
     [data-theme="light"] [style*="color:#f87171"] { color: var(--color-red) !important; }
     [data-theme="light"] [style*="color:#34d399"] { color: var(--color-green) !important; }
