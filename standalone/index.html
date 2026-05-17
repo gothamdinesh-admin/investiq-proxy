@@ -1916,20 +1916,47 @@
 
     <!-- INSIGHTS SECTION -->
     <div id="section-insights" style="display:none;">
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold flex items-center gap-2">AI Insights & Recommendations <span class="iq-badge">IQ</span></h2>
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-brain" style="color:var(--accent);"></i>AI Insights &amp; Recommendations
+            <span class="iq-badge">IQ</span>
+          </h2>
+          <div class="text-xs neutral mt-1">Four specialist Claude agents analyse your portfolio in parallel — health, sentiment, risk, opportunities.</div>
+        </div>
         <button onclick="openModal('agentsModal')" class="btn btn-primary">
           <i class="fas fa-robot mr-2"></i>Run AI Analysis
         </button>
       </div>
+
+      <!-- Empty-state hero — explains the four agents inline so the user
+           knows what they'll get before opening the modal -->
       <div id="insightsContent">
-        <div class="card p-8 text-center">
-          <i class="fas fa-robot text-5xl mb-4 block" style="color:#6366f1;opacity:0.4;"></i>
-          <div class="text-lg font-semibold mb-2">Multi-Agent AI Analysis</div>
-          <div class="neutral text-sm mb-4">Click "Run AI Analysis" above to get insights from 4 specialised Claude agents analysing your portfolio in parallel.</div>
-          <button onclick="openModal('agentsModal')" class="btn btn-primary">
-            <i class="fas fa-play mr-1"></i>Run Now
-          </button>
+        <div class="card p-6">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+            <div class="card2 p-4">
+              <div class="flex items-center gap-2 mb-2"><i class="fas fa-heartbeat" style="color:var(--color-green);"></i><span class="font-semibold text-sm">Portfolio Health</span></div>
+              <div class="text-xs neutral">Concentration risk, diversification score, position sizing flags.</div>
+            </div>
+            <div class="card2 p-4">
+              <div class="flex items-center gap-2 mb-2"><i class="fas fa-chart-line" style="color:var(--color-blue);"></i><span class="font-semibold text-sm">Sentiment Analyst</span></div>
+              <div class="text-xs neutral">Market mood + headline-driven sentiment across your tickers.</div>
+            </div>
+            <div class="card2 p-4">
+              <div class="flex items-center gap-2 mb-2"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i><span class="font-semibold text-sm">Risk Watcher</span></div>
+              <div class="text-xs neutral">Macro headwinds, sector-specific risks, FX exposure flags.</div>
+            </div>
+            <div class="card2 p-4">
+              <div class="flex items-center gap-2 mb-2"><i class="fas fa-lightbulb" style="color:var(--color-violet);"></i><span class="font-semibold text-sm">Opportunity Scout</span></div>
+              <div class="text-xs neutral">Rebalancing ideas + tickers worth a closer look (NZ-compliant — no buy/sell advice).</div>
+            </div>
+          </div>
+          <div class="text-center pt-3" style="border-top:1px solid var(--border);">
+            <button onclick="openModal('agentsModal')" class="btn btn-primary">
+              <i class="fas fa-play mr-1"></i>Run all 4 agents
+            </button>
+            <div class="text-xs neutral mt-2">Synthesised by Opus into a single Portfolio Score + action list.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -1953,11 +1980,25 @@
           <button onclick="refreshWatchlist()" class="btn btn-sm btn-secondary" title="Refresh prices"><i class="fas fa-sync-alt"></i></button>
         </div>
       </div>
+      <!-- Watchlist stats strip — quick summary of what's on the list -->
+      <div id="watchlistStats" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4" style="display:none;">
+        <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Tickers</div><div class="text-lg font-bold" id="wlStatCount">0</div></div>
+        <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Gainers Today</div><div class="text-lg font-bold" style="color:var(--color-green);" id="wlStatUp">0</div></div>
+        <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Losers Today</div><div class="text-lg font-bold" style="color:var(--color-red);" id="wlStatDown">0</div></div>
+        <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Biggest Mover</div><div class="text-lg font-bold" id="wlStatBig">–</div></div>
+      </div>
+
       <div class="card" style="overflow:hidden;">
         <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;">
           <span>Symbol</span><span class="text-right">Price</span><span class="text-right">Day %</span><span class="text-right">Added</span><span class="text-right">Actions</span>
         </div>
-        <div id="watchlistRows"></div>
+        <div id="watchlistRows">
+          <div class="text-center py-10">
+            <i class="fas fa-eye text-4xl mb-3 block" style="color:var(--accent);opacity:0.4;"></i>
+            <div class="text-lg font-semibold mb-1">Your watchlist is empty</div>
+            <div class="text-xs neutral mb-4">Track tickers you're researching before pulling the trigger. Prices refresh on demand.</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -9263,6 +9304,33 @@ function renderWatchlist() {
       </div>
     </div>`;
   }).join('');
+  // v0.10 — refresh the stats strip (count + gainers/losers/biggest mover)
+  try { renderWatchlistStats(); } catch(e) {}
+}
+
+// Watchlist stats strip (count + today's gainers/losers/biggest mover)
+function renderWatchlistStats() {
+  const wl = state?.settings?.watchlist || [];
+  const wrap = document.getElementById('watchlistStats');
+  if (!wrap) return;
+  if (!wl.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('wlStatCount', wl.length);
+  const withPct = wl.filter(w => typeof w.dayChangePct === 'number' && isFinite(w.dayChangePct));
+  set('wlStatUp', withPct.filter(w => w.dayChangePct > 0).length);
+  set('wlStatDown', withPct.filter(w => w.dayChangePct < 0).length);
+  if (withPct.length) {
+    const biggest = [...withPct].sort((a, b) => Math.abs(b.dayChangePct) - Math.abs(a.dayChangePct))[0];
+    const big = document.getElementById('wlStatBig');
+    if (big) {
+      const sign = biggest.dayChangePct >= 0 ? '+' : '';
+      const color = biggest.dayChangePct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
+      big.innerHTML = `${_escape(biggest.symbol)} <span style="color:${color};font-size:13px;">${sign}${biggest.dayChangePct.toFixed(2)}%</span>`;
+    }
+  } else {
+    set('wlStatBig', '–');
+  }
 }
 
 // ===== ONBOARDING =====
