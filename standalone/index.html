@@ -7,8 +7,10 @@
   <meta name="description" content="InvestIQ is a personal investment portfolio tracker for NZ investors. Track stocks, ETFs, crypto and more across eToro, Sharesies, and other platforms.">
   <meta property="og:title" content="InvestIQ — Personal Portfolio Dashboard">
   <meta property="og:description" content="Track your investments across platforms with live prices, AI insights, and multi-currency support.">
-  <meta name="theme-color" content="#080d1a">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23080d1a'/><text y='.9em' font-size='72' x='12'>📈</text></svg>">
+  <meta name="theme-color" content="#07111F">
+  <link rel="icon" type="image/svg+xml" href="assets/invest_iq_app_icon.svg">
+  <link rel="apple-touch-icon" href="assets/invest_iq_app_icon.png">
+  <link rel="shortcut icon" href="assets/invest_iq_app_icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -775,7 +777,37 @@
 
     .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
 
-    .gradient-text { background: linear-gradient(135deg, #818cf8, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .gradient-text { background: linear-gradient(90deg, #1D4ED8, #10B981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    [data-theme="light"] .gradient-text { background: linear-gradient(90deg, #1D4ED8, #047857); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+    /* Brand mark — used in the nav. Navy/white "Invest" + gradient "IQ" +
+       gold insight dot. Pure inline so it scales on retina + theme-aware. */
+    .brand-mark { display: inline-flex; align-items: baseline; gap: 2px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
+    .brand-mark .bm-invest { color: var(--text-primary); }
+    .brand-mark .bm-iq { background: linear-gradient(90deg, #1D4ED8, #10B981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; padding-left: 2px; }
+    .brand-mark .bm-dot { width: 6px; height: 6px; border-radius: 50%; background: #F59E0B; box-shadow: 0 0 8px rgba(245,158,11,0.6); margin-left: 4px; align-self: center; }
+    .brand-icon { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #0B1F3A 0%, #1D4ED8 50%, #10B981 100%); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(29,78,216,0.25); }
+    .brand-icon i { color: #FFFFFF; font-size: 14px; }
+    .brand-icon::after { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #FCD34D; transform: translate(11px,-11px); box-shadow: 0 0 6px rgba(252,211,77,0.7); }
+    .brand-icon { position: relative; }
+
+    /* IQ badge — gold premium chip used on AI Daily Brief / AI Insights to
+       distinguish premium "intelligence" moments from regular UI. */
+    .iq-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 9999px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.6px;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, rgba(245,158,11,0.18), rgba(252,211,77,0.10));
+      color: #FCD34D;
+      border: 1px solid rgba(252,211,77,0.35);
+    }
+    [data-theme="light"] .iq-badge {
+      background: linear-gradient(90deg, rgba(245,158,11,0.14), rgba(245,158,11,0.06));
+      color: #B45309;
+      border-color: rgba(245,158,11,0.45);
+    }
+    .iq-badge::before { content: '✦'; font-size: 10px; }
   </style>
 </head>
 <body class="dark">
@@ -801,10 +833,10 @@
   <div style="width:100%;max-width:400px;padding:32px;">
     <!-- Logo -->
     <div class="flex items-center justify-center gap-3 mb-8">
-      <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#818cf8);display:flex;align-items:center;justify-content:center;">
-        <i class="fas fa-chart-line text-white"></i>
-      </div>
-      <span class="font-bold text-2xl gradient-text">InvestIQ</span>
+      <span class="brand-icon" style="width:40px;height:40px;border-radius:11px;"><i class="fas fa-chart-line" style="font-size:17px;"></i></span>
+      <span class="brand-mark text-2xl" style="font-size:26px;">
+        <span class="bm-invest">Invest</span><span class="bm-iq">IQ</span><span class="bm-dot" aria-hidden="true"></span>
+      </span>
     </div>
     <div class="text-center mb-8">
       <div class="text-lg font-semibold mb-1">Welcome back</div>
@@ -1147,13 +1179,13 @@
 <!-- NAVBAR -->
 <nav class="glass sticky top-0 z-50 flex items-center justify-between px-6 py-3" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
   <div class="flex items-center gap-3">
-    <div class="flex items-center gap-2">
-      <div style="width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#34d399);border-radius:8px;display:flex;align-items:center;justify-content:center;">
-        <i class="fas fa-chart-line text-white" style="font-size:14px;"></i>
-      </div>
-      <span class="font-bold text-lg gradient-text">InvestIQ</span>
-    </div>
-    <span id="navTagline" class="text-xs neutral px-2 py-1 rounded" style="background:var(--bg-panel-2);">Personal Portfolio Dashboard</span>
+    <a href="#" onclick="event.preventDefault(); showSection('overview');" class="flex items-center gap-2" style="text-decoration:none;">
+      <span class="brand-icon"><i class="fas fa-chart-line"></i></span>
+      <span class="brand-mark text-lg" style="font-size:18px;">
+        <span class="bm-invest">Invest</span><span class="bm-iq">IQ</span><span class="bm-dot" aria-hidden="true"></span>
+      </span>
+    </a>
+    <span id="navTagline" class="text-xs neutral px-2 py-1 rounded" style="background:var(--bg-panel-2);">Intelligent Investing Dashboard</span>
   </div>
   <div class="flex items-center" style="gap:8px;">
     <span id="lastUpdated" class="text-xs neutral" style="white-space:nowrap;">Not yet updated</span>
@@ -1620,7 +1652,7 @@
     <!-- INSIGHTS SECTION -->
     <div id="section-insights" style="display:none;">
       <div class="flex items-center justify-between mb-6">
-        <h2 class="text-xl font-bold">AI Insights & Recommendations</h2>
+        <h2 class="text-xl font-bold flex items-center gap-2">AI Insights & Recommendations <span class="iq-badge">IQ</span></h2>
         <button onclick="openModal('agentsModal')" class="btn btn-primary">
           <i class="fas fa-robot mr-2"></i>Run AI Analysis
         </button>
@@ -1681,7 +1713,8 @@
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
             <i class="fas fa-bolt" style="color:#fbbf24;"></i>
-            <h3 class="font-semibold text-sm" style="color:#c8d6ef;">Daily Brief</h3>
+            <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Daily Brief</h3>
+            <span class="iq-badge">IQ</span>
             <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku</span>
           </div>
           <button onclick="generateDailyBrief()" id="briefRunBtn" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-magic mr-1"></i>Generate</button>
@@ -2186,7 +2219,7 @@
   <div class="modal" style="max-width:680px;">
     <div class="flex items-center justify-between mb-6">
       <div>
-        <h2 class="text-lg font-bold">Multi-Agent AI Analysis</h2>
+        <h2 class="text-lg font-bold flex items-center gap-2">Multi-Agent AI Analysis <span class="iq-badge">IQ</span></h2>
         <div class="text-xs neutral mt-1">4 specialized agents working in parallel on your portfolio</div>
       </div>
       <button onclick="closeModal('agentsModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
