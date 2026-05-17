@@ -345,6 +345,12 @@
       #adminBadge { padding: 2px 6px !important; font-size: 9px !important; }
       #adminBadge i { display: none !important; }
 
+      /* Show hamburger on mobile so users can reach the sections that
+         don't fit in the bottom tab bar (Watchlist, News, Tax, Dividends,
+         Family) AND key actions (Add Holding, Connect Platform, Theme,
+         Help, Refresh). */
+      #mobileDrawerBtn { display: inline-flex !important; align-items: center; justify-content: center; }
+
       nav {
         padding: 8px 12px !important;
         flex-wrap: wrap;                            /* lets content wrap if it must */
@@ -399,10 +405,24 @@
       /* Keep the portfolio value summary and score ring visible */
       .sidebar > .mb-6 { margin-bottom: 0 !important; }
       .sidebar .card2 { margin-bottom: 0 !important; padding: 8px 12px !important; }
-      .sidebar .card2 .score-ring { width: 48px; height: 48px; }
-      .sidebar .card2 .score-ring svg { width: 48px; height: 48px; }
-      #scoreNum { font-size: 13px !important; }
+      .sidebar .card2 .score-ring { width: 56px; height: 56px; }
+      .sidebar .card2 .score-ring svg { width: 56px; height: 56px; }
+      .sidebar .card2 .score-ring .score-text { gap: 0; line-height: 1; }
+      #scoreNum { font-size: 16px !important; line-height: 1 !important; }
+      .sidebar .card2 .score-ring .score-text .text-xs { font-size: 8px !important; line-height: 1 !important; margin-top: 1px; }
       #sidebarTotal { font-size: 18px !important; }
+
+      /* Modal close X — bump from 20px / dim grey to 28px / contrast so it
+         actually looks tappable on a phone. iOS 44pt minimum tap target. */
+      .modal .flex.items-center.justify-between > button[onclick*="closeModal"],
+      .modal-overlay > .modal > div > button[onclick*="closeModal"] {
+        font-size: 28px !important;
+        color: var(--text-primary) !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
+        line-height: 1 !important;
+        opacity: 0.7;
+      }
 
       /* Sidebar row: value left, score ring right */
       .sidebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -856,6 +876,44 @@
       border-color: rgba(245,158,11,0.45);
     }
     .iq-badge::before { content: '✦'; font-size: 10px; }
+
+    /* ═══════════════════════════════════════════════════════════════════
+       MOBILE DRAWER — slide-in side panel surfacing every section + key
+       action when the user taps the hamburger. Off-canvas, transform
+       transition. Hidden on desktop (uses the regular sidebar instead). */
+    #mobileDrawer {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 84%; max-width: 320px;
+      background: var(--bg-panel); border-right: 1px solid var(--border);
+      transform: translateX(-105%); transition: transform 0.25s ease-out;
+      z-index: 1001; overflow-y: auto;
+      box-shadow: 8px 0 24px rgba(0,0,0,0.35);
+    }
+    #mobileDrawer.open { transform: translateX(0); }
+    #mobileDrawerBackdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
+      z-index: 1000; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    #mobileDrawerBackdrop.open { opacity: 1; pointer-events: auto; }
+    #mobileDrawer .drawer-section-title {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+      color: var(--text-muted); padding: 12px 16px 6px;
+    }
+    #mobileDrawer .drawer-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; min-height: 48px;
+      color: var(--text-secondary); cursor: pointer; font-size: 14px;
+      border: none; background: none; width: 100%; text-align: left;
+      transition: background 0.15s, color 0.15s;
+    }
+    #mobileDrawer .drawer-item:hover, #mobileDrawer .drawer-item:active {
+      background: var(--accent-soft); color: var(--text-primary);
+    }
+    #mobileDrawer .drawer-item i { width: 18px; text-align: center; color: var(--accent); }
+    #mobileDrawer .drawer-close {
+      position: absolute; top: 12px; right: 12px;
+      width: 36px; height: 36px; border: none; background: var(--bg-panel-2);
+      border-radius: 8px; color: var(--text-primary); font-size: 18px; cursor: pointer;
+    }
   </style>
 </head>
 <body class="dark">
@@ -1227,6 +1285,9 @@
 <!-- NAVBAR -->
 <nav class="glass sticky top-0 z-50 flex items-center justify-between px-6 py-3" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
   <div class="flex items-center gap-3">
+    <button id="mobileDrawerBtn" onclick="toggleMobileDrawer()" class="btn btn-sm btn-secondary" title="Menu" style="display:none;padding:8px 11px;font-size:16px;">
+      <i class="fas fa-bars"></i>
+    </button>
     <a href="#" onclick="event.preventDefault(); showSection('overview');" class="flex items-center gap-2" style="text-decoration:none;">
       <span class="brand-icon"><i class="fas fa-chart-line"></i></span>
       <span class="brand-mark text-lg" style="font-size:18px;">
@@ -1292,6 +1353,45 @@
     </button>
   </div>
 </nav>
+
+<!-- MOBILE DRAWER — catch-all menu for sections + actions that don't fit
+     in the bottom tab bar. Only visible on mobile (toggled by #mobileDrawerBtn). -->
+<div id="mobileDrawerBackdrop" onclick="toggleMobileDrawer(false)"></div>
+<aside id="mobileDrawer" aria-hidden="true">
+  <button class="drawer-close" onclick="toggleMobileDrawer(false)" aria-label="Close menu">&times;</button>
+  <div style="padding:20px 16px 8px;">
+    <div class="brand-mark" style="font-size:18px;">
+      <span class="bm-invest">Invest</span><span class="bm-iq">IQ</span><span class="bm-dot"></span>
+    </div>
+    <div class="text-xs neutral mt-1">Intelligent Investing Dashboard</div>
+  </div>
+
+  <div class="drawer-section-title">Sections</div>
+  <button class="drawer-item" onclick="showSection('overview');toggleMobileDrawer(false);"><i class="fas fa-th-large"></i>Overview</button>
+  <button class="drawer-item" onclick="showSection('holdings');toggleMobileDrawer(false);"><i class="fas fa-briefcase"></i>Holdings</button>
+  <button class="drawer-item" onclick="showSection('performance');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>Performance</button>
+  <button class="drawer-item" onclick="showSection('market');toggleMobileDrawer(false);"><i class="fas fa-globe"></i>Market</button>
+  <button class="drawer-item" onclick="showSection('insights');toggleMobileDrawer(false);"><i class="fas fa-brain"></i>AI Insights</button>
+  <button class="drawer-item" onclick="showSection('watchlist');toggleMobileDrawer(false);"><i class="fas fa-eye"></i>Watchlist</button>
+  <button class="drawer-item" onclick="showSection('news');toggleMobileDrawer(false);"><i class="fas fa-newspaper"></i>News</button>
+  <button class="drawer-item" onclick="showSection('tax');toggleMobileDrawer(false);"><i class="fas fa-receipt"></i>NZ Tax (FIF)</button>
+  <button class="drawer-item" onclick="showSection('dividends');toggleMobileDrawer(false);"><i class="fas fa-coins"></i>Dividends</button>
+  <button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas fa-users"></i>Family</button>
+  <button class="drawer-item" id="drawerAdminLink" style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>Admin Panel</button>
+
+  <div class="drawer-section-title">Actions</div>
+  <button class="drawer-item" onclick="openModal('addModal');toggleMobileDrawer(false);"><i class="fas fa-plus-circle"></i>Add holding</button>
+  <button class="drawer-item" onclick="refreshAll();toggleMobileDrawer(false);"><i class="fas fa-sync-alt"></i>Refresh prices</button>
+  <button class="drawer-item" onclick="openModal('agentsModal');toggleMobileDrawer(false);"><i class="fas fa-robot"></i>Run AI agents</button>
+
+  <div class="drawer-section-title">Settings</div>
+  <button class="drawer-item" onclick="toggleTheme();"><i id="drawerThemeIcon" class="fas fa-moon"></i>Toggle theme</button>
+  <button class="drawer-item" onclick="openModal('settingsModal');toggleMobileDrawer(false);"><i class="fas fa-cog"></i>Settings</button>
+  <button class="drawer-item" onclick="openModal('helpModal');toggleMobileDrawer(false);"><i class="fas fa-question-circle"></i>Help & FAQ</button>
+  <button class="drawer-item" id="drawerSignOut" style="display:none;color:var(--color-red);" onclick="signOut();toggleMobileDrawer(false);"><i class="fas fa-sign-out-alt" style="color:var(--color-red);"></i>Sign out</button>
+
+  <div style="height:24px;"></div>
+</aside>
 
 <!-- MAIN LAYOUT -->
 <div id="mainLayout" class="flex" style="min-height:calc(100vh - 68px);">
@@ -2903,6 +3003,32 @@ function loadInitialTheme() {
          || 'dark';
   } catch(e) {}
   applyTheme(theme);
+}
+
+// Mobile drawer toggle. Optional `force` param: true = open, false = close,
+// undefined = toggle. Also mirrors admin/family/sign-out visibility from
+// the desktop sidebar each time the drawer opens, so it stays in sync.
+function toggleMobileDrawer(force) {
+  const drawer = document.getElementById('mobileDrawer');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (!drawer || !backdrop) return;
+  const willOpen = (typeof force === 'boolean') ? force : !drawer.classList.contains('open');
+  drawer.classList.toggle('open', willOpen);
+  backdrop.classList.toggle('open', willOpen);
+  drawer.setAttribute('aria-hidden', willOpen ? 'false' : 'true');
+  if (willOpen) {
+    // Mirror desktop sidebar visibility into drawer
+    const familyVisible = document.getElementById('familyNavLink')?.style.display !== 'none';
+    const adminVisible  = document.getElementById('adminNavLink')?.style.display !== 'none';
+    const signedIn      = document.getElementById('supaUserBadge')?.style.display !== 'none';
+    const dF = document.getElementById('drawerFamilyLink'); if (dF) dF.style.display = familyVisible ? 'flex' : 'none';
+    const dA = document.getElementById('drawerAdminLink');  if (dA) dA.style.display = adminVisible  ? 'flex' : 'none';
+    const dS = document.getElementById('drawerSignOut');    if (dS) dS.style.display = signedIn      ? 'flex' : 'none';
+    // Mirror current theme icon
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    const dti = document.getElementById('drawerThemeIcon');
+    if (dti) dti.className = 'fas ' + (cur === 'light' ? 'fa-sun' : 'fa-moon');
+  }
 }
 
 function toggleTheme() {
