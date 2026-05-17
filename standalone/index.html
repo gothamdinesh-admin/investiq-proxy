@@ -1938,33 +1938,33 @@
         </button>
       </div>
 
-      <!-- Empty-state hero — explains the four agents inline so the user
-           knows what they'll get before opening the modal -->
+      <!-- Empty-state preview — shows what the user will see post-run
+           (KPI strip + Action Items theme) so they know the value before
+           clicking Run. -->
       <div id="insightsContent">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5" style="opacity:0.5;pointer-events:none;">
+          <div class="card2 p-4" style="border-left:3px solid var(--color-green);"><div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Portfolio Health</div><div class="text-2xl font-bold mt-1">–/100</div><div class="text-xs neutral mt-1">Pending run</div></div>
+          <div class="card2 p-4" style="border-left:3px solid var(--color-amber);"><div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Risk Level</div><div class="text-2xl font-bold mt-1">–</div><div class="text-xs neutral mt-1">Pending run</div></div>
+          <div class="card2 p-4" style="border-left:3px solid var(--color-blue);"><div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Market Sentiment</div><div class="text-2xl font-bold mt-1">–</div><div class="text-xs neutral mt-1">Pending run</div></div>
+          <div class="card2 p-4" style="border-left:3px solid var(--color-violet);"><div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Opportunities</div><div class="text-2xl font-bold mt-1">–</div><div class="text-xs neutral mt-1">Pending run</div></div>
+        </div>
         <div class="card p-6">
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
-            <div class="card2 p-4">
-              <div class="flex items-center gap-2 mb-2"><i class="fas fa-heartbeat" style="color:var(--color-green);"></i><span class="font-semibold text-sm">Portfolio Health</span></div>
-              <div class="text-xs neutral">Concentration risk, diversification score, position sizing flags.</div>
-            </div>
-            <div class="card2 p-4">
-              <div class="flex items-center gap-2 mb-2"><i class="fas fa-chart-line" style="color:var(--color-blue);"></i><span class="font-semibold text-sm">Sentiment Analyst</span></div>
-              <div class="text-xs neutral">Market mood + headline-driven sentiment across your tickers.</div>
-            </div>
-            <div class="card2 p-4">
-              <div class="flex items-center gap-2 mb-2"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i><span class="font-semibold text-sm">Risk Watcher</span></div>
-              <div class="text-xs neutral">Macro headwinds, sector-specific risks, FX exposure flags.</div>
-            </div>
-            <div class="card2 p-4">
-              <div class="flex items-center gap-2 mb-2"><i class="fas fa-lightbulb" style="color:var(--color-violet);"></i><span class="font-semibold text-sm">Opportunity Scout</span></div>
-              <div class="text-xs neutral">Rebalancing ideas + tickers worth a closer look (NZ-compliant — no buy/sell advice).</div>
-            </div>
+          <div class="text-center mb-5">
+            <span class="iq-badge mb-3" style="display:inline-flex;">IQ</span>
+            <h3 class="text-xl font-bold mt-3 mb-1">Run a full AI portfolio analysis</h3>
+            <div class="text-sm neutral max-w-md mx-auto">Four specialist agents work in parallel, then a senior advisor synthesises everything into a prioritised, severity-tagged action list.</div>
           </div>
-          <div class="text-center pt-3" style="border-top:1px solid var(--border);">
-            <button onclick="openModal('agentsModal')" class="btn btn-primary">
-              <i class="fas fa-play mr-1"></i>Run all 4 agents
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-5">
+            <div class="card2 p-3 flex items-center gap-3"><i class="fas fa-heartbeat" style="color:var(--color-green);font-size:18px;width:24px;text-align:center;"></i><div><div class="font-semibold text-sm">Portfolio Health</div><div class="text-xs neutral">Concentration, diversification, position sizing.</div></div></div>
+            <div class="card2 p-3 flex items-center gap-3"><i class="fas fa-chart-line" style="color:var(--color-blue);font-size:18px;width:24px;text-align:center;"></i><div><div class="font-semibold text-sm">Market Impact</div><div class="text-xs neutral">Sentiment + macro factors hitting your tickers.</div></div></div>
+            <div class="card2 p-3 flex items-center gap-3"><i class="fas fa-shield-halved" style="color:var(--color-amber);font-size:18px;width:24px;text-align:center;"></i><div><div class="font-semibold text-sm">Risk Watcher</div><div class="text-xs neutral">Concentration, macro, FX, liquidity flags.</div></div></div>
+            <div class="card2 p-3 flex items-center gap-3"><i class="fas fa-lightbulb" style="color:var(--color-violet);font-size:18px;width:24px;text-align:center;"></i><div><div class="font-semibold text-sm">Opportunity Scout</div><div class="text-xs neutral">Gaps, hedges, NZ-relevant ideas (no buy/sell advice).</div></div></div>
+          </div>
+          <div class="text-center pt-4" style="border-top:1px solid var(--border);">
+            <button onclick="openModal('agentsModal')" class="btn btn-primary" style="padding:10px 24px;font-size:14px;">
+              <i class="fas fa-play mr-2"></i>Run all 4 agents
             </button>
-            <div class="text-xs neutral mt-2">Synthesised into a single Portfolio Score + action list.</div>
+            <div class="text-xs neutral mt-2">Output: <b style="color:var(--text-primary);">Health KPIs · prioritised action items · 30-day focus</b></div>
           </div>
         </div>
       </div>
@@ -2581,11 +2581,21 @@
         <div class="text-xs neutral">Analyses global market trends and their effect on your specific holdings.</div>
         <div id="agent-market-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
       </div>
+      <div class="agent-card agent-idle" id="agent-risk">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2">
+            <span>🛡️</span><span class="font-semibold text-sm">Risk Watcher Agent</span>
+          </div>
+          <div id="agent-risk-status" class="text-xs neutral">Idle</div>
+        </div>
+        <div class="text-xs neutral">Flags concentration, macro, FX, and quality risks specific to your holdings.</div>
+        <div id="agent-risk-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
+      </div>
       <div class="agent-card agent-idle" id="agent-opportunity">
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>🔭</span><span class="font-semibold text-sm">Opportunity Scout Agent</span>
-            
+
           </div>
           <div id="agent-opportunity-status" class="text-xs neutral">Idle</div>
         </div>
@@ -2598,7 +2608,7 @@
             <span>💼</span><span class="font-semibold text-sm">Senior Advisor · Orchestrator</span>
             
           </div>
-          <div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1–3…</div>
+          <div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1–4…</div>
         </div>
         <div class="text-xs neutral">Synthesises all agent outputs into a prioritised 5-point action plan.</div>
         <div id="agent-advisor-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:160px;overflow-y:auto;"></div>

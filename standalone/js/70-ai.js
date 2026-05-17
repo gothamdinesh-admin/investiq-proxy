@@ -7,11 +7,35 @@
 //   renderQuickInsights(), logActivity(), toast.
 // ═══════════════════════════════════════════════════════════════════════
 
+// AI Insights — classification-driven dashboard layout (v0.10.5 rework).
+// Instead of "wall of text per agent" the user gets:
+//   1. KPI strip — four traffic-light tiles (Health / Risk / Sentiment / Opportunities)
+//   2. Hero card — score ring + senior advisor's 30-day focus pulled out
+//   3. Action Items — Critical/High/Medium/Low/Watch chips parsed from
+//      the advisor's prioritised list. The actionable bit, surfaced.
+//   4. Collapsible per-agent reports below for users who want the detail.
 function renderInsightsSection(results) {
   if (!results) return;
-  const score = results.portfolioScore || null;
+  const score = results.portfolioScore != null ? results.portfolioScore : null;
   const scoreColor = score == null ? 'var(--accent)' : (score >= 70 ? 'var(--color-green)' : score >= 40 ? 'var(--color-amber)' : 'var(--color-red)');
   const scoreLabel = score == null ? 'Analysed' : (score >= 70 ? 'Healthy' : score >= 40 ? 'Moderate' : 'Needs Work');
+
+  // Pull sentiment Bullish/Neutral/Bearish out of the market agent's text
+  const sentMatch = (results.marketAnalysis || '').match(/Sentiment(?:\s+Score)?:?\s*\**?(Bullish|Neutral|Bearish)/i);
+  const sentiment = sentMatch ? sentMatch[1] : 'Neutral';
+  const sentColor = sentiment === 'Bullish' ? 'var(--color-green)' : sentiment === 'Bearish' ? 'var(--color-red)' : 'var(--color-amber)';
+  const sentIcon  = sentiment === 'Bullish' ? 'fa-arrow-trend-up' : sentiment === 'Bearish' ? 'fa-arrow-trend-down' : 'fa-equals';
+
+  // Risk Level: Low / Moderate / Elevated / High — parsed from risk agent
+  const riskLevel = results.riskLevel
+    || ((results.riskAnalysis || '').match(/Risk Level:?\s*\**?(Low|Moderate|Elevated|High)/i) || [])[1]
+    || 'Moderate';
+  const riskColor = riskLevel === 'Low' ? 'var(--color-green)' : riskLevel === 'Moderate' ? 'var(--color-amber)' : riskLevel === 'Elevated' ? 'var(--color-orange)' : 'var(--color-red)';
+  const riskIcon  = riskLevel === 'Low' ? 'fa-shield-halved' : riskLevel === 'Moderate' ? 'fa-shield' : 'fa-triangle-exclamation';
+
+  // Count bullet points in opportunities as a rough "opportunities found" tile
+  const oppCount = ((results.opportunities || '').match(/^\s*[•\-\*\d]/gm) || []).length;
+
   const runAt = results.timestamp ? new Date(results.timestamp) : new Date();
   const ago = (() => {
     const sec = Math.floor((Date.now() - runAt.getTime()) / 1000);
@@ -21,64 +45,128 @@ function renderInsightsSection(results) {
     return Math.floor(sec / 86400) + ' days ago';
   })();
 
-  // Hero card — Portfolio Score + Senior Advisor synthesis. This is the
-  // user's TL;DR. Everything else is detail beneath it.
+  // ── KPI strip ────────────────────────────────────────────────────────────
+  const kpiTile = (label, value, sub, color, icon) => `
+    <div class="card2 p-4" style="border-left:3px solid ${color};">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">${label}</div>
+        <i class="fas ${icon}" style="color:${color};font-size:14px;"></i>
+      </div>
+      <div class="text-2xl font-bold mt-1" style="color:${color};line-height:1.1;">${value}</div>
+      <div class="text-xs neutral mt-1">${sub}</div>
+    </div>`;
+  const kpiStrip = `
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      ${kpiTile('Portfolio Health',  score != null ? score + '/100' : '–', scoreLabel,                            scoreColor, 'fa-heartbeat')}
+      ${kpiTile('Risk Level',        riskLevel,                              'Auto-classified by Risk Watcher',   riskColor,  riskIcon)}
+      ${kpiTile('Market Sentiment',  sentiment,                              'Across your holdings today',        sentColor,  sentIcon)}
+      ${kpiTile('Opportunities',     oppCount || '–',                        oppCount ? 'Ideas found by Scout' : 'No gaps flagged', 'var(--color-violet)', 'fa-lightbulb')}
+    </div>`;
+
+  // ── Action Items — parse [Tag] prefixed lines out of advisor output ────
+  // Advisor was prompted to emit lines like "[High] Trim NVDA below 10%…"
+  // We extract those and render as severity-coloured cards. Anything that
+  // doesn't match the tag pattern falls through to the synthesis paragraph.
+  const advisor = results.finalAdvice || '';
+  const tagRegex = /^\s*[•\-\*]?\s*\[(Critical|High|Medium|Low|Watch)\]\s*(.+)$/gim;
+  const actionItems = [];
+  let m; while ((m = tagRegex.exec(advisor)) !== null) actionItems.push({ tag: m[1], text: m[2].trim() });
+  const SEV = {
+    Critical: { color: 'var(--color-red)',    icon: 'fa-circle-exclamation', label: 'Critical' },
+    High:     { color: 'var(--color-orange)', icon: 'fa-arrow-up',           label: 'High' },
+    Medium:   { color: 'var(--color-amber)',  icon: 'fa-minus',              label: 'Medium' },
+    Low:      { color: 'var(--color-blue)',   icon: 'fa-arrow-down',         label: 'Low' },
+    Watch:    { color: 'var(--color-violet)', icon: 'fa-eye',                label: 'Watch' }
+  };
+  // Sort by severity so Critical actions are at top
+  const sevOrder = { Critical: 0, High: 1, Medium: 2, Low: 3, Watch: 4 };
+  actionItems.sort((a, b) => sevOrder[a.tag] - sevOrder[b.tag]);
+
+  const actionItemHtml = actionItems.length
+    ? `<div class="card mb-5 p-5">
+         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+           <div class="flex items-center gap-2">
+             <i class="fas fa-list-check" style="color:var(--accent);font-size:16px;"></i>
+             <h3 class="font-semibold text-base" style="margin:0;">Prioritised Action Items</h3>
+             <span class="iq-badge">IQ</span>
+           </div>
+           <span class="text-xs neutral">${actionItems.length} action${actionItems.length === 1 ? '' : 's'}</span>
+         </div>
+         <div class="space-y-2">
+           ${actionItems.map(a => {
+             const s = SEV[a.tag];
+             return `<div class="action-row" style="display:flex;align-items:flex-start;gap:12px;padding:12px;border-radius:10px;background:var(--bg-panel-2);border:1px solid ${s.color}33;">
+               <div style="flex-shrink:0;width:78px;text-align:center;">
+                 <div style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:9999px;background:${s.color}1f;color:${s.color};font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">
+                   <i class="fas ${s.icon}" style="font-size:9px;"></i>${s.label}
+                 </div>
+               </div>
+               <div style="flex:1;color:var(--text-body);font-size:13px;line-height:1.55;">${formatMarkdown(a.text)}</div>
+             </div>`;
+           }).join('')}
+         </div>
+       </div>`
+    : '';
+
+  // ── Hero — score ring + 30-day focus pulled out of advisor text ────────
+  const focusMatch = advisor.match(/30[\s\-]?day focus[:\s\*]+([\s\S]+?)(?:\n\s*\n|$)/i);
+  const focusText = focusMatch ? focusMatch[1].trim() : null;
   const heroHtml = `
     <div class="insights-hero card mb-5" style="position:relative;overflow:hidden;padding:24px;border:1px solid var(--accent-soft-2);">
       <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--color-green),var(--color-amber));"></div>
-      <div class="flex items-center gap-4 mb-4 flex-wrap">
-        <div style="position:relative;width:96px;height:96px;flex-shrink:0;">
-          <svg width="96" height="96" viewBox="0 0 80 80" style="transform:rotate(-90deg);">
+      <div class="flex items-center gap-5 flex-wrap">
+        <div style="position:relative;width:104px;height:104px;flex-shrink:0;">
+          <svg width="104" height="104" viewBox="0 0 80 80" style="transform:rotate(-90deg);">
             <circle cx="40" cy="40" r="32" fill="none" stroke="var(--border)" stroke-width="6"/>
             <circle cx="40" cy="40" r="32" fill="none" stroke="${scoreColor}" stroke-width="6" stroke-linecap="round"
-              stroke-dasharray="201" stroke-dashoffset="${score == null ? 0 : 201 - (score / 100) * 201}"
+              stroke-dasharray="201" stroke-dashoffset="${score == null ? 201 : 201 - (score / 100) * 201}"
               style="transition:stroke-dashoffset 1.2s ease, stroke 0.3s;"/>
           </svg>
           <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-            <span style="font-size:30px;font-weight:800;color:${scoreColor};line-height:1;">${score != null ? score : '–'}</span>
+            <span style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1;">${score != null ? score : '–'}</span>
             <span class="text-xs neutral" style="margin-top:2px;">/100</span>
           </div>
         </div>
-        <div style="flex:1;min-width:0;">
+        <div style="flex:1;min-width:200px;">
           <div class="flex items-center gap-2 flex-wrap mb-1">
             <span class="iq-badge">IQ</span>
             <span class="text-xs neutral">Last run ${ago}</span>
           </div>
-          <h3 class="text-xl font-bold" style="color:${scoreColor};margin:4px 0;">${scoreLabel}</h3>
-          <div class="text-sm neutral">Synthesised analysis from four specialist agents.</div>
+          <h3 class="text-2xl font-bold" style="color:${scoreColor};margin:4px 0;">${scoreLabel}</h3>
+          ${focusText
+            ? `<div class="text-xs uppercase neutral font-semibold mt-2" style="letter-spacing:0.5px;">30-day focus</div>
+               <div class="text-sm" style="color:var(--text-body);line-height:1.55;margin-top:4px;">${formatMarkdown(focusText)}</div>`
+            : `<div class="text-sm neutral">Synthesised across four specialist agents.</div>`}
         </div>
-        <button onclick="openModal('agentsModal')" class="btn btn-primary" style="white-space:nowrap;">
-          <i class="fas fa-redo mr-1"></i>Re-run analysis
+        <button onclick="openModal('agentsModal')" class="btn btn-primary" style="white-space:nowrap;align-self:flex-start;">
+          <i class="fas fa-redo mr-1"></i>Re-run
         </button>
       </div>
-      ${results.finalAdvice ? `
-      <div style="padding-top:18px;border-top:1px solid var(--border);">
-        <div class="flex items-center gap-2 mb-3">
-          <i class="fas fa-user-tie" style="color:var(--color-green);font-size:14px;"></i>
-          <span class="font-semibold text-sm">Senior Advisor's action plan</span>
-        </div>
-        <div class="prose-sm" style="color:var(--text-body);line-height:1.7;font-size:14px;">${formatMarkdown(results.finalAdvice)}</div>
-      </div>` : ''}
     </div>`;
 
-  // Per-agent detail cards. Each agent gets its own brand-colour-tinted
-  // card so they're visually distinct as you scroll.
+  // ── Per-agent detail (collapsible — most users want the action items above) ──
   const agentCard = (icon, title, color, body) => `
-    <div class="card p-5" style="border-left:3px solid ${color};">
-      <div class="flex items-center gap-2 mb-3">
-        <i class="${icon}" style="color:${color};font-size:16px;"></i>
-        <h4 class="font-semibold" style="color:${color};margin:0;">${title}</h4>
-      </div>
-      <div class="prose-sm" style="color:var(--text-body);line-height:1.7;font-size:13px;">${formatMarkdown(body || 'No output.')}</div>
-    </div>`;
+    <details class="card p-5" style="border-left:3px solid ${color};">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;">
+        <div class="flex items-center gap-2">
+          <i class="${icon}" style="color:${color};font-size:16px;"></i>
+          <span class="font-semibold" style="color:${color};">${title}</span>
+        </div>
+        <i class="fas fa-chevron-down text-xs neutral"></i>
+      </summary>
+      <div class="prose-sm mt-3 pt-3" style="color:var(--text-body);line-height:1.7;font-size:13px;border-top:1px solid var(--border);">${formatMarkdown(body || 'No output.')}</div>
+    </details>`;
 
-  document.getElementById('insightsContent').innerHTML = heroHtml + `
-    <div class="text-xs uppercase neutral font-semibold mb-3 mt-4" style="letter-spacing:0.6px;">Agent breakdown</div>
+  document.getElementById('insightsContent').innerHTML = kpiStrip + heroHtml + actionItemHtml + `
+    <div class="text-xs uppercase neutral font-semibold mb-3 mt-4 flex items-center gap-2" style="letter-spacing:0.6px;">
+      <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
+      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click a card to expand</span>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      ${agentCard('fas fa-heartbeat',  'Portfolio Health',  'var(--color-green)',  results.healthAnalysis)}
-      ${agentCard('fas fa-chart-line', 'Sentiment Analyst', 'var(--color-blue)',   results.marketAnalysis)}
-      ${agentCard('fas fa-shield-alt', 'Risk Watcher',      'var(--color-amber)',  results.riskAnalysis || results.marketAnalysis)}
-      ${agentCard('fas fa-lightbulb',  'Opportunity Scout', 'var(--color-violet)', results.opportunities)}
+      ${agentCard('fas fa-heartbeat',         'Portfolio Health',  'var(--color-green)',  results.healthAnalysis)}
+      ${agentCard('fas fa-chart-line',        'Market Impact',     'var(--color-blue)',   results.marketAnalysis)}
+      ${agentCard('fas fa-shield-halved',     'Risk Watcher',      'var(--color-amber)',  results.riskAnalysis)}
+      ${agentCard('fas fa-lightbulb',         'Opportunity Scout', 'var(--color-violet)', results.opportunities)}
     </div>`;
 
   if (score != null) updateScoreRing(score);
@@ -190,6 +278,20 @@ Reference real market dynamics. Be specific to the actual tickers listed. Under 
 
 Be concrete. Suggest real tickers where possible. Consider the investor is NZ-based. Under 220 words.`
   },
+  risk: {
+    label: '🛡️ Risk Watcher',
+    model: 'claude-haiku-4-5',
+    modelOpenAI: 'local-model',
+    maxTokens: 800,
+    system: `You are a portfolio risk specialist. Given the portfolio + market data, identify the most material RISKS the investor should be aware of right now. Cover:
+1. **Concentration risk** — any single holding or sector >20% weight; name the ticker(s) and weight.
+2. **Macro headwind** — current macro/policy/cycle risk most relevant to this portfolio (interest rates, AI bubble, geopolitics, NZD strength, etc.) — be specific.
+3. **FX exposure** — for an NZ-based investor, flag if foreign-currency holdings are unusually large or unhedged.
+4. **Liquidity / quality** — flag any thinly-traded, speculative, or fundamentally weak holdings.
+
+Always start your response with exactly: "Risk Level: Low" or "Risk Level: Moderate" or "Risk Level: Elevated" or "Risk Level: High".
+Then 3-4 bullet observations referencing specific tickers and weights. Under 220 words.`
+  },
   advisor: {
     label: '💼 Senior Advisor',
     model: 'claude-opus-4-5',
@@ -198,15 +300,16 @@ Be concrete. Suggest real tickers where possible. Consider the investor is NZ-ba
     system: `You are a senior personal financial advisor. Your specialist team has produced:
 - A Portfolio Health analysis
 - A Market Impact analysis
+- A Risk Watcher analysis
 - An Opportunity Scout analysis
 
-Synthesize all three into a clear, prioritised action plan:
-1. **Top 5 Priority Actions** — ranked by importance, specific and actionable
+Synthesize all four into a clear, prioritised action plan:
+1. **Top 5 Priority Actions** — ranked by importance, specific and actionable. Each action MUST start with one of these severity tags in square brackets so the UI can colour them: [Critical], [High], [Medium], [Low], or [Watch]. Example: "[High] Trim NVDA below 10% portfolio weight to reduce concentration."
 2. **One key risk** to watch in the next 30 days
 3. **One strong positive** — what is working well
 4. **30-day focus** — one single thing the investor should do first
 
-Use the actual portfolio data to make this personal. Reference specific holdings by ticker. Under 300 words.`
+Use the actual portfolio data. Reference specific holdings by ticker. NZ-based investor. Under 320 words.`
   }
 };
 
@@ -421,30 +524,37 @@ async function runAgents() {
     const stagger = (ms) => new Promise(r => setTimeout(r, ms));
     setAgentState('portfolio',   'running');
     const p1 = callClaude('portfolio',   baseMsg);
-    await stagger(4000);
+    await stagger(3500);
     setAgentState('market',      'running');
     const p2 = callClaude('market',      baseMsg);
-    await stagger(4000);
+    await stagger(3500);
+    setAgentState('risk',        'running');
+    const p4 = callClaude('risk',        baseMsg);
+    await stagger(3500);
     setAgentState('opportunity', 'running');
     const p3 = callClaude('opportunity', baseMsg);
 
-    const [healthAnalysis, marketAnalysis, opportunities] = await Promise.all([p1, p2, p3]);
+    const [healthAnalysis, marketAnalysis, riskAnalysis, opportunities] = await Promise.all([p1, p2, p4, p3]);
 
     setAgentState('portfolio',   'done', healthAnalysis);
     setAgentState('market',      'done', marketAnalysis);
+    setAgentState('risk',        'done', riskAnalysis);
     setAgentState('opportunity', 'done', opportunities);
 
     const scoreMatch = healthAnalysis.match(/Health Score:\s*(\d+)/i);
     if (scoreMatch) updateScoreRing(parseInt(scoreMatch[1]));
+    const riskMatch = riskAnalysis.match(/Risk Level:\s*(Low|Moderate|Elevated|High)/i);
 
-    // ── Phase 2: advisor synthesises all three outputs ────────────────────────
+    // ── Phase 2: advisor synthesises all four outputs ────────────────────────
     setAgentState('advisor', 'running');
-    const advisorMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health Agent (${AGENT_DEFS.portfolio.model}):\n${healthAnalysis}\n\n🌍 Market Impact Agent (${AGENT_DEFS.market.model}):\n${marketAnalysis}\n\n🔭 Opportunity Scout Agent (${AGENT_DEFS.opportunity.model}):\n${opportunities}`;
+    const advisorMsg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health Agent:\n${healthAnalysis}\n\n🌍 Market Impact Agent:\n${marketAnalysis}\n\n🛡️ Risk Watcher:\n${riskAnalysis}\n\n🔭 Opportunity Scout Agent:\n${opportunities}`;
     const finalAdvice = await callClaude('advisor', advisorMsg);
     setAgentState('advisor', 'done', finalAdvice);
 
-    state.agentResults = { healthAnalysis, marketAnalysis, opportunities, finalAdvice,
-      portfolioScore: scoreMatch ? parseInt(scoreMatch[1]) : null };
+    state.agentResults = { healthAnalysis, marketAnalysis, riskAnalysis, opportunities, finalAdvice,
+      portfolioScore: scoreMatch ? parseInt(scoreMatch[1]) : null,
+      riskLevel: riskMatch ? riskMatch[1] : null,
+      timestamp: new Date().toISOString() };
     saveState();
     renderInsightsSection(state.agentResults);
     renderQuickInsights(metrics);
