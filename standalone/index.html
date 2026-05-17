@@ -428,8 +428,12 @@
       .sidebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
       .sidebar > .mb-6 { flex: 1; }
 
-      /* Main content: full width, reduce padding, add bottom padding for tab bar */
-      main { padding: 12px 12px 80px 12px !important; }
+      /* Main content: full width, reduce padding, add bottom padding for
+         tab bar. 64px bar + iOS home-indicator safe area + breathing room. */
+      main { padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 96px) 12px !important; }
+
+      /* Toast: clear the safe-area-aware tab bar too */
+      #toastContainer { bottom: calc(env(safe-area-inset-bottom, 0px) + 88px) !important; }
 
       /* Metric cards: 2-col grid */
       .grid.grid-cols-2.lg\:grid-cols-4 { grid-template-columns: repeat(2, 1fr) !important; }
@@ -731,13 +735,16 @@
       display: none;
       position: fixed;
       bottom: 0; left: 0; right: 0;
-      height: 64px;
-      background: #0f1729;
-      border-top: 1px solid #1e2d4a;
+      /* min-height keeps icons + labels intact; padding-bottom adds the
+         iOS home-indicator safe area so nothing gets clipped on iPhones
+         with a notch / dynamic island. */
+      min-height: 64px;
+      background: var(--bg-panel);
+      border-top: 1px solid var(--border);
       z-index: 90;
       align-items: center;
       justify-content: space-around;
-      padding: 0 8px env(safe-area-inset-bottom, 0);
+      padding: 6px 8px calc(env(safe-area-inset-bottom, 0px) + 6px);
     }
     #mobileTabBar::-webkit-scrollbar { display: none; }
     .mob-tab {
