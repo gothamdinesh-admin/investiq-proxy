@@ -6966,16 +6966,58 @@ async function autoRefreshFundPrice(holdingId) {
     // response. 404 is "scraper didn't run / source unreachable".
     const data = await res.json().catch(() => ({ error: 'response not JSON' }));
     if (!data.price) {
-      // Help the user pick the right code by showing what we found
+      // Help the user pick the right code by showing what we found.
+      // Render the list as a selector so they can pick + retry inline,
+      // no copy-paste-edit-holding round-trip needed.
       if (data.available?.length) {
-        await showInfo({
-          title: 'Fund not matched on Harbour\'s page',
-          icon: 'fa-info-circle',
-          iconColor: '#fbbf24',
-          description: `Couldn't match "${_escape(h.symbol)}" to any fund. <b>Edit this holding</b> and try one of these exact names as the symbol or display name:`,
-          body: `<div style="background:rgba(251,191,36,0.06);padding:10px;border-radius:6px;font-size:11px;color:#94a3b8;line-height:1.7;max-height:200px;overflow-y:auto;">${data.available.map(n => `• ${_escape(n)}`).join('<br>')}</div>`,
-          actions: [{ key: 'ok', label: 'Got it', variant: 'primary', flex: true }]
+        const opts = data.available.map(n => ({ value: n, label: n }));
+        const pick = await showFormModal({
+          title: 'Pick the matching fund',
+          icon: 'fa-list',
+          iconColor: '#F59E0B',
+          description: `Couldn't match "<b>${_escape(h.symbol)}</b>" to a fund on ${h.provider || 'the provider'}'s page. Pick the right one from the list below and we'll fetch its price + save the canonical name to this holding.`,
+          fields: [{
+            name: 'fundName',
+            type: 'select',
+            label: 'Available funds',
+            value: opts[0].value,
+            options: opts,
+            hint: 'The chosen name will be saved as this holding\'s display name so future refreshes match automatically.'
+          }],
+          submitLabel: 'Fetch this fund',
+          submitVariant: 'primary'
         });
+        if (!pick || !pick.fundName) return;
+        // Retry the proxy with the chosen name. Use it as the `name`
+        // parameter so the scraper does an exact-match lookup.
+        toast.info(`Fetching "${pick.fundName}"…`);
+        try {
+          const retryUrl = `${proxyBase}/api/nz-fund?code=${encodeURIComponent(h.symbol)}&provider=${encodeURIComponent(h.provider || '')}&name=${encodeURIComponent(pick.fundName)}`;
+          const r2 = await fetch(retryUrl, {
+            headers: proxyHeaders(),
+            signal: AbortSignal.timeout(15000)
+          });
+          const d2 = await r2.json().catch(() => ({ error: 'response not JSON' }));
+          if (!d2.price) {
+            toast.error(d2.error || 'Still could not fetch — try editing the holding manually.');
+            return;
+          }
+          const target = state.portfolio.find(x => x.id === holdingId);
+          if (!target) return;
+          target.currentPrice = d2.price;
+          target.manualPriceDate = new Date().toISOString().slice(0, 10);
+          target.dayChange = null;
+          target.dayChangePct = null;
+          // Persist the canonical name so the next refresh hits directly
+          target.name = pick.fundName;
+          saveState();
+          renderAll();
+          toast.success(`Saved as "${pick.fundName}" · NZ$${d2.price.toFixed(4)} per unit${d2.asOf ? ' (as of ' + d2.asOf + ')' : ''}`);
+          logActivity('fund_price_refreshed', { symbol: h.symbol, price: d2.price, source: d2.source, picked: pick.fundName });
+          if (_currentHoldingId === holdingId) viewHolding(holdingId);
+        } catch(e) {
+          toast.error('Retry failed: ' + e.message);
+        }
       } else {
         toast.error(data.error || 'Could not fetch price');
       }
