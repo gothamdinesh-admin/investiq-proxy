@@ -147,9 +147,10 @@
 
     * { box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar { width: 12px; height: 12px; }
     ::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
-    ::-webkit-scrollbar-thumb { background: var(--scrollbar-fg); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-fg); border-radius: 6px; border: 2px solid var(--scrollbar-bg); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
     .mono { font-family: 'JetBrains Mono', monospace; }
     .glass { background: var(--bg-panel); backdrop-filter: blur(12px); border: 1px solid var(--border); }
@@ -418,11 +419,15 @@
         border-bottom: 1px solid #1e2d4a;
         padding: 12px 16px !important;
       }
-      /* Hide sidebar nav + quick stats + action buttons on mobile (replaced by bottom tab bar) */
+      /* Hide sidebar nav + quick stats + action buttons + movers strip on
+         mobile (replaced by bottom tab bar + hamburger drawer). Sidebar
+         strip on mobile shows ONLY portfolio total + score ring. */
       .sidebar nav,
       .sidebar .space-y-3,
       .sidebar .text-xs.neutral.uppercase,
-      .sidebar .mt-6.pt-4 { display: none !important; }
+      .sidebar .mt-6.pt-4,
+      #moversList,
+      #moversAsOf { display: none !important; }
       /* Keep the portfolio value summary and score ring visible */
       .sidebar > .mb-6 { margin-bottom: 0 !important; }
       .sidebar .card2 { margin-bottom: 0 !important; padding: 8px 12px !important; }
@@ -1326,10 +1331,10 @@
         <summary class="font-semibold text-sm">What do the AI agents do? Are they giving me financial advice?</summary>
         <div class="text-xs neutral mt-2" style="line-height:1.7;">
           Four specialised Claude agents analyse your portfolio in parallel:<br>
-          • <b>Portfolio Health</b> (Haiku) — diversification + concentration scoring<br>
-          • <b>Market Impact</b> (Sonnet) — global factors affecting your holdings<br>
-          • <b>Opportunity Scout</b> (Sonnet) — gaps and underweight sectors<br>
-          • <b>Senior Advisor</b> (Opus) — synthesises into a 5-point action plan<br>
+          • <b>Portfolio Health</b> — diversification + concentration scoring<br>
+          • <b>Market Impact</b> — global factors affecting your holdings<br>
+          • <b>Opportunity Scout</b> — gaps and underweight sectors<br>
+          • <b>Senior Advisor</b> — synthesises into a 5-point action plan<br>
           <span style="color:#fbbf24;">This is analysis only, NOT personalised financial advice. Talk to a licensed adviser before making decisions.</span>
         </div>
       </details>
@@ -1423,15 +1428,16 @@
     <div style="position:relative;display:inline-block;">
       <button onclick="toggleNotificationsPanel()" id="notifBellBtn" class="btn btn-sm btn-secondary" title="Notifications" style="padding:6px 10px;position:relative;">
         <i class="fas fa-bell"></i>
-        <span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;background:#f87171;color:white;font-size:9px;min-width:16px;height:16px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0 4px;font-weight:700;border:2px solid var(--bg-panel);"></span>
+        <span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--color-red);color:white;font-size:10px;min-width:18px;height:18px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0 5px;font-weight:700;border:2px solid var(--bg-panel);box-shadow:0 0 0 2px rgba(248,113,113,0.25);"></span>
       </button>
       <!-- Dropdown panel -->
       <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:380px;max-width:calc(100vw - 20px);max-height:480px;background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.3);z-index:1000;overflow:hidden;display:flex;flex-direction:column;">
         <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
           <div class="font-semibold text-sm" style="color:var(--text-primary);">Notifications</div>
-          <div class="flex items-center gap-2">
-            <button onclick="markAllNotificationsRead()" id="notifMarkAllBtn" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:2px 6px;">Mark all read</button>
-            <button onclick="toggleNotificationsPanel()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;line-height:1;">&times;</button>
+          <div class="flex items-center gap-1">
+            <button onclick="markAllNotificationsRead()" id="notifMarkAllBtn" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:4px 8px;border-radius:6px;">Mark read</button>
+            <button onclick="dismissAllNotifications()" id="notifDismissAllBtn" class="text-xs" style="background:none;border:none;color:var(--color-red);cursor:pointer;padding:4px 8px;border-radius:6px;" title="Clear every notification">Clear all</button>
+            <button onclick="toggleNotificationsPanel()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;line-height:1;padding:0 6px;">&times;</button>
           </div>
         </div>
         <div id="notifList" style="flex:1;overflow-y:auto;padding:4px;">
@@ -1955,7 +1961,7 @@
             <button onclick="openModal('agentsModal')" class="btn btn-primary">
               <i class="fas fa-play mr-1"></i>Run all 4 agents
             </button>
-            <div class="text-xs neutral mt-2">Synthesised by Opus into a single Portfolio Score + action list.</div>
+            <div class="text-xs neutral mt-2">Synthesised into a single Portfolio Score + action list.</div>
           </div>
         </div>
       </div>
@@ -2020,7 +2026,7 @@
         <button onclick="switchNewsTab('markets')" id="newsTabMarkets" class="news-tab"><i class="fas fa-globe"></i> Markets</button>
       </div>
 
-      <!-- DAILY BRIEF — Haiku-summarised, top 3 bullets (For You tab) -->
+      <!-- DAILY BRIEF — top 3 AI-summarised bullets (For You tab) -->
       <div class="card mb-6" data-news-tab="foryou" style="border:1px solid var(--accent-soft-2);background:var(--bg-panel);padding:18px 20px;position:relative;overflow:hidden;">
         <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--color-green));"></div>
         <div class="flex items-center justify-between mb-3">
@@ -2028,7 +2034,6 @@
             <i class="fas fa-bolt" style="color:var(--color-amber);"></i>
             <h3 class="font-semibold text-sm" style="color:var(--text-primary);">Daily Brief</h3>
             <span class="iq-badge">IQ</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku</span>
           </div>
           <button onclick="generateDailyBrief()" id="briefRunBtn" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-magic mr-1"></i>Generate</button>
         </div>
@@ -2555,7 +2560,7 @@
           <div class="flex items-center gap-2">
             <span>📊</span>
             <span class="font-semibold text-sm">Portfolio Health Agent</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
+            
           </div>
           <div id="agent-portfolio-status" class="text-xs neutral">Idle</div>
         </div>
@@ -2566,7 +2571,7 @@
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>🌍</span><span class="font-semibold text-sm">Market Impact Agent</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
+            
           </div>
           <div id="agent-market-status" class="text-xs neutral">Idle</div>
         </div>
@@ -2577,7 +2582,7 @@
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>🔭</span><span class="font-semibold text-sm">Opportunity Scout Agent</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Haiku · Fast</span>
+            
           </div>
           <div id="agent-opportunity-status" class="text-xs neutral">Idle</div>
         </div>
@@ -2588,7 +2593,7 @@
         <div class="flex items-center justify-between mb-1">
           <div class="flex items-center gap-2">
             <span>💼</span><span class="font-semibold text-sm">Senior Advisor · Orchestrator</span>
-            <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);">Opus · Most Powerful</span>
+            
           </div>
           <div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1–3…</div>
         </div>
@@ -2607,7 +2612,7 @@
     </div>
 
     <div class="text-xs neutral mt-3 text-center">
-      Requires Claude API key in Settings. Uses Haiku + Sonnet + Opus — ~4,000 tokens total per run.
+      Requires Claude API key in Settings. Uses ~4,000 tokens total per run.
     </div>
   </div>
 </div>
@@ -3027,7 +3032,7 @@
         <div class="flex items-center gap-2">
           <i class="fas fa-brain" style="color:var(--color-amber);"></i>
           <span class="font-semibold text-sm">AI Deep-Dive</span>
-          <span class="text-xs px-2 py-0 rounded-full" style="background:rgba(96,165,250,0.12);color:#60a5fa;border:1px solid rgba(96,165,250,0.2);">Sonnet</span>
+          
         </div>
         <button id="holdingAiBtn" onclick="runHoldingAI()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-magic mr-1"></i>Analyse</button>
       </div>
@@ -3392,6 +3397,28 @@ async function dismissNotification(id) {
   _notifCache = _notifCache.filter(n => n.id !== id);
   renderNotifBadge();
   renderNotifPanel();
+}
+
+// Dismiss everything currently in the panel. The user wanted a one-click
+// way to clear the bell — no more accumulating notifications across logins.
+async function dismissAllNotifications() {
+  if (!_supabase || !_supaUser) return;
+  if (!_notifCache.length) return;
+  const ok = await showConfirm({
+    title: 'Clear all notifications?',
+    message: `This dismisses all ${_notifCache.length} notification${_notifCache.length === 1 ? '' : 's'} permanently. New ones can still arrive afterwards.`,
+    confirmLabel: 'Clear all',
+    cancelLabel: 'Keep them',
+    variant: 'warning'
+  });
+  if (!ok) return;
+  await _supabase.from('notifications')
+    .update({ dismissed_at: new Date().toISOString() })
+    .is('dismissed_at', null);
+  _notifCache = [];
+  renderNotifBadge();
+  renderNotifPanel();
+  toast.success('Notifications cleared');
 }
 
 // Helper for other code to create local notifications (e.g. after a
