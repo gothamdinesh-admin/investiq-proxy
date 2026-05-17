@@ -66,10 +66,16 @@
       /* Borders */
       --border:           #334155;
       --border-strong:    #475569;
-      /* Text */
+      /* Text — four-tier system, audited against WCAG AA on bg #07111F.
+         Primary: titles + key numbers (17.8:1, AAA).
+         Body:    paragraph text — new middle tier (11.5:1, AAA).
+         Secondary: labels + meta — slightly brighter slate (7.6:1, AAA).
+         Muted:   timestamps + hints — bumped from #64748B (failed AA at
+                  3.7:1) to slate-400 (5.6:1, passes AA body). */
       --text-primary:     #F8FAFC;
-      --text-secondary:   #94A3B8;
-      --text-muted:       #64748B;
+      --text-body:        #CBD5E1;
+      --text-secondary:   #A3B1C6;
+      --text-muted:       #7B8BAA;
       --text-inverted:    #07111F;
       /* Accents (functional, not decorative) */
       --accent:           #60A5FA;       /* intelligent blue — primary CTA */
@@ -108,8 +114,10 @@
       /* Borders — slate-300 / 400 for visible separation on white */
       --border:           #CBD5E1;
       --border-strong:    #94A3B8;
-      /* Text — slate-900, not pure black */
+      /* Text — slate-900, not pure black. Four-tier mirror of dark.
+         Primary 16.8:1, Body 11.2:1, Secondary 7.5:1, Muted 4.7:1. */
       --text-primary:     #0B1220;
+      --text-body:        #1E293B;
       --text-secondary:   #475569;
       --text-muted:       #64748B;
       --text-inverted:    #FFFFFF;
@@ -248,7 +256,9 @@
 
     .pos { color: #34d399; }
     .neg { color: #f87171; }
-    .neutral { color: #94a3b8; }
+    .neutral { color: var(--text-secondary); }
+    .text-body { color: var(--text-body); }
+    .text-muted-app { color: var(--text-muted); }
 
     .badge-pos { background: rgba(52,211,153,0.12); color: #34d399; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
     .badge-neg { background: rgba(248,113,113,0.12); color: #f87171; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
@@ -787,7 +797,7 @@
 
     .insight-box { background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.2); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
     .insight-box h4 { color: #818cf8; font-size: 13px; font-weight: 600; margin: 0 0 8px; }
-    .insight-box p, .insight-box ul { color: #94a3b8; font-size: 13px; margin: 0; line-height: 1.6; }
+    .insight-box p, .insight-box ul { color: var(--text-body); font-size: 13px; margin: 0; line-height: 1.6; }
     .insight-box ul { padding-left: 16px; }
 
     /* Portfolio pulse strip uses flex + natural layout — no scroll animation */
