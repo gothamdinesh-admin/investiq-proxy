@@ -67,5 +67,5 @@ const LOCAL_ONLY_SETTINGS = [
 // IDLE SESSION TIMEOUT — auto-logout after N minutes of no user activity.
 // Prevents lingering sessions on shared/lost devices.
 // ═══════════════════════════════════════════════════════════════════════
-const IDLE_LIMIT_MS = 30 * 60 * 1000;  // 30 min — generous for portfolio review
-const IDLE_WARNING_MS = 2 * 60 * 1000; // warn 2 min before
+const IDLE_LIMIT_MS = 120 * 60 * 1000; // 2 hours — only logs out after real inactivity
+const IDLE_WARNING_MS = 5 * 60 * 1000; // warn 5 min before

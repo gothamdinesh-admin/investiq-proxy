@@ -146,6 +146,13 @@ function recordActivity() {
 
 function checkIdle() {
   if (!_supaUser) return; // only relevant when signed in
+  // If the tab is visible AND the window has focus, treat that as active use —
+  // user may be reading a long page without scrolling. Only count idle time
+  // accrued while the app was actually backgrounded or unattended.
+  if (document.visibilityState === 'visible' && document.hasFocus()) {
+    recordActivity();
+    return;
+  }
   const idle = Date.now() - _lastActivity;
   if (idle >= IDLE_LIMIT_MS) {
     console.log('[idle] auto-signing out after', Math.round(idle/60000), 'min idle');
@@ -158,13 +165,15 @@ function checkIdle() {
     const minsLeft = Math.ceil((IDLE_LIMIT_MS - idle) / 60000);
     toast.warning({
       title: 'Session timing out',
-      message: `You'll be signed out in ${minsLeft} min for security. Move your mouse to stay signed in.`,
+      message: `You'll be signed out in ${minsLeft} min for security. Move your mouse or return to the tab to stay signed in.`,
       duration: IDLE_WARNING_MS
     });
   }
 }
 
-// Reset idle timer on any meaningful user activity
-['click', 'keydown', 'scroll', 'mousemove'].forEach(ev =>
+// Reset idle timer on any meaningful user activity, plus tab focus/visibility
+// changes so simply switching back to the tab keeps the session alive.
+['click', 'keydown', 'scroll', 'mousemove', 'touchstart', 'focus', 'visibilitychange'].forEach(ev =>
   window.addEventListener(ev, recordActivity, { passive: true })
 );
+document.addEventListener('visibilitychange', recordActivity, { passive: true });

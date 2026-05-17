@@ -6719,11 +6719,35 @@ async function editAlertPrompt(alertId) {
 
 async function openAlertModal(values, editingId) {
   const isEdit = !!editingId;
-  // Pre-decide scope/symbol options
-  const portfolioOpt = { value: 'portfolio', label: 'Whole portfolio' };
+  // "What to watch" options:
+  // 1. Whole portfolio
+  // 2. Each holding the user owns (with their current price for context)
+  // 3. Curated NZ fund codes the user can pre-arm alerts for even if they
+  //    don't own the fund yet (useful for "watch this before buying")
+  const portfolioOpt = { value: 'portfolio', label: '📊 Whole portfolio' };
   const symbolList = [...new Set(state.portfolio.map(h => h.symbol).filter(Boolean))].sort();
-  const tickerOpts = symbolList.map(s => ({ value: `ticker:${s}`, label: `${s} (${state.portfolio.find(h => h.symbol === s)?.name || s})` }));
-  // Show seeded symbol first when applicable
+  const tickerOpts = symbolList.map(s => {
+    const h = state.portfolio.find(x => x.symbol === s);
+    const px = h?.currentPrice ? ` · current $${(h.currentPrice).toFixed(2)}` : '';
+    return { value: `ticker:${s}`, label: `${s} — ${h?.name || s}${px}` };
+  });
+  const NZ_FUND_CODES_FOR_ALERTS = [
+    'SPK.NZ','AIR.NZ','MEL.NZ','MCY.NZ','CEN.NZ','GNE.NZ','IFT.NZ','EBO.NZ','MFT.NZ','RYM.NZ','FPH.NZ','ATM.NZ',
+    'HARBOUR-AE','HARBOUR-GROWTH','HARBOUR-INCOME','MILFORD-AG','MILFORD-DI','GENERATE-GROWTH','FISHER-GROWTH','SIMPLICITY-GROWTH','BOOSTER-GROWTH','KERNEL-S&P500','KERNEL-NZ20'
+  ];
+  // Only include NZ codes user doesn't already hold (avoid dropdown bloat)
+  const nzFundOpts = NZ_FUND_CODES_FOR_ALERTS
+    .filter(c => !symbolList.includes(c))
+    .map(c => ({ value: `ticker:${c}`, label: `${c} (not owned · watch only)` }));
+
+  const allOpts = [
+    portfolioOpt,
+    ...(tickerOpts.length ? [{ value: '_h', label: '── Your holdings ──', disabled: true }] : []),
+    ...tickerOpts,
+    ...(nzFundOpts.length ? [{ value: '_n', label: '── NZ funds + popular NZX (not yet owned) ──', disabled: true }] : []),
+    ...nzFundOpts
+  ];
+
   const seededTarget = values.scope === 'portfolio' ? 'portfolio'
                      : values.symbol ? `ticker:${values.symbol}`
                      : (tickerOpts[0]?.value || 'portfolio');
@@ -6739,8 +6763,8 @@ async function openAlertModal(values, editingId) {
         type: 'select',
         label: 'What to watch',
         value: seededTarget,
-        options: [portfolioOpt, ...tickerOpts],
-        hint: tickerOpts.length ? `Pick a holding or your whole portfolio.` : 'Add some holdings first — then you can also set per-ticker alerts.'
+        options: allOpts,
+        hint: 'Your holdings + curated NZ funds. Threshold below is in the holding\'s native currency.'
       },
       {
         name: 'condition',
@@ -6748,10 +6772,10 @@ async function openAlertModal(values, editingId) {
         label: 'When',
         value: values.condition || 'below',
         options: [
-          { value: 'above', label: 'Rises above (price/value)' },
-          { value: 'below', label: 'Drops below (price/value)' },
-          { value: 'day_rise_pct', label: 'Rises % in a single day' },
-          { value: 'day_drop_pct', label: 'Drops % in a single day' }
+          { value: 'above', label: 'Rises above a specific price/value' },
+          { value: 'below', label: 'Drops below a specific price/value' },
+          { value: 'day_rise_pct', label: 'Rises by X% in a single day' },
+          { value: 'day_drop_pct', label: 'Drops by X% in a single day' }
         ]
       },
       {
@@ -6759,9 +6783,9 @@ async function openAlertModal(values, editingId) {
         type: 'number',
         label: 'Threshold',
         value: values.threshold || values.currentPrice || '',
-        placeholder: values.currentPrice ? `e.g. ${(values.currentPrice * 0.9).toFixed(2)}` : 'e.g. 150 or 5',
+        placeholder: values.currentPrice ? `e.g. ${(values.currentPrice * 0.9).toFixed(2)}` : 'e.g. 150 (price) or 5 (percent)',
         required: true,
-        hint: 'Number only. For % conditions enter a percentage (e.g. 5 = 5%).'
+        hint: 'For "rises above" / "drops below": the PRICE per share/unit (e.g. enter 150 if you want to be alerted when NVDA crosses $150). For "X% in a single day": the percentage (5 = 5%).'
       },
       {
         name: 'cooldown_hours',
@@ -6798,6 +6822,27 @@ async function openAlertModal(values, editingId) {
   const condition = result.condition;
   const cooldown_hours = parseInt(result.cooldown_hours) || 24;
   const note = (result.note || '').trim() || null;
+
+  // Sanity check: if this is a price-level alert and we know the current
+  // price, warn when threshold is wildly off (>5x or <0.2x). Catches the
+  // classic "I typed 1 thinking it was a percent" mistake.
+  if ((condition === 'above' || condition === 'below') && target.startsWith('ticker:')) {
+    const sym = target.slice(7);
+    const h = state.portfolio.find(x => x.symbol === sym);
+    const cur = h?.currentPrice;
+    if (cur && cur > 0 && (threshold > cur * 5 || threshold < cur * 0.2)) {
+      const pctDiff = ((threshold - cur) / cur * 100).toFixed(1);
+      const dir = condition === 'above' ? 'rises above' : 'drops below';
+      const ok = await showConfirm({
+        title: 'Double-check this threshold?',
+        message: `You're asking to be alerted when <b>${sym}</b> ${dir} <b>${threshold.toFixed(2)}</b>, but its current price is <b>${cur.toFixed(2)}</b> (${pctDiff}% away). Did you mean to enter a percentage? Use a "% in a single day" condition for that. Continue with this price?`,
+        confirmLabel: 'Yes, use this price',
+        cancelLabel: 'Let me fix it',
+        variant: 'warning'
+      });
+      if (!ok) return openAlertModal(result, editingId);
+    }
+  }
 
   // Currency hint — for ticker alerts, pull from the holding; default NZD for portfolio
   let currency = null;
