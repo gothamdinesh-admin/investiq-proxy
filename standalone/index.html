@@ -1173,6 +1173,26 @@
     </button>
     <!-- Divider before utility cluster -->
     <span class="nav-sep" style="width:1px;height:20px;background:var(--border);margin:0 4px;"></span>
+    <!-- Notifications bell -->
+    <div style="position:relative;display:inline-block;">
+      <button onclick="toggleNotificationsPanel()" id="notifBellBtn" class="btn btn-sm btn-secondary" title="Notifications" style="padding:6px 10px;position:relative;">
+        <i class="fas fa-bell"></i>
+        <span id="notifBadge" style="display:none;position:absolute;top:-3px;right:-3px;background:#f87171;color:white;font-size:9px;min-width:16px;height:16px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0 4px;font-weight:700;border:2px solid var(--bg-panel);"></span>
+      </button>
+      <!-- Dropdown panel -->
+      <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:380px;max-width:calc(100vw - 20px);max-height:480px;background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.3);z-index:1000;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+          <div class="font-semibold text-sm" style="color:var(--text-primary);">Notifications</div>
+          <div class="flex items-center gap-2">
+            <button onclick="markAllNotificationsRead()" id="notifMarkAllBtn" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:2px 6px;">Mark all read</button>
+            <button onclick="toggleNotificationsPanel()" style="background:none;border:none;color:var(--text-muted);font-size:18px;cursor:pointer;line-height:1;">&times;</button>
+          </div>
+        </div>
+        <div id="notifList" style="flex:1;overflow-y:auto;padding:4px;">
+          <div class="text-xs neutral text-center py-6">No notifications yet</div>
+        </div>
+      </div>
+    </div>
     <button onclick="openModal('helpModal')" class="btn btn-sm btn-secondary" title="Help & FAQ" style="padding:6px 10px;">
       <i class="fas fa-question-circle"></i>
     </button>
@@ -1440,6 +1460,9 @@
           </select>
           <button id="groupByPlatformBtn" onclick="toggleGroupByPlatform()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Group holdings by platform">
             <i class="fas fa-layer-group mr-1"></i>Group
+          </button>
+          <button onclick="refreshAllFundPrices()" class="btn" style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.35);" title="Refresh unit prices for every NZ fund and KiwiSaver holding">
+            <i class="fas fa-bolt mr-1"></i>Refresh funds
           </button>
           <button onclick="downloadCSVTemplate()" class="btn" style="background:#1e293b;border:1px solid #334155;" title="Download blank CSV template">
             <i class="fas fa-download mr-1"></i>Template
@@ -2811,6 +2834,149 @@ function toggleTheme() {
   }
   toast.success(`Switched to ${next} mode`);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS (v0.8e)
+//
+// In-app notifications inbox surfacing things that need attention:
+// failed auto-refreshes, stale prices, missed alerts, system issues.
+// Backed by `notifications` table (migration 013). RLS own-rows-only.
+//
+// Bell icon in header shows unread count badge. Click for dropdown
+// listing recent notifications (severity-coloured). Mark read / dismiss.
+// ═══════════════════════════════════════════════════════════════════════
+let _notifCache = [];
+let _notifPollInterval = null;
+
+async function loadNotifications() {
+  if (!_supabase || !_supaUser) return;
+  const { data, error } = await _supabase
+    .from('notifications')
+    .select('*')
+    .is('dismissed_at', null)
+    .order('created_at', { ascending: false })
+    .limit(30);
+  if (error) {
+    console.warn('[notifications] load failed:', error.message);
+    return;
+  }
+  _notifCache = data || [];
+  renderNotifBadge();
+  // Only re-render the panel if it's currently open
+  const panel = document.getElementById('notifPanel');
+  if (panel && panel.style.display !== 'none') renderNotifPanel();
+}
+
+function renderNotifBadge() {
+  const badge = document.getElementById('notifBadge');
+  if (!badge) return;
+  const unread = _notifCache.filter(n => !n.read_at).length;
+  if (unread > 0) {
+    badge.style.display = 'flex';
+    badge.textContent = unread > 99 ? '99+' : unread;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderNotifPanel() {
+  const wrap = document.getElementById('notifList');
+  if (!wrap) return;
+  if (!_notifCache.length) {
+    wrap.innerHTML = `<div class="text-xs neutral text-center py-6"><i class="fas fa-check-circle mr-1" style="color:#34d399;"></i>All clear · no notifications</div>`;
+    return;
+  }
+  const SEV_DEFS = {
+    info:    { color: '#60a5fa', icon: 'fa-info-circle',   bg: 'rgba(96,165,250,0.08)' },
+    success: { color: '#34d399', icon: 'fa-check-circle',  bg: 'rgba(52,211,153,0.08)' },
+    warning: { color: '#fbbf24', icon: 'fa-exclamation-triangle', bg: 'rgba(251,191,36,0.08)' },
+    error:   { color: '#f87171', icon: 'fa-times-circle',  bg: 'rgba(248,113,113,0.08)' }
+  };
+  wrap.innerHTML = _notifCache.map(n => {
+    const def = SEV_DEFS[n.severity] || SEV_DEFS.info;
+    const unread = !n.read_at;
+    return `<div style="padding:10px 12px;margin:4px;border-radius:8px;background:${unread ? def.bg : 'transparent'};border:1px solid ${unread ? def.color + '33' : 'transparent'};">
+      <div class="flex items-start gap-2">
+        <i class="fas ${def.icon}" style="color:${def.color};font-size:13px;margin-top:3px;flex-shrink:0;"></i>
+        <div style="flex:1;min-width:0;">
+          <div class="text-sm font-semibold" style="color:var(--text-primary);line-height:1.3;">${_escape(n.title)}</div>
+          ${n.body ? `<div class="text-xs neutral mt-1" style="line-height:1.5;">${_escape(n.body)}</div>` : ''}
+          <div class="flex items-center gap-2 mt-2">
+            ${n.link_url ? `<a href="${_escape(n.link_url)}" onclick="event.stopPropagation()" class="text-xs" style="color:${def.color};text-decoration:underline;">${_escape(n.link_label || 'Open')}</a>` : ''}
+            <span class="text-xs neutral" style="font-size:10px;">${timeSince(new Date(n.created_at))}</span>
+          </div>
+        </div>
+        <button onclick="event.stopPropagation();dismissNotification('${n.id}')" style="background:none;border:none;color:var(--text-muted);font-size:14px;cursor:pointer;padding:0 4px;" title="Dismiss">&times;</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleNotificationsPanel() {
+  const panel = document.getElementById('notifPanel');
+  if (!panel) return;
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'flex' : 'none';
+  if (opening) {
+    renderNotifPanel();
+    // Mark all currently-visible as read after a brief delay
+    setTimeout(() => {
+      const unread = _notifCache.filter(n => !n.read_at);
+      if (unread.length && _supabase) {
+        _supabase.from('notifications')
+          .update({ read_at: new Date().toISOString() })
+          .in('id', unread.map(n => n.id))
+          .then(() => loadNotifications());
+      }
+    }, 1500);
+  }
+}
+
+async function markAllNotificationsRead() {
+  if (!_supabase || !_supaUser) return;
+  await _supabase.from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .is('read_at', null);
+  await loadNotifications();
+  toast.success('All notifications marked read');
+}
+
+async function dismissNotification(id) {
+  if (!_supabase) return;
+  await _supabase.from('notifications').update({ dismissed_at: new Date().toISOString() }).eq('id', id);
+  _notifCache = _notifCache.filter(n => n.id !== id);
+  renderNotifBadge();
+  renderNotifPanel();
+}
+
+// Helper for other code to create local notifications (e.g. after a
+// bulk refresh, the failed-funds list goes here for surfacing later).
+async function createNotification(opts) {
+  if (!_supabase || !_supaUser) return;
+  try {
+    await _supabase.from('notifications').insert({
+      kind:       opts.kind || 'system',
+      severity:   opts.severity || 'info',
+      title:      opts.title,
+      body:       opts.body || null,
+      link_url:   opts.link_url || null,
+      link_label: opts.link_label || null,
+      metadata:   opts.metadata || null
+    });
+    loadNotifications();
+  } catch(e) {
+    console.warn('[notifications] insert failed:', e.message);
+  }
+}
+
+// Click-outside closes the dropdown
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('notifPanel');
+  const bell  = document.getElementById('notifBellBtn');
+  if (!panel || panel.style.display === 'none') return;
+  if (panel.contains(e.target) || bell?.contains(e.target)) return;
+  panel.style.display = 'none';
+});
 
 // ═══════════════════════════════════════════════════════════════════════
 // SENTRY ERROR MONITORING (Security C5)
@@ -6752,6 +6918,95 @@ async function autoRefreshFundPrice(holdingId) {
   }
 }
 
+// Bulk refresh every NZ fund / KiwiSaver holding's unit price in one click.
+// Loops serially (not parallel) with a small delay between requests so we
+// don't hammer Harbour / Sorted.org.nz. Aggregates successes + failures
+// and surfaces a styled summary + writes a notification for each failure
+// so they're not lost when the modal closes.
+async function refreshAllFundPrices() {
+  const funds = state.portfolio.filter(h => h.type === 'fund' || h.type === 'kiwisaver');
+  if (!funds.length) {
+    return toast.info('No NZ fund / KiwiSaver holdings to refresh');
+  }
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/,'');
+  if (!proxyBase) return toast.error('No proxy URL set');
+
+  const ok = await showConfirm({
+    title: `Refresh ${funds.length} fund price${funds.length === 1 ? '' : 's'}?`,
+    icon: 'fa-bolt',
+    iconColor: '#22d3ee',
+    description: `Fetches the latest unit price for every NZ Managed Fund + KiwiSaver holding. Takes about ${funds.length} second${funds.length === 1 ? '' : 's'} (serialised to avoid hammering provider sites). Failures are logged to your notifications inbox.`,
+    confirmLabel: 'Refresh all',
+    confirmVariant: 'primary'
+  });
+  if (!ok) return;
+
+  const results = { ok: 0, fail: 0, items: [] };
+  toast.info(`Refreshing ${funds.length} fund${funds.length === 1 ? '' : 's'}…`);
+
+  for (let i = 0; i < funds.length; i++) {
+    const h = funds[i];
+    try {
+      const url = `${proxyBase}/api/nz-fund?code=${encodeURIComponent(h.symbol)}&provider=${encodeURIComponent(h.provider || '')}&name=${encodeURIComponent(h.name || '')}`;
+      const res = await fetch(url, {
+        headers: proxyHeaders(),
+        signal: AbortSignal.timeout(15000)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.price) {
+        const target = state.portfolio.find(x => x.id === h.id);
+        if (target) {
+          target.currentPrice = data.price;
+          target.manualPriceDate = new Date().toISOString().slice(0, 10);
+          if (data.fund_name && !target.name) target.name = data.fund_name;
+        }
+        results.ok++;
+        results.items.push({ symbol: h.symbol, ok: true, price: data.price, source: data.source });
+      } else {
+        results.fail++;
+        results.items.push({ symbol: h.symbol, ok: false, reason: data.error || 'no price returned' });
+      }
+    } catch(e) {
+      results.fail++;
+      results.items.push({ symbol: h.symbol, ok: false, reason: e.message });
+    }
+    // 250ms politeness delay between calls — Harbour + Sorted aren't paid APIs
+    if (i < funds.length - 1) await new Promise(r => setTimeout(r, 250));
+  }
+
+  saveState();
+  renderAll();
+
+  // Drop a notification for each failure so the user can come back to it
+  for (const it of results.items.filter(x => !x.ok)) {
+    createNotification({
+      kind:       'fund_refresh_failed',
+      severity:   'warning',
+      title:      `Couldn't auto-refresh ${it.symbol}`,
+      body:       it.reason,
+      link_label: 'Update manually'
+    });
+  }
+
+  // Summary modal
+  await showInfo({
+    title: 'Fund refresh complete',
+    icon: results.fail === 0 ? 'fa-check-circle' : 'fa-info-circle',
+    iconColor: results.fail === 0 ? '#34d399' : '#fbbf24',
+    description: `${results.ok} of ${funds.length} fund price${funds.length === 1 ? '' : 's'} updated successfully. ${results.fail > 0 ? `${results.fail} failed — each is in your notifications.` : 'All clear.'}`,
+    body: `<div style="background:var(--bg-deep);padding:10px;border-radius:6px;font-size:11px;max-height:280px;overflow-y:auto;">
+      ${results.items.map(it => `<div style="padding:4px 0;border-bottom:1px solid var(--border);">
+        <span style="color:${it.ok ? '#34d399' : '#f87171'};">${it.ok ? '✓' : '✗'}</span>
+        <span style="color:var(--text-primary);">${_escape(it.symbol)}</span>
+        <span class="text-xs neutral" style="font-size:10px;margin-left:8px;">${it.ok ? `NZ$${it.price.toFixed(4)} from ${_escape(it.source || '')}` : _escape(it.reason || '').slice(0,80)}</span>
+      </div>`).join('')}
+    </div>`,
+    actions: [{ key: 'ok', label: 'Done', variant: 'primary', flex: true }]
+  });
+
+  logActivity('fund_bulk_refresh', { total: funds.length, ok: results.ok, fail: results.fail });
+}
+
 // Called from Holding Detail modal — opens the alert modal seeded with
 // the current holding's symbol, currency, and current price.
 function setAlertForCurrentHolding() {
@@ -9568,6 +9823,15 @@ async function init() {
   // Family invite — check URL params for an inbound invite token / code.
   // Banner shows whether or not the user is signed in (prompts sign-in if not).
   try { checkFamilyInviteOnLoad(); } catch(e) { console.warn('[family] invite check failed:', e); }
+
+  // Notifications — load existing + poll every 2 min for new ones from
+  // background Edge Functions (refresh-nz-funds writes new notifications
+  // when funds fail to auto-refresh).
+  if (_supaUser) {
+    loadNotifications();
+    if (_notifPollInterval) clearInterval(_notifPollInterval);
+    _notifPollInterval = setInterval(() => loadNotifications(), 2 * 60 * 1000);
+  }
 
   // Load market data first (gets FX rates), then portfolio prices, then re-render with correct NZD values
   try {

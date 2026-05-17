@@ -315,6 +315,54 @@ deck itself.
         10. PROJECT-SPECIFIC section (template for other repos)
       User can copy + adapt for any future project.
 
+### 2026-05-17 session — Release v0.8e (Bulk refresh + Daily cron + Notifications)
+
+User asked for: bulk "Refresh all NZ funds" button + daily auto-refresh
+Edge Function + notification bar with details on what's been missed.
+Three coordinated pieces shipped:
+
+**Notifications inbox (migration 013_notifications.sql + frontend bell)**
+- [x] `notifications` table with severity (info/warning/error/success),
+      title, body, link_url, metadata, read_at, dismissed_at. RLS own-
+      rows-only (notifications can contain symbol-level detail).
+- [x] Bell icon in header with unread-count badge.
+- [x] Dropdown panel (380px) listing recent notifications, severity-
+      coloured, each with title + body + link + relative timestamp +
+      dismiss × button.
+- [x] Mark-all-read button. Click-outside closes the panel.
+- [x] Polls every 2 min while signed in so Edge-Function-written items
+      surface within a few minutes.
+- [x] createNotification() helper for any code to write inbox entries.
+
+**Bulk "Refresh funds" button on Holdings tab**
+- [x] Teal button next to Group/Template. Confirms how many funds will
+      be refreshed → loops serially with 250ms politeness delay → drops
+      a notification per failure → shows summary modal at end.
+- [x] Per-fund result list in the summary modal with ✓ / ✗ + source +
+      price or error reason.
+- [x] Activity log entry: fund_bulk_refresh { total, ok, fail }.
+
+**Daily auto-refresh Edge Function (refresh-nz-funds)**
+- [x] Service-role iterates every investiq_portfolios row. Collects
+      unique (symbol, provider) combinations from fund/kiwisaver
+      holdings across all users.
+- [x] Calls Render proxy /api/nz-fund for each unique fund (serial,
+      300ms delay between requests). One lookup serves all users
+      holding that fund.
+- [x] Updates each user's portfolio array with new currentPrice +
+      manualPriceDate.
+- [x] For every failure, writes a notification row for the affected
+      user (service-role bypasses RLS legitimately).
+- [x] Summary notification to all admin users with totals
+      (updates / failures / unique fund count).
+- [x] X-Cron-Secret auth (same pattern as weekly-digest, alerts, backup).
+- [x] setup.sql: pg_cron scheduled 14:00 UTC daily (= 2 AM NZ).
+
+**Activation required:**
+- Run migration 013_notifications.sql
+- Deploy refresh-nz-funds Edge Function via Dashboard
+- Run refresh-nz-funds/setup.sql with placeholders filled
+
 ### 2026-05-16 session — Release v0.7d (Hardening / Critical security fixes)
 
 **Critical security work shipped**
