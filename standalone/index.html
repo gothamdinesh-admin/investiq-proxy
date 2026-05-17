@@ -1847,33 +1847,57 @@
       </div>
     </div>
 
-    <!-- MARKET SECTION -->
+    <!-- MARKET SECTION — rebuilt v0.10 to lead with personal context.
+         Order: your exposure -> indices (general) -> FX/commodities/crypto. -->
     <div id="section-market" style="display:none;">
       <div class="mb-6">
         <h2 class="text-xl font-bold flex items-center gap-2">
-          <i class="fas fa-globe" style="color:var(--color-teal);"></i>Global Market Overview
+          <i class="fas fa-globe" style="color:var(--color-teal);"></i>Market Pulse
         </h2>
-        <div class="text-xs neutral mt-1">Indices, commodities, currencies, and crypto at a glance.</div>
+        <div class="text-xs neutral mt-1">Your exposure first, then the wider market — so you see what matters to you.</div>
+      </div>
+
+      <!-- YOUR EXPOSURE — personal stats card. 4 mini-tiles. -->
+      <div class="card p-5 mb-6" style="position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--color-green));"></div>
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div class="section-title" style="margin:0;"><i class="fas fa-user-shield" style="color:var(--accent);"></i> Your Exposure</div>
+          <div class="text-xs neutral">How your portfolio is positioned right now</div>
+        </div>
+        <div id="exposureGrid" class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Top Currency</div><div class="text-lg font-bold" id="expCurrency">–</div><div class="text-xs neutral mt-1" id="expCurrencyHint">no data</div></div>
+          <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Top Sector</div><div class="text-lg font-bold" id="expSector">–</div><div class="text-xs neutral mt-1" id="expSectorHint">no data</div></div>
+          <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Top Region</div><div class="text-lg font-bold" id="expRegion">–</div><div class="text-xs neutral mt-1" id="expRegionHint">no data</div></div>
+          <div class="card2 p-3"><div class="text-xs neutral uppercase mb-1" style="letter-spacing:0.4px;">Today vs S&amp;P</div><div class="text-lg font-bold" id="expVsIndex">–</div><div class="text-xs neutral mt-1" id="expVsIndexHint">awaiting data</div></div>
+        </div>
+      </div>
+
+      <!-- INDICES — general market reference -->
+      <div class="mb-2 flex items-center justify-between">
+        <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-chart-area mr-1" style="color:var(--color-blue);"></i> Indices</div>
       </div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="indicesGrid">
         <div class="card2 p-4 text-center"><div class="neutral text-xs">Loading indices...</div></div>
       </div>
+
+      <!-- FX + Commodities + Crypto — secondary reference data -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5">
+          <div class="section-title mb-3"><i class="fas fa-money-bill-wave" style="color:var(--color-green);"></i> Currencies <span class="text-xs neutral ml-1" style="font-weight:400;text-transform:none;letter-spacing:0;">(yours first)</span></div>
+          <div id="fxGrid" class="space-y-3"></div>
+        </div>
         <div class="card p-5">
           <div class="section-title mb-3"><i class="fas fa-coins" style="color:var(--color-amber);"></i> Commodities</div>
           <div id="commoditiesGrid" class="space-y-3"></div>
-        </div>
-        <div class="card p-5">
-          <div class="section-title mb-3"><i class="fas fa-money-bill-wave" style="color:var(--color-green);"></i> Currencies</div>
-          <div id="fxGrid" class="space-y-3"></div>
         </div>
         <div class="card p-5">
           <div class="section-title mb-3"><i class="fab fa-bitcoin" style="color:var(--color-amber);"></i> Crypto</div>
           <div id="cryptoGrid" class="space-y-3"></div>
         </div>
       </div>
+
       <div class="card p-5">
-        <div class="section-title mb-4"><i class="fas fa-newspaper" style="color:var(--accent);"></i> Portfolio Impact Analysis</div>
+        <div class="section-title mb-4"><i class="fas fa-newspaper" style="color:var(--accent);"></i> Portfolio Impact Analysis <span class="iq-badge ml-2">IQ</span></div>
         <div id="marketImpact" class="neutral text-sm">Run AI Agents to see how current market conditions affect your portfolio.</div>
       </div>
     </div>
@@ -10326,6 +10350,74 @@ function showSection(name, el) {
   document.querySelectorAll('.mob-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.section === name);
   });
+  // v0.10 — render the Market Pulse personal exposure card when its
+  // section opens. Cheap, recalculated from current portfolio metrics.
+  if (name === 'market') { try { renderMarketExposure(); } catch(e) { console.warn('exposure', e); } }
+}
+
+// Build the "Your Exposure" mini-tiles on the Market section. Pulls from
+// the live portfolio: biggest currency exposure, top sector, top region,
+// and today's portfolio % vs the S&P 500 from indices grid (if loaded).
+function renderMarketExposure() {
+  const holdings = (state?.portfolio || []).filter(h => !h.ignored);
+  if (!holdings.length) return; // tiles keep their '–' placeholders
+  // Aggregate value per currency / sector / region (use NZD-converted value)
+  const fxToNZD = (window._fxToNZD) || {};
+  const valueIn = (h) => {
+    const v = (h.currentPrice || 0) * (h.qty || 0);
+    if (!h.currency || h.currency === 'NZD') return v;
+    const r = fxToNZD[h.currency] || h.fxToBase || 1;
+    return v * r;
+  };
+  const totalVal = holdings.reduce((s, h) => s + valueIn(h), 0) || 1;
+  const bucketize = (keyFn) => {
+    const m = {};
+    holdings.forEach(h => { const k = keyFn(h) || 'Unknown'; m[k] = (m[k] || 0) + valueIn(h); });
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  };
+  const byCurrency = bucketize(h => h.currency || 'NZD');
+  const bySector   = bucketize(h => h.sector || h.industry || 'Other');
+  const byRegion   = bucketize(h => h.region || h.exchangeRegion || h.country || 'Unknown');
+  const setTile = (id, label, hintId, hint) => {
+    const el = document.getElementById(id); if (el) el.textContent = label;
+    const h = document.getElementById(hintId); if (h) h.textContent = hint;
+  };
+  const pct = (v) => ((v / totalVal) * 100).toFixed(0) + '%';
+  if (byCurrency[0]) setTile('expCurrency', byCurrency[0][0],            'expCurrencyHint', `${pct(byCurrency[0][1])} of portfolio`);
+  if (bySector[0])   setTile('expSector',   bySector[0][0].slice(0, 14), 'expSectorHint',   `${pct(bySector[0][1])} of portfolio`);
+  if (byRegion[0])   setTile('expRegion',   byRegion[0][0],              'expRegionHint',   `${pct(byRegion[0][1])} of portfolio`);
+
+  // Today's portfolio % vs S&P 500 — derived from holding dayChangePct
+  // weighted by value, compared against the index card if rendered.
+  let todayWeighted = 0, weightedDenom = 0;
+  holdings.forEach(h => {
+    if (typeof h.dayChangePct === 'number' && isFinite(h.dayChangePct)) {
+      const v = valueIn(h); todayWeighted += v * h.dayChangePct; weightedDenom += v;
+    }
+  });
+  const myToday = weightedDenom ? (todayWeighted / weightedDenom) : null;
+  // Try to scrape the S&P 500 number from the indices grid (rendered by loadIndices)
+  let spx = null;
+  document.querySelectorAll('#indicesGrid .card2').forEach(c => {
+    const t = c.textContent || '';
+    if (/S&P|SPX|GSPC/i.test(t)) {
+      const m = t.match(/([+-]?\d+\.\d+)\s*%/);
+      if (m) spx = parseFloat(m[1]);
+    }
+  });
+  const expEl = document.getElementById('expVsIndex');
+  const expHint = document.getElementById('expVsIndexHint');
+  if (expEl && myToday !== null) {
+    const sign = myToday >= 0 ? '+' : '';
+    expEl.innerHTML = `<span style="color:${myToday >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${sign}${myToday.toFixed(2)}%</span>`;
+    if (spx !== null && expHint) {
+      const diff = myToday - spx;
+      const winning = diff >= 0;
+      expHint.innerHTML = `S&amp;P ${spx >= 0 ? '+' : ''}${spx.toFixed(2)}% · you ${winning ? 'lead' : 'trail'} by <b style="color:${winning ? 'var(--color-green)' : 'var(--color-red)'};">${Math.abs(diff).toFixed(2)}%</b>`;
+    } else if (expHint) {
+      expHint.textContent = 'S&P loading…';
+    }
+  }
 }
 
 </script>
