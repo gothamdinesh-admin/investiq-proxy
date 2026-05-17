@@ -7,6 +7,18 @@
 //   renderQuickInsights(), logActivity(), toast.
 // ═══════════════════════════════════════════════════════════════════════
 
+// Scroll a KPI tile's target agent-report card into view and pulse-highlight it.
+// Wired to the KPI-tile click handlers in renderInsightsSection.
+function focusAgentReport(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  el.classList.remove('agent-pulse');
+  // force reflow so the animation restarts if user clicks the same tile twice
+  void el.offsetWidth;
+  el.classList.add('agent-pulse');
+}
+
 // AI Insights — classification-driven dashboard layout (v0.10.5 rework).
 // Instead of "wall of text per agent" the user gets:
 //   1. KPI strip — four traffic-light tiles (Health / Risk / Sentiment / Opportunities)
@@ -45,22 +57,22 @@ function renderInsightsSection(results) {
     return Math.floor(sec / 86400) + ' days ago';
   })();
 
-  // ── KPI strip ────────────────────────────────────────────────────────────
-  const kpiTile = (label, value, sub, color, icon) => `
-    <div class="card2 p-4" style="border-left:3px solid ${color};">
+  // ── KPI strip (interactive — click a tile to focus that agent's report) ─
+  const kpiTile = (label, value, sub, color, icon, targetId) => `
+    <button onclick="focusAgentReport('${targetId}')" class="card2 p-4 kpi-tile" style="border-left:3px solid ${color};text-align:left;cursor:pointer;background:var(--bg-panel-2);border-top:1px solid var(--border);border-right:1px solid var(--border);border-bottom:1px solid var(--border);width:100%;transition:transform 0.15s,border-color 0.15s,box-shadow 0.15s;">
       <div class="flex items-center justify-between mb-1">
         <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">${label}</div>
         <i class="fas ${icon}" style="color:${color};font-size:14px;"></i>
       </div>
       <div class="text-2xl font-bold mt-1" style="color:${color};line-height:1.1;">${value}</div>
       <div class="text-xs neutral mt-1">${sub}</div>
-    </div>`;
+    </button>`;
   const kpiStrip = `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-      ${kpiTile('Portfolio Health',  score != null ? score + '/100' : '–', scoreLabel,                            scoreColor, 'fa-heartbeat')}
-      ${kpiTile('Risk Level',        riskLevel,                              'Auto-classified by Risk Watcher',   riskColor,  riskIcon)}
-      ${kpiTile('Market Sentiment',  sentiment,                              'Across your holdings today',        sentColor,  sentIcon)}
-      ${kpiTile('Opportunities',     oppCount || '–',                        oppCount ? 'Ideas found by Scout' : 'No gaps flagged', 'var(--color-violet)', 'fa-lightbulb')}
+      ${kpiTile('Portfolio Health',  score != null ? score + '/100' : '–', scoreLabel,                            scoreColor, 'fa-heartbeat',    'agent-report-portfolio')}
+      ${kpiTile('Risk Level',        riskLevel,                              'Auto-classified by Risk Watcher',   riskColor,  riskIcon,          'agent-report-risk')}
+      ${kpiTile('Market Sentiment',  sentiment,                              'Across your holdings today',        sentColor,  sentIcon,          'agent-report-market')}
+      ${kpiTile('Opportunities',     oppCount || '–',                        oppCount ? 'Ideas found by Scout' : 'No gaps flagged', 'var(--color-violet)', 'fa-lightbulb', 'agent-report-opportunity')}
     </div>`;
 
   // ── Action Items — parse [Tag] prefixed lines out of advisor output ────
@@ -144,29 +156,43 @@ function renderInsightsSection(results) {
       </div>
     </div>`;
 
-  // ── Per-agent detail (collapsible — most users want the action items above) ──
-  const agentCard = (icon, title, color, body) => `
-    <details class="card p-5" style="border-left:3px solid ${color};">
-      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;">
+  // ── Per-agent detail (always-open cards — uniform layout, no more mix
+  // of expanded/collapsed). Empty-state shows a Run-only-this button so
+  // missing agents stand out and can be filled in individually. ──
+  const agentCard = (icon, title, color, body, agentKey, anchorId) => {
+    const hasBody = !!(body && body.trim());
+    const emptyState = `
+      <div class="text-center py-6">
+        <i class="${icon}" style="color:${color};font-size:32px;opacity:0.35;"></i>
+        <div class="text-sm neutral mt-3 mb-3">No output yet for this agent.</div>
+        <button onclick="runSingleAgent('${agentKey}')" class="btn btn-sm" style="background:${color}1f;color:${color};border:1px solid ${color}55;">
+          <i class="fas fa-play mr-1"></i>Run only this
+        </button>
+      </div>`;
+    return `<div id="${anchorId}" class="card p-5" style="border-left:3px solid ${color};scroll-margin-top:20px;">
+      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div class="flex items-center gap-2">
           <i class="${icon}" style="color:${color};font-size:16px;"></i>
           <span class="font-semibold" style="color:${color};">${title}</span>
         </div>
-        <i class="fas fa-chevron-down text-xs neutral"></i>
-      </summary>
-      <div class="prose-sm mt-3 pt-3" style="color:var(--text-body);line-height:1.7;font-size:13px;border-top:1px solid var(--border);">${formatMarkdown(body || 'No output.')}</div>
-    </details>`;
+        ${hasBody ? `<button onclick="runSingleAgent('${agentKey}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 9px;" title="Re-run only this agent"><i class="fas fa-redo mr-1"></i>Re-run</button>` : ''}
+      </div>
+      ${hasBody
+        ? `<div class="prose-sm pt-3" style="color:var(--text-body);line-height:1.7;font-size:13px;border-top:1px solid var(--border);">${formatMarkdown(body)}</div>`
+        : emptyState}
+    </div>`;
+  };
 
   document.getElementById('insightsContent').innerHTML = kpiStrip + heroHtml + actionItemHtml + `
     <div class="text-xs uppercase neutral font-semibold mb-3 mt-4 flex items-center gap-2" style="letter-spacing:0.6px;">
       <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
-      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click a card to expand</span>
+      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click a KPI tile above to jump</span>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      ${agentCard('fas fa-heartbeat',         'Portfolio Health',  'var(--color-green)',  results.healthAnalysis)}
-      ${agentCard('fas fa-chart-line',        'Market Impact',     'var(--color-blue)',   results.marketAnalysis)}
-      ${agentCard('fas fa-shield-halved',     'Risk Watcher',      'var(--color-amber)',  results.riskAnalysis)}
-      ${agentCard('fas fa-lightbulb',         'Opportunity Scout', 'var(--color-violet)', results.opportunities)}
+      ${agentCard('fas fa-heartbeat',     'Portfolio Health',  'var(--color-green)',  results.healthAnalysis,  'portfolio',   'agent-report-portfolio')}
+      ${agentCard('fas fa-chart-line',    'Market Impact',     'var(--color-blue)',   results.marketAnalysis,  'market',      'agent-report-market')}
+      ${agentCard('fas fa-shield-halved', 'Risk Watcher',      'var(--color-amber)',  results.riskAnalysis,    'risk',        'agent-report-risk')}
+      ${agentCard('fas fa-lightbulb',     'Opportunity Scout', 'var(--color-violet)', results.opportunities,   'opportunity', 'agent-report-opportunity')}
     </div>`;
 
   if (score != null) updateScoreRing(score);
@@ -522,28 +548,42 @@ async function runAgents() {
     // tokens across ~10s, which keeps us inside the 10k/min sonnet window
     // without meaningfully slowing the user-perceived total (~25s anyway).
     const stagger = (ms) => new Promise(r => setTimeout(r, ms));
-    setAgentState('portfolio',   'running');
-    const p1 = callClaude('portfolio',   baseMsg);
-    await stagger(3500);
-    setAgentState('market',      'running');
-    const p2 = callClaude('market',      baseMsg);
-    await stagger(3500);
-    setAgentState('risk',        'running');
-    const p4 = callClaude('risk',        baseMsg);
-    await stagger(3500);
-    setAgentState('opportunity', 'running');
-    const p3 = callClaude('opportunity', baseMsg);
+    // ── SEQUENTIAL execution ─────────────────────────────────────────────
+    // Was running 4 agents in parallel staggered by 3.5s — hit Anthropic's
+    // 10k input-tokens/min cap on big portfolios + timed out the page.
+    // Now: one agent at a time. Slower wall-clock (~25-40s total) but
+    // robust, no rate-limit hits, no timeouts. Each agent's result is
+    // saved as it lands so a partial failure still leaves usable data.
+    state.agentResults = state.agentResults || {};
 
-    const [healthAnalysis, marketAnalysis, riskAnalysis, opportunities] = await Promise.all([p1, p2, p4, p3]);
-
-    setAgentState('portfolio',   'done', healthAnalysis);
-    setAgentState('market',      'done', marketAnalysis);
-    setAgentState('risk',        'done', riskAnalysis);
-    setAgentState('opportunity', 'done', opportunities);
-
+    setAgentState('portfolio', 'running');
+    const healthAnalysis = await callClaude('portfolio', baseMsg);
+    setAgentState('portfolio', 'done', healthAnalysis);
     const scoreMatch = healthAnalysis.match(/Health Score:\s*(\d+)/i);
     if (scoreMatch) updateScoreRing(parseInt(scoreMatch[1]));
+    state.agentResults.healthAnalysis = healthAnalysis;
+    state.agentResults.portfolioScore = scoreMatch ? parseInt(scoreMatch[1]) : null;
+    saveState();
+
+    setAgentState('market', 'running');
+    const marketAnalysis = await callClaude('market', baseMsg);
+    setAgentState('market', 'done', marketAnalysis);
+    state.agentResults.marketAnalysis = marketAnalysis;
+    saveState();
+
+    setAgentState('risk', 'running');
+    const riskAnalysis = await callClaude('risk', baseMsg);
+    setAgentState('risk', 'done', riskAnalysis);
     const riskMatch = riskAnalysis.match(/Risk Level:\s*(Low|Moderate|Elevated|High)/i);
+    state.agentResults.riskAnalysis = riskAnalysis;
+    state.agentResults.riskLevel = riskMatch ? riskMatch[1] : null;
+    saveState();
+
+    setAgentState('opportunity', 'running');
+    const opportunities = await callClaude('opportunity', baseMsg);
+    setAgentState('opportunity', 'done', opportunities);
+    state.agentResults.opportunities = opportunities;
+    saveState();
 
     // ── Phase 2: advisor synthesises all four outputs ────────────────────────
     setAgentState('advisor', 'running');
@@ -551,10 +591,8 @@ async function runAgents() {
     const finalAdvice = await callClaude('advisor', advisorMsg);
     setAgentState('advisor', 'done', finalAdvice);
 
-    state.agentResults = { healthAnalysis, marketAnalysis, riskAnalysis, opportunities, finalAdvice,
-      portfolioScore: scoreMatch ? parseInt(scoreMatch[1]) : null,
-      riskLevel: riskMatch ? riskMatch[1] : null,
-      timestamp: new Date().toISOString() };
+    state.agentResults.finalAdvice = finalAdvice;
+    state.agentResults.timestamp = new Date().toISOString();
     saveState();
     renderInsightsSection(state.agentResults);
     renderQuickInsights(metrics);
@@ -562,19 +600,103 @@ async function runAgents() {
 
   } catch(e) {
     document.getElementById('agentError').style.display = 'block';
-    // Friendlier message for the most common failure: Anthropic per-minute
-    // rate-limit. Tells the user it's transient and they can just retry.
     const isRateLimit = /\b429\b|rate limit/i.test(e.message || '');
     document.getElementById('agentError').textContent = isRateLimit
-      ? 'Rate limit hit (Anthropic 10k input tokens/min). Wait ~60 seconds and click Run Again — the staggered launch and slimmed payload should keep the next run under cap.'
+      ? 'Rate limit hit. Wait ~60 seconds, then try running a single agent (click Run on the agent card directly).'
       : 'Agent error: ' + e.message;
     logActivity('agent_run_failed', { error: e.message?.slice(0,200) });
-    ['portfolio','market','opportunity','advisor'].forEach(k => {
+    ['portfolio','market','risk','opportunity','advisor'].forEach(k => {
       if (document.getElementById('agent-'+k)?.className.includes('running'))
         setAgentState(k, 'error');
     });
   }
 
   document.getElementById('runAgentsBtn').disabled = false;
-  document.getElementById('runAgentsBtn').innerHTML = '<i class="fas fa-redo mr-2"></i>Run Again';
+  document.getElementById('runAgentsBtn').innerHTML = '<i class="fas fa-redo mr-2"></i>Run All Again';
+}
+
+// Run a single agent by key. Lets the user re-run just one (saves money,
+// avoids rate limits) — wired to the per-card play buttons in the modal.
+async function runSingleAgent(agentKey) {
+  const metrics = getMetrics();
+  if (!metrics.holdings.length) {
+    document.getElementById('agentError').style.display = 'block';
+    document.getElementById('agentError').textContent = 'Add some holdings first before running analysis.';
+    return;
+  }
+  const allowed = await tryConsumeAiQuota();
+  if (!allowed) return;
+  document.getElementById('agentError').style.display = 'none';
+
+  // Rebuild the same payload runAgents() uses — kept in scope by recomputing.
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
+  const TOP_N = 20;
+  const sorted = [...metrics.holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  const topHoldings = sorted.slice(0, TOP_N).map(h => ({
+    symbol: h.symbol, name: h.name || h.symbol, type: h.type,
+    platform: h.platform, sector: h.sector || 'unknown',
+    value: sym + fmt(h.currentValue),
+    weight: fmt(h.weight) + '%',
+    return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'
+  }));
+  const tail = sorted.slice(TOP_N);
+  const aggMap = new Map();
+  tail.forEach(h => {
+    const key = `${h.type || 'other'}|${h.sector || 'unknown'}`;
+    if (!aggMap.has(key)) aggMap.set(key, { type: h.type, sector: h.sector || 'unknown', value: 0, weight: 0, count: 0 });
+    const a = aggMap.get(key);
+    a.value  += h.currentValue || 0;
+    a.weight += h.weight || 0;
+    a.count  += 1;
+  });
+  const tailAggregates = [...aggMap.values()].sort((a,b) => b.value - a.value).map(a => ({
+    type: a.type, sector: a.sector, holdings: a.count,
+    value: sym + fmt(a.value), weight: fmt(a.weight) + '%'
+  }));
+  const portfolioSummary = { totalValue: sym + fmt(metrics.totalValue), totalReturn: (metrics.totalGainPct >= 0 ? '+' : '') + fmt(metrics.totalGainPct) + '%', holdingsCount: metrics.holdings.length, topHoldings, tailAggregates };
+  const marketSummary = (typeof window._latestMarketData === 'object') ? window._latestMarketData : {};
+  const baseMsg = `Portfolio:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}`;
+
+  state.agentResults = state.agentResults || {};
+  try {
+    setAgentState(agentKey, 'running');
+    if (agentKey === 'advisor') {
+      // Advisor needs the other 3+1 outputs to synthesise — use stored
+      const r = state.agentResults;
+      if (!r.healthAnalysis || !r.marketAnalysis || !r.riskAnalysis || !r.opportunities) {
+        setAgentState('advisor', 'error');
+        document.getElementById('agentError').style.display = 'block';
+        document.getElementById('agentError').textContent = 'Run the other 4 agents first — advisor needs their outputs to synthesise.';
+        return;
+      }
+      const msg = `Portfolio Data:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}\n\n── AGENT OUTPUTS ──\n\n📊 Portfolio Health:\n${r.healthAnalysis}\n\n🌍 Market Impact:\n${r.marketAnalysis}\n\n🛡️ Risk Watcher:\n${r.riskAnalysis}\n\n🔭 Opportunity Scout:\n${r.opportunities}`;
+      const out = await callClaude('advisor', msg);
+      setAgentState('advisor', 'done', out);
+      state.agentResults.finalAdvice = out;
+    } else {
+      const out = await callClaude(agentKey, baseMsg);
+      setAgentState(agentKey, 'done', out);
+      if (agentKey === 'portfolio') {
+        const m = out.match(/Health Score:\s*(\d+)/i);
+        if (m) { updateScoreRing(parseInt(m[1])); state.agentResults.portfolioScore = parseInt(m[1]); }
+        state.agentResults.healthAnalysis = out;
+      } else if (agentKey === 'market') {
+        state.agentResults.marketAnalysis = out;
+      } else if (agentKey === 'risk') {
+        const m = out.match(/Risk Level:\s*(Low|Moderate|Elevated|High)/i);
+        if (m) state.agentResults.riskLevel = m[1];
+        state.agentResults.riskAnalysis = out;
+      } else if (agentKey === 'opportunity') {
+        state.agentResults.opportunities = out;
+      }
+    }
+    state.agentResults.timestamp = new Date().toISOString();
+    saveState();
+    renderInsightsSection(state.agentResults);
+    logActivity('agent_run_single', { agent: agentKey });
+  } catch(e) {
+    setAgentState(agentKey, 'error');
+    document.getElementById('agentError').style.display = 'block';
+    document.getElementById('agentError').textContent = 'Agent error: ' + e.message;
+  }
 }

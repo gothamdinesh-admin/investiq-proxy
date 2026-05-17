@@ -982,6 +982,18 @@
     /* News headlines (ticker-grouped) */
     .news-headline:hover { border-color: var(--accent) !important; background: var(--accent-soft) !important; }
 
+    /* AI Insights KPI tiles — clickable, lift on hover */
+    .kpi-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.18); border-color: var(--accent) !important; }
+    .kpi-tile:active { transform: translateY(0); }
+    .kpi-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* Pulse highlight when a KPI tile is clicked and we jump to its report */
+    @keyframes agentPulse {
+      0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); }
+      30%      { box-shadow: 0 0 0 8px var(--accent-soft); }
+    }
+    .agent-pulse { animation: agentPulse 1.4s ease-out 1; }
+
     /* ═══════════════════════════════════════════════════════════════════
        MOBILE DRAWER — slide-in side panel surfacing every section + key
        action when the user taps the hamburger. Off-canvas, transform
@@ -2565,7 +2577,7 @@
             <span class="font-semibold text-sm">Portfolio Health Agent</span>
             
           </div>
-          <div id="agent-portfolio-status" class="text-xs neutral">Idle</div>
+          <div class="flex items-center gap-2"><button onclick="runSingleAgent('portfolio')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Run only this agent"><i class="fas fa-play"></i></button><div id="agent-portfolio-status" class="text-xs neutral">Idle</div></div>
         </div>
         <div class="text-xs neutral">Scores diversification, concentration risk, and overall portfolio health.</div>
         <div id="agent-portfolio-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
@@ -2576,7 +2588,7 @@
             <span>🌍</span><span class="font-semibold text-sm">Market Impact Agent</span>
             
           </div>
-          <div id="agent-market-status" class="text-xs neutral">Idle</div>
+          <div class="flex items-center gap-2"><button onclick="runSingleAgent('market')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Run only this agent"><i class="fas fa-play"></i></button><div id="agent-market-status" class="text-xs neutral">Idle</div></div>
         </div>
         <div class="text-xs neutral">Analyses global market trends and their effect on your specific holdings.</div>
         <div id="agent-market-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
@@ -2586,7 +2598,7 @@
           <div class="flex items-center gap-2">
             <span>🛡️</span><span class="font-semibold text-sm">Risk Watcher Agent</span>
           </div>
-          <div id="agent-risk-status" class="text-xs neutral">Idle</div>
+          <div class="flex items-center gap-2"><button onclick="runSingleAgent('risk')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Run only this agent"><i class="fas fa-play"></i></button><div id="agent-risk-status" class="text-xs neutral">Idle</div></div>
         </div>
         <div class="text-xs neutral">Flags concentration, macro, FX, and quality risks specific to your holdings.</div>
         <div id="agent-risk-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
@@ -2597,7 +2609,7 @@
             <span>🔭</span><span class="font-semibold text-sm">Opportunity Scout Agent</span>
 
           </div>
-          <div id="agent-opportunity-status" class="text-xs neutral">Idle</div>
+          <div class="flex items-center gap-2"><button onclick="runSingleAgent('opportunity')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Run only this agent"><i class="fas fa-play"></i></button><div id="agent-opportunity-status" class="text-xs neutral">Idle</div></div>
         </div>
         <div class="text-xs neutral">Finds gaps, underweight sectors, and actionable investment opportunities.</div>
         <div id="agent-opportunity-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:120px;overflow-y:auto;"></div>
@@ -2608,7 +2620,7 @@
             <span>💼</span><span class="font-semibold text-sm">Senior Advisor · Orchestrator</span>
             
           </div>
-          <div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1–4…</div>
+          <div class="flex items-center gap-2"><button onclick="runSingleAgent('advisor')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Re-synthesise from existing outputs"><i class="fas fa-play"></i></button><div id="agent-advisor-status" class="text-xs neutral">Waiting for agents 1-4...</div></div>
         </div>
         <div class="text-xs neutral">Synthesises all agent outputs into a prioritised 5-point action plan.</div>
         <div id="agent-advisor-result" class="text-xs mt-2" style="display:none;color:#94a3b8;line-height:1.6;max-height:160px;overflow-y:auto;"></div>
