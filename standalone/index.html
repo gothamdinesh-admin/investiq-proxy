@@ -321,16 +321,64 @@
 
     /* Hide verbose navbar elements on small screens */
     @media (max-width: 768px) {
-      /* Navbar */
+      /* Navbar — keep only essentials on mobile. Secondary actions
+         (theme toggle, help, AI shortcut, refresh button) are still
+         reachable via Settings / bottom tab bar / sidebar drawer. */
       nav .text-xs.neutral:first-of-type,           /* "Not yet updated" timestamp */
       #lastUpdated,
-      nav span[style*="background:#141e33"],         /* "Personal Portfolio Dashboard" badge */
-      #proxyStatusDot, #proxyStatusLabel            /* Proxy status indicator */
+      #navTagline,                                   /* "Intelligent Investing Dashboard" badge */
+      nav span[style*="background:#141e33"],         /* legacy bg-panel-2 tagline */
+      nav span[style*="background:var(--bg-panel-2)"],/* current tagline */
+      #syncIndicator,                                /* sync chip — visible in notifications/settings */
+      #proxyStatusDot, #proxyStatusLabel,            /* Proxy status indicator */
+      .nav-sep                                       /* desktop dividers */
       { display: none !important; }
 
-      nav { padding: 10px 16px; }
-      nav .font-bold.text-lg { font-size: 15px; }
-      #refreshBtn .mr-1 ~ * { display: none; }      /* Refresh: icon only */
+      /* Hide the desktop-only utility cluster on mobile. AI accessible
+         via bottom tab bar; help/theme/refresh via Settings menu. */
+      nav button[onclick="openModal('helpModal')"],
+      nav button[onclick="toggleTheme()"],
+      nav button[onclick="refreshAll()"],
+      nav button[onclick="openModal('agentsModal')"] { display: none !important; }
+
+      /* Make admin badge smaller on mobile so it fits next to brand */
+      #adminBadge { padding: 2px 6px !important; font-size: 9px !important; }
+      #adminBadge i { display: none !important; }
+
+      nav {
+        padding: 8px 12px !important;
+        flex-wrap: wrap;                            /* lets content wrap if it must */
+        gap: 8px;
+      }
+      nav > div { min-width: 0; }                   /* allow children to shrink */
+      nav .brand-mark { font-size: 16px !important; }
+      nav .brand-icon { width: 28px !important; height: 28px !important; }
+      nav .brand-icon i { font-size: 12px !important; }
+      #refreshBtn .mr-1 ~ * { display: none; }      /* Refresh: icon only (legacy) */
+
+      /* Bottom tab bar — cap visible items so we don't horizontally scroll.
+         Hide the in-bar "Add" tab since the page has its own Add buttons,
+         and drop the Admin tab from the mobile bar (still in sidebar drawer
+         + accessible via the settings modal). */
+      #mobileTabBar { overflow-x: hidden !important; justify-content: space-around !important; }
+      #mobileTabBar .mob-tab:nth-child(n+6) { display: none !important; }
+      #mobileTabBar .mob-tab[onclick*="addModal"] { display: none !important; }
+      #mobileAdminTab { display: none !important; }
+
+      /* AI Insights header (and similar dense headers) — let the badge +
+         action button wrap below the title on narrow screens. */
+      h2.text-xl.font-bold + button,
+      h2.text-xl.font-bold { min-width: 0; }
+      #section-insights > .flex.items-center.justify-between,
+      #section-watchlist > .flex.items-center.justify-between {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      #section-insights > .flex.items-center.justify-between > .btn,
+      #section-watchlist > .flex.items-center.justify-between > .btn {
+        width: 100%;
+        justify-content: center;
+      }
 
       /* Stack layout — use ID to avoid matching other flex containers */
       #mainLayout { flex-direction: column; }
@@ -493,14 +541,14 @@
       .nav-link { min-height: 44px; }
       input.input, select.input, textarea.input { font-size: 16px !important; /* prevents iOS zoom-on-focus */ }
 
-      /* Sticky portfolio summary — keep total value + score visible while
-         scrolling. The slim sidebar already sits at top; pin it. */
+      /* On mobile the sidebar becomes a one-time strip at the top of the
+         page that scrolls away naturally — sticky-pinning it caused it to
+         overlap the metric cards below it (IMG_3441). Bottom tab bar gives
+         the user nav access without needing the sidebar always visible. */
       .sidebar {
-        position: sticky !important;
-        top: 0;
-        z-index: 50;
-        backdrop-filter: blur(8px);
-        background: rgba(15,23,41,0.95) !important;
+        position: static !important;
+        z-index: auto !important;
+        backdrop-filter: none !important;
       }
 
       /* Holdings DETAILED table: convert grid row to stacked card so users
