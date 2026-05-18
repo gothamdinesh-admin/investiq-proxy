@@ -1,19 +1,36 @@
 # InvestIQ — Prioritised Action Plan
 
-_Last revisited: 2026-05-15 · Paid plans now active (Supabase Pro · Render Starter · Netlify Pro)_
+_Last revisited: 2026-05-17 · v0.12-perf-pulse shipped_
 
 This is the single source of truth for what's next. Priority order is intentional — do P0 first, then P1 top-down.
 
 ---
 
+## ✅ Recently completed (v0.8 → v0.12)
+
+| Tag | What |
+|---|---|
+| `v0.8e` | Bulk NZ-fund refresh button + daily auto-refresh Edge Function + in-app notifications inbox |
+| `v0.8f` | Price-alert UX (threshold sanity check, NZ-fund selector), idle timeout bumped to 2h with focus-aware pause |
+| `v0.8g` | InvestIQ brand palette: deep navy + intelligent blue + emerald + gold, both light/dark refined |
+| `v0.8h` | Brand assets in repo (logo SVGs/PNGs + favicon + apple-touch-icon), inline gradient wordmark, IQ premium badge |
+| `v0.8i` | "Fund not matched" turned into a selector with auto-retry |
+| `v0.9-mobile-pass-{1..6}` | Mobile UX overhaul: hamburger drawer, FAB on desktop, safe-area-aware tab bar, score-ring fit, sticky-sidebar removed on mobile, scrollbar bigger, WCAG-AA text contrast tier system |
+| `v0.10-section-cleanup` | Overview redesign (Today's Movers + FAB replaces sidebar action stack), Market rebuilt as Market Pulse (personal exposure first), News split into For You/Markets tabs, AI Insights with inline 4-agent preview |
+| `v0.10-polish-pack` | News grouped by ticker + managed-fund info cards, AI Insights hero card, notifications red dot + Clear all, model names hidden from UI |
+| `v0.11-insights-classified` | Risk Watcher 4th agent, classification dashboard (KPI tiles + parsed action items), advisor emits [Critical/High/Medium/Low/Watch] tags |
+| `v0.11-insights-iterate` | Sequential agent execution (no more timeouts/rate limits), per-agent re-run buttons, clickable KPI tiles that jump to reports |
+| `v0.11-insights-collapse` | Detail cards minimised by default, openable, consistent across all four agents |
+| `v0.12-perf-pulse` | Performance section rebuilt: KPI strip (All-time / CAGR / Best / Worst month), monthly returns heatmap, contribution view (top contributors + drag by NZ$), segmented-control toggles. FX card lifts user-held currencies to top. |
+
+---
+
 ## 🚨 P0 — Verify & harden what just shipped
 
-The recent barrage of fixes needs user verification before building more on top.
-
-- [ ] **Verify LSE pence fix** — open Holdings, find `AZN.L`, `CPI.L` or other `.L` tickers. Return % should be realistic (not +14389%). If still wrong, dump that holding's raw `lots[]` via Admin → Test Supabase R/W and we'll dig deeper.
-- [ ] **Verify crypto dedup** — Admin Panel → Fix Crypto Tickers → then Force Reload from Cloud. Should see one `BTC-USD` row, not two. Total holdings count should equal unique symbols.
-- [ ] **Verify admin badge gating** — log in as a regular test user (not gothamdinesh@gmail.com). ADMIN pill should NOT appear. Sidebar Admin Panel link should NOT appear. Settings modal should NOT show the orange "Admin · Platform Config" section.
-- [ ] **Verify snapshot time-travel** — Performance → Holdings at a specific date → today should appear with per-holding breakdown. Tomorrow a second date appears.
+- [ ] **Run a fresh AI analysis** — Insights section. Sequential execution should produce KPI tiles + Action Items with severity badges. Each agent card minimised by default; click to expand.
+- [ ] **Performance section** — at least 2 months of snapshots needed before heatmap shows; CAGR needs 30+ days.
+- [ ] **News For You** — open News → For You. Cards should be grouped by ticker. Below the news groups, "Your managed funds" section lists every fund/KiwiSaver holding with provider + last unit price.
+- [ ] **Mobile sanity** — open the app on phone, hamburger drawer reaches every section + actions. Bottom tab bar 5 items, no overflow. Score ring fits inside 56px.
 - [ ] **Run the full self-check** in `docs/SELF_CHECK.md` before any new feature work.
 
 ---

@@ -987,6 +987,20 @@
     .kpi-tile:active { transform: translateY(0); }
     .kpi-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+    /* Segmented control (used by Performance range + mode toggles).
+       iOS-style grouped pill: a tinted background with a raised active pill. */
+    .segmented-control { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-panel-2); border-radius: 8px; border: 1px solid var(--border); }
+    .seg-btn {
+      background: none; border: none; cursor: pointer;
+      padding: 5px 12px; border-radius: 6px;
+      font-size: 12px; font-weight: 500;
+      color: var(--text-secondary);
+      transition: background 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .seg-btn:hover:not(.active) { color: var(--text-primary); }
+    .seg-btn.active { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+
     /* Pulse highlight when a KPI tile is clicked and we jump to its report */
     @keyframes agentPulse {
       0%, 100% { box-shadow: 0 0 0 0 var(--accent-soft); }
@@ -1819,33 +1833,57 @@
     <div id="section-performance" style="display:none;">
       <div class="mb-6">
         <h2 class="text-xl font-bold flex items-center gap-2">
-          <i class="fas fa-chart-line" style="color:var(--color-green);"></i>Performance Analysis
+          <i class="fas fa-chart-line" style="color:var(--color-green);"></i>Performance
         </h2>
-        <div class="text-xs neutral mt-1">Portfolio value over time vs. benchmark indices.</div>
+        <div class="text-xs neutral mt-1">How your portfolio has actually grown — all-time, annualised, by month, and by contributor.</div>
+      </div>
+
+      <!-- KPI strip — at-a-glance summary numbers -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5" id="perfKpiStrip">
+        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">All-time Return</div>
+          <div class="text-2xl font-bold mt-1" id="perfKpiTotal" style="color:var(--color-green);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="perfKpiTotalSub">awaiting snapshots</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-blue);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Annualised (CAGR)</div>
+          <div class="text-2xl font-bold mt-1" id="perfKpiCagr" style="color:var(--color-blue);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="perfKpiCagrSub">needs ≥30 days of history</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Best Month</div>
+          <div class="text-2xl font-bold mt-1" id="perfKpiBest" style="color:var(--color-amber);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="perfKpiBestSub">–</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-red);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Worst Month</div>
+          <div class="text-2xl font-bold mt-1" id="perfKpiWorst" style="color:var(--color-red);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="perfKpiWorstSub">–</div>
+        </div>
       </div>
 
       <!-- Historical snapshot chart with benchmark overlay -->
       <div class="card p-5 mb-6">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div class="section-title"><i class="fas fa-history" style="color:var(--color-green);"></i> Portfolio vs Benchmarks</div>
-          <div class="flex gap-1 flex-wrap">
-            <button data-snap-range="30"   onclick="setSnapshotRange(30)"   class="btn btn-sm btn-secondary">30d</button>
-            <button data-snap-range="90"   onclick="setSnapshotRange(90)"   class="btn btn-sm" style="background:#6366f1;color:white;">90d</button>
-            <button data-snap-range="365"  onclick="setSnapshotRange(365)"  class="btn btn-sm btn-secondary">1y</button>
-            <button data-snap-range="3650" onclick="setSnapshotRange(3650)" class="btn btn-sm btn-secondary">All</button>
+          <div class="flex gap-1 flex-wrap segmented-control" role="tablist">
+            <button data-snap-range="30"   onclick="setSnapshotRange(30)"   class="seg-btn">30d</button>
+            <button data-snap-range="90"   onclick="setSnapshotRange(90)"   class="seg-btn active">90d</button>
+            <button data-snap-range="365"  onclick="setSnapshotRange(365)"  class="seg-btn">1y</button>
+            <button data-snap-range="3650" onclick="setSnapshotRange(3650)" class="seg-btn">All</button>
           </div>
         </div>
 
         <!-- Display-mode + benchmark toggle row -->
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-          <div class="flex gap-1">
-            <button data-snap-mode="return" onclick="setSnapshotMode('return')" class="btn btn-sm" style="background:#6366f1;color:white;font-size:11px;padding:4px 10px;">% Return</button>
-            <button data-snap-mode="value"  onclick="setSnapshotMode('value')"  class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;">NZ$ Value</button>
+          <div class="flex gap-1 segmented-control">
+            <button data-snap-mode="return" onclick="setSnapshotMode('return')" class="seg-btn active" style="font-size:11px;padding:4px 10px;">% Return</button>
+            <button data-snap-mode="value"  onclick="setSnapshotMode('value')"  class="seg-btn"        style="font-size:11px;padding:4px 10px;">NZ$ Value</button>
           </div>
           <div id="benchmarkChips" class="flex gap-1 flex-wrap"></div>
         </div>
 
-        <div id="snapshotChartEmpty" class="text-center py-8" style="color:#4a6080;">
+        <div id="snapshotChartEmpty" class="text-center py-8" style="color:var(--text-muted);">
           <i class="fas fa-chart-line text-3xl mb-2 block" style="opacity:0.3;"></i>
           <div class="text-sm">Your performance chart will grow here. A snapshot is saved automatically each day you open the app.</div>
         </div>
@@ -1853,11 +1891,38 @@
         <div id="benchmarkMeta" class="text-xs neutral mt-2"></div>
       </div>
 
-      <!-- Historical holdings (time-travel view) -->
+      <!-- Monthly returns heatmap — calendar-style grid -->
+      <div class="card p-5 mb-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <div class="section-title"><i class="fas fa-calendar" style="color:var(--color-violet);"></i> Monthly Returns</div>
+            <div class="text-xs neutral mt-1">Month-by-month % change. Green = up, red = down. Hover for value.</div>
+          </div>
+          <div class="text-xs neutral" id="heatmapLegend"></div>
+        </div>
+        <div id="monthlyHeatmap">
+          <div class="text-center py-6 neutral text-sm">Heatmap appears once you have at least two months of snapshots.</div>
+        </div>
+      </div>
+
+      <!-- Contribution analysis — what's driving gain/loss in NZD$ terms -->
       <div class="card p-5 mb-6">
         <div class="flex items-center justify-between mb-4">
           <div>
-            <div class="section-title"><i class="fas fa-clock" style="color:var(--color-amber);"></i> Holdings at a specific date</div>
+            <div class="section-title"><i class="fas fa-trophy" style="color:var(--color-amber);"></i> Top Contributors &amp; Drag</div>
+            <div class="text-xs neutral mt-1">What's driving your return in actual dollars — biggest gainers and biggest losers by NZ$ contribution to your total return.</div>
+          </div>
+        </div>
+        <div id="contributionView" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="neutral text-sm">No portfolio data yet.</div>
+        </div>
+      </div>
+
+      <!-- Historical holdings (time-travel view) -->
+      <div class="card p-5 mb-6">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <div class="section-title"><i class="fas fa-clock" style="color:var(--color-teal);"></i> Time Travel</div>
             <div class="text-xs neutral mt-1">Browse your portfolio as it looked on any past snapshot date.</div>
           </div>
           <div class="flex items-center gap-2">
@@ -1872,6 +1937,7 @@
         </div>
       </div>
 
+      <!-- Breakdown bar charts -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div class="card p-5">
           <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:var(--accent);"></i> By Asset Type</div>
@@ -1881,10 +1947,6 @@
           <div class="section-title mb-4"><i class="fas fa-chart-bar" style="color:var(--color-green);"></i> By Platform</div>
           <div style="height:260px;"><canvas id="platformBarChart"></canvas></div>
         </div>
-      </div>
-      <div class="card p-5">
-        <div class="section-title mb-4"><i class="fas fa-trophy" style="color:var(--color-amber);"></i> Top & Bottom Performers</div>
-        <div id="performersTable" class="grid grid-cols-1 lg:grid-cols-2 gap-4"></div>
       </div>
     </div>
 
@@ -4856,19 +4918,40 @@ function renderMarketSection() {
       </div>`).join('');
   }
 
-  function renderMarketList(elId, data, priceDecimals=2) {
-    document.getElementById(elId).innerHTML = Object.entries(data).map(([name, d]) => `
-      <div class="flex justify-between items-center py-1.5" style="border-bottom:1px solid #1a2540;">
-        <span class="text-sm">${name}</span>
+  function renderMarketList(elId, data, priceDecimals=2, ownedFirst=null) {
+    let entries = Object.entries(data);
+    if (ownedFirst && ownedFirst.size) {
+      entries.sort((a, b) => {
+        const aOwned = [...ownedFirst].some(c => a[0].includes(c));
+        const bOwned = [...ownedFirst].some(c => b[0].includes(c));
+        if (aOwned && !bOwned) return -1;
+        if (!aOwned && bOwned) return 1;
+        return 0;
+      });
+    }
+    document.getElementById(elId).innerHTML = entries.map(([name, d]) => {
+      const isOwned = ownedFirst && [...ownedFirst].some(c => name.includes(c));
+      return `<div class="flex justify-between items-center py-1.5" style="border-bottom:1px solid var(--border);${isOwned ? 'background:var(--accent-soft);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:4px;' : ''}">
+        <span class="text-sm">${name}${isOwned ? ' <span class="text-xs" style="color:var(--accent);font-weight:600;">· yours</span>' : ''}</span>
         <div class="text-right">
           <div class="mono text-sm font-semibold">${d.price?.toFixed(priceDecimals) || '–'}</div>
           <div class="text-xs ${d.changePct >= 0 ? 'pos' : 'neg'}">${d.changePct >= 0 ? '+' : ''}${d.changePct?.toFixed(2) || '–'}%</div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
+  // Build a set of foreign currencies the user actually holds, so the FX
+  // card can lift their pairs to the top (NZ investor wants USD/AUD/GBP
+  // before EUR/JPY/etc.).
+  const ownedCurrencies = new Set(
+    (state.portfolio || [])
+      .map(h => (h.currency || '').toUpperCase())
+      .filter(c => c && c !== 'NZD')
+  );
+
   renderMarketList('commoditiesGrid', state.marketData.commodities);
-  renderMarketList('fxGrid', state.marketData.fx, 4);
+  renderMarketList('fxGrid', state.marketData.fx, 4, ownedCurrencies);
   renderMarketList('cryptoGrid', state.marketData.crypto, 0);
 }
 
@@ -4940,35 +5023,158 @@ function updatePortfolioTicker() {
   updateTicker();
 }
 
+// Performance section renderer (v0.12). Drives 3 surfaces:
+//   1. KPI strip (All-time return / CAGR / Best / Worst month)
+//   2. Contribution view (top contributors + drag, by $ value)
+//   3. Monthly returns heatmap (from snapshot history)
 function renderPerformanceSection(metrics) {
-  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
-  const sorted = [...metrics.holdings].sort((a,b) => b.gainPct - a.gainPct);
-  const top = sorted.slice(0,5);
-  const bottom = sorted.filter(h=>h.gainPct < 0).slice(-5).reverse();
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
+  renderPerfContribution(metrics, sym);
+  // KPI strip + heatmap need snapshot history, so they run async
+  renderPerfKpisAndHeatmap(sym).catch(e => console.warn('[perf] kpi/heatmap', e));
+}
 
-  document.getElementById('performersTable').innerHTML = `
+// CONTRIBUTION VIEW — Top 5 gainers + bottom 5 losers ranked by ACTUAL
+// dollar contribution to total return (not %). A small position with a
+// huge % gain may contribute less to your portfolio than a big position
+// with a modest % gain — this surface tells you what really moves the
+// needle.
+function renderPerfContribution(metrics, sym) {
+  const wrap = document.getElementById('contributionView');
+  if (!wrap) return;
+  const holdings = (metrics.holdings || []).filter(h => isFinite(h.gainAmount) && Math.abs(h.gainPct || 0) < 500);
+  if (!holdings.length) { wrap.innerHTML = '<div class="neutral text-sm">No portfolio data yet.</div>'; return; }
+  const sorted = [...holdings].sort((a, b) => (b.gainAmount || 0) - (a.gainAmount || 0));
+  const winners = sorted.filter(h => (h.gainAmount || 0) > 0).slice(0, 5);
+  const losers  = sorted.filter(h => (h.gainAmount || 0) < 0).slice(-5).reverse();
+  const maxAbs = Math.max(...sorted.map(h => Math.abs(h.gainAmount || 0)), 1);
+  const row = (h, kind) => {
+    const amt = h.gainAmount || 0;
+    const pct = h.gainPct || 0;
+    const color = kind === 'win' ? 'var(--color-green)' : 'var(--color-red)';
+    const width = Math.max(2, (Math.abs(amt) / maxAbs) * 100);
+    const sign = amt >= 0 ? '+' : '−';
+    return `<div onclick="viewHolding('${h.id}')" style="padding:10px 12px;border-radius:8px;cursor:pointer;transition:background 0.12s;" onmouseover="this.style.background='var(--bg-panel-2)'" onmouseout="this.style.background='transparent'">
+      <div class="flex items-center justify-between mb-1">
+        <div style="min-width:0;overflow:hidden;">
+          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.symbol)}</div>
+          <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.name || h.symbol)} · ${sym}${fmt(h.currentValue)}</div>
+        </div>
+        <div class="text-right" style="flex-shrink:0;margin-left:10px;">
+          <div class="font-bold mono text-sm" style="color:${color};">${sign}${sym}${fmt(Math.abs(amt))}</div>
+          <div class="text-xs" style="color:${color};">${pct >= 0 ? '+' : ''}${fmt(pct)}%</div>
+        </div>
+      </div>
+      <div style="height:4px;background:var(--bg-deep);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${width}%;background:${color};border-radius:2px;"></div></div>
+    </div>`;
+  };
+  wrap.innerHTML = `
     <div>
-      <div class="text-sm font-semibold pos mb-3"><i class="fas fa-arrow-up mr-1"></i>Top Performers</div>
-      ${top.map(h => `
-        <div class="flex items-center justify-between py-2" style="border-bottom:1px solid #1a2540;">
-          <div>
-            <div class="font-semibold text-sm">${h.symbol}</div>
-            <div class="text-xs neutral">${sym}${fmt(h.currentValue)}</div>
-          </div>
-          <span class="badge-pos">+${fmt(h.gainPct)}%</span>
-        </div>`).join('') || '<div class="neutral text-sm">No data</div>'}
+      <div class="text-sm font-semibold mb-2" style="color:var(--color-green);"><i class="fas fa-arrow-trend-up mr-1"></i>Top contributors</div>
+      ${winners.length ? winners.map(h => row(h, 'win')).join('') : '<div class="neutral text-sm py-3">No winners yet.</div>'}
     </div>
     <div>
-      <div class="text-sm font-semibold neg mb-3"><i class="fas fa-arrow-down mr-1"></i>Underperformers</div>
-      ${bottom.map(h => `
-        <div class="flex items-center justify-between py-2" style="border-bottom:1px solid #1a2540;">
-          <div>
-            <div class="font-semibold text-sm">${h.symbol}</div>
-            <div class="text-xs neutral">${sym}${fmt(h.currentValue)}</div>
-          </div>
-          <span class="badge-neg">${fmt(h.gainPct)}%</span>
-        </div>`).join('') || '<div class="neutral text-sm">No underperformers</div>'}
+      <div class="text-sm font-semibold mb-2" style="color:var(--color-red);"><i class="fas fa-arrow-trend-down mr-1"></i>Biggest drag</div>
+      ${losers.length ? losers.map(h => row(h, 'loss')).join('') : '<div class="neutral text-sm py-3">No losers — well done.</div>'}
     </div>`;
+}
+
+// KPI STRIP + HEATMAP — both derived from snapshot history.
+async function renderPerfKpisAndHeatmap(sym) {
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  // Pull a generous slice of history (10y). loadSnapshotHistory lives in 50-portfolio.js or similar.
+  let history = [];
+  try { history = await loadSnapshotHistory(3650); } catch(e) { history = []; }
+  if (!history || history.length < 2) return;
+
+  // All-time return: last value vs first value (assumes consistent contributions
+  // don't dominate — simple TWR approximation good enough for the user view).
+  const first = Number(history[0].total_value) || 0;
+  const last  = Number(history[history.length - 1].total_value) || 0;
+  if (first > 0) {
+    const totalPct = ((last - first) / first) * 100;
+    setText('perfKpiTotal', (totalPct >= 0 ? '+' : '') + totalPct.toFixed(2) + '%');
+    document.getElementById('perfKpiTotal').style.color = totalPct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
+    setText('perfKpiTotalSub', `${sym}${fmt(first)} → ${sym}${fmt(last)}`);
+
+    // CAGR — annualised. Needs at least 30 days.
+    const days = (new Date(history[history.length - 1].snapshot_date) - new Date(history[0].snapshot_date)) / 86400000;
+    if (days >= 30) {
+      const years = Math.max(days / 365.25, 1 / 365.25);
+      const cagr = (Math.pow(last / first, 1 / years) - 1) * 100;
+      setText('perfKpiCagr', (cagr >= 0 ? '+' : '') + cagr.toFixed(2) + '%');
+      document.getElementById('perfKpiCagr').style.color = cagr >= 0 ? 'var(--color-blue)' : 'var(--color-red)';
+      setText('perfKpiCagrSub', `over ${days < 365 ? Math.round(days) + ' days' : (days / 365.25).toFixed(1) + ' years'}`);
+    }
+  }
+
+  // Bucket snapshots into monthly returns. Use last-snapshot-of-month value.
+  const byMonth = new Map();
+  history.forEach(h => {
+    const ym = (h.snapshot_date || '').slice(0, 7); // YYYY-MM
+    if (!ym) return;
+    byMonth.set(ym, Number(h.total_value) || 0);
+  });
+  const monthEntries = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  if (monthEntries.length < 2) return;
+  const monthlyReturns = [];
+  for (let i = 1; i < monthEntries.length; i++) {
+    const prev = monthEntries[i - 1][1];
+    const curr = monthEntries[i][1];
+    if (prev > 0) monthlyReturns.push({ ym: monthEntries[i][0], pct: ((curr - prev) / prev) * 100 });
+  }
+  if (!monthlyReturns.length) return;
+
+  const best  = monthlyReturns.reduce((a, b) => b.pct > a.pct ? b : a, monthlyReturns[0]);
+  const worst = monthlyReturns.reduce((a, b) => b.pct < a.pct ? b : a, monthlyReturns[0]);
+  setText('perfKpiBest', (best.pct >= 0 ? '+' : '') + best.pct.toFixed(2) + '%');
+  setText('perfKpiBestSub', _humanMonth(best.ym));
+  setText('perfKpiWorst', (worst.pct >= 0 ? '+' : '') + worst.pct.toFixed(2) + '%');
+  setText('perfKpiWorstSub', _humanMonth(worst.ym));
+
+  // ── HEATMAP — calendar grid: rows = years, cols = months Jan→Dec ────
+  const yearSet = new Set(monthlyReturns.map(m => m.ym.slice(0, 4)));
+  const years = [...yearSet].sort();
+  const lookup = new Map(monthlyReturns.map(m => [m.ym, m.pct]));
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  // Scale colour intensity. Cap at ±10% so single outliers don't wash out everything else.
+  const scale = (pct) => {
+    if (pct == null) return { bg: 'var(--bg-panel-2)', color: 'var(--text-muted)', text: '·' };
+    const clamped = Math.max(-10, Math.min(10, pct));
+    const intensity = Math.abs(clamped) / 10; // 0..1
+    if (pct >= 0) {
+      const a = 0.15 + intensity * 0.55;
+      return { bg: `rgba(16,185,129,${a.toFixed(2)})`, color: '#fff', text: pct.toFixed(1) + '%' };
+    } else {
+      const a = 0.15 + intensity * 0.55;
+      return { bg: `rgba(220,38,38,${a.toFixed(2)})`, color: '#fff', text: pct.toFixed(1) + '%' };
+    }
+  };
+  const headerRow = `<div style="display:grid;grid-template-columns:60px repeat(12, minmax(0, 1fr));gap:4px;margin-bottom:6px;">
+    <div></div>${monthNames.map(n => `<div class="text-xs neutral text-center" style="font-size:10px;">${n}</div>`).join('')}
+  </div>`;
+  const dataRows = years.map(y => {
+    const cells = monthNames.map((_, idx) => {
+      const ym = `${y}-${String(idx + 1).padStart(2, '0')}`;
+      const pct = lookup.get(ym);
+      const s = scale(pct);
+      return `<div style="aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:${s.bg};color:${s.color};border-radius:6px;font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;" title="${ym}${pct != null ? `: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : ' (no data)'}">${s.text}</div>`;
+    }).join('');
+    return `<div style="display:grid;grid-template-columns:60px repeat(12, minmax(0, 1fr));gap:4px;margin-bottom:4px;">
+      <div class="text-xs neutral" style="display:flex;align-items:center;">${y}</div>${cells}
+    </div>`;
+  }).join('');
+  const hm = document.getElementById('monthlyHeatmap');
+  if (hm) hm.innerHTML = headerRow + dataRows;
+  const legend = document.getElementById('heatmapLegend');
+  if (legend) legend.innerHTML = `<span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:rgba(220,38,38,0.7);border-radius:3px;"></span> down <span style="display:inline-block;width:12px;height:12px;background:rgba(16,185,129,0.7);border-radius:3px;margin-left:8px;"></span> up · capped at ±10%</span>`;
+}
+
+function _humanMonth(ym) {
+  if (!ym) return '';
+  const [y, m] = ym.split('-');
+  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${names[parseInt(m) - 1] || m} ${y}`;
 }
 
 // AI agents (AGENT_DEFS, callClaude, runAgents, setAgentState, renderInsightsSection, updateScoreRing, refreshSidebarScore, formatMarkdown) moved to js/70-ai.js
@@ -7787,10 +7993,7 @@ function toggleBenchmark(key) {
 function setSnapshotRange(days) {
   _snapshotDays = days;
   document.querySelectorAll('button[data-snap-range]').forEach(b => {
-    const isActive = parseInt(b.dataset.snapRange) === days;
-    b.style.background = isActive ? '#6366f1' : '';
-    b.style.color      = isActive ? 'white' : '';
-    b.classList.toggle('btn-secondary', !isActive);
+    b.classList.toggle('active', parseInt(b.dataset.snapRange) === days);
   });
   loadSnapshotChart();
 }
@@ -7798,10 +8001,7 @@ function setSnapshotRange(days) {
 function setSnapshotMode(mode) {
   _snapshotMode = mode;
   document.querySelectorAll('button[data-snap-mode]').forEach(b => {
-    const isActive = b.dataset.snapMode === mode;
-    b.style.background = isActive ? '#6366f1' : '';
-    b.style.color      = isActive ? 'white' : '';
-    b.classList.toggle('btn-secondary', !isActive);
+    b.classList.toggle('active', b.dataset.snapMode === mode);
   });
   loadSnapshotChart();
 }
