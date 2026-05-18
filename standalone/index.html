@@ -1675,15 +1675,20 @@
 
         <!-- Performance chart -->
         <div class="card p-5 lg:col-span-2">
-          <div class="section-title mb-4">
-            <i class="fas fa-chart-area" style="color:var(--color-green);"></i>
-            Performance
-            <div class="flex gap-2 ml-auto">
+          <div class="flex items-start justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <div class="section-title" style="margin:0;">
+                <i class="fas fa-chart-area" style="color:var(--color-green);"></i>
+                Performance
+              </div>
+              <div class="text-xs neutral mt-1">Your top 6 winners and 6 losers by the active metric.</div>
+            </div>
+            <div class="flex gap-2">
               <span class="tab active text-xs" onclick="switchPerfTab(this,'value')">Value</span>
               <span class="tab text-xs" onclick="switchPerfTab(this,'return')">Return %</span>
             </div>
           </div>
-          <div style="height:200px;">
+          <div style="height:260px;">
             <canvas id="perfChart"></canvas>
           </div>
         </div>
@@ -4735,15 +4740,34 @@ function renderAllocChart(metrics) {
 }
 
 function renderPerfChart(metrics) {
-  const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
-  const sorted = [...metrics.holdings].sort((a,b) => b.gain - a.gain);
-  const labels = sorted.map(h => h.symbol);
-  const values = state.perfMode === 'value'
-    ? sorted.map(h => h.gain)
-    : sorted.map(h => h.gainPct);
-
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
   if (charts.perf) charts.perf.destroy();
-  if (!labels.length) return;
+  if (!metrics.holdings.length) return;
+
+  // v0.12.2 — Overview chart was cramming 60+ ticker bars into a 200px-tall
+  // canvas, labels overlapped. Now: top 6 winners + top 6 losers by the
+  // active metric (gain $ or gain %). Cleaner read at a glance; the
+  // Performance page has the full contribution view for deep-dives.
+  const TAKE = 6;
+  const valueFor = (h) => state.perfMode === 'value' ? (h.gain || 0) : (h.gainPct || 0);
+  // Filter extreme outliers (likely pence/pound issues) when in % mode
+  const valid = metrics.holdings.filter(h => state.perfMode === 'value' ? true : Math.abs(h.gainPct || 0) < 500);
+  const sortedDesc = [...valid].sort((a, b) => valueFor(b) - valueFor(a));
+  const winners = sortedDesc.filter(h => valueFor(h) > 0).slice(0, TAKE);
+  const losers  = sortedDesc.filter(h => valueFor(h) < 0).slice(-TAKE).reverse();
+  const combined = [...winners, ...losers];
+  if (!combined.length) return;
+
+  const labels = combined.map(h => h.symbol);
+  const values = combined.map(valueFor);
+
+  // Read theme tokens so the chart auto-themes when CSS vars change
+  const style = getComputedStyle(document.documentElement);
+  const gridColor  = style.getPropertyValue('--chart-grid').trim() || 'rgba(30,45,74,0.4)';
+  const tickColor  = style.getPropertyValue('--chart-text').trim() || '#7a9cc0';
+  const greenSolid = style.getPropertyValue('--color-green').trim() || '#34d399';
+  const redSolid   = style.getPropertyValue('--color-red').trim()   || '#f87171';
+
   const ctx = document.getElementById('perfChart').getContext('2d');
   charts.perf = new Chart(ctx, {
     type: 'bar',
@@ -4752,17 +4776,37 @@ function renderPerfChart(metrics) {
       datasets: [{
         label: state.perfMode === 'value' ? 'P&L (' + sym + ')' : 'Return (%)',
         data: values,
-        backgroundColor: values.map(v => v >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)'),
-        borderColor: values.map(v => v >= 0 ? '#34d399' : '#f87171'),
-        borderWidth: 1, borderRadius: 4
+        backgroundColor: values.map(v => v >= 0 ? greenSolid + 'b3' : redSolid + 'b3'),
+        borderColor:     values.map(v => v >= 0 ? greenSolid        : redSolid),
+        borderWidth: 1, borderRadius: 6, maxBarThickness: 38
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const v = ctx.parsed.y;
+              return state.perfMode === 'value'
+                ? `${sym}${fmt(Math.abs(v))} ${v >= 0 ? 'gain' : 'loss'}`
+                : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+            }
+          }
+        }
+      },
       scales: {
-        x: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } },
-        y: { grid: { color: '#1e2d4a' }, ticks: { color: '#7a9cc0', font: { size: 11 } } }
+        x: {
+          grid: { display: false },
+          ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: false }
+        },
+        y: {
+          grid: { color: gridColor },
+          ticks: { color: tickColor, font: { size: 10 },
+            callback: (v) => state.perfMode === 'value' ? `${sym}${fmt(v)}` : `${v}%`
+          }
+        }
       }
     }
   });
@@ -8532,7 +8576,7 @@ ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct
           ${(h.symbol||'?').slice(0,3)}
         </div>
         <div style="min-width:0;overflow:hidden;">
-          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.symbol} <span class="text-xs neutral">${h.platform}</span>${ignoredBadge}</div>
+          <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.symbol}${_holdingSentimentDot(h.symbol)} <span class="text-xs neutral">${h.platform}</span>${ignoredBadge}</div>
           <div style="display:flex;align-items:center;">${liveTag}</div>
         </div>
       </div>
@@ -9548,6 +9592,81 @@ function _computeTickerSentiment(articles) {
   return m;
 }
 
+// Haiku-powered sentiment refinement. Sends all current headlines (title
+// only — keeps token count tiny) and asks Haiku to classify each as
+// bullish / bearish / neutral with confidence. Overwrites the keyword
+// scores in window._tickerSentiment. One call, ~1-2k tokens, much higher
+// quality than keyword matching. Stashes into state so it persists.
+async function refineSentimentWithAI() {
+  const btn = document.getElementById('refineSentimentBtn');
+  const articles = window._newsArticlesCache || [];
+  if (!articles.length) {
+    if (window.toast?.warning) toast.warning('Load news first — nothing to analyse.');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Analysing...'; }
+  try {
+    // Compact payload: just symbol + title. Strip duplicates.
+    const seen = new Set();
+    const payload = articles.filter(a => {
+      const key = (a.symbol || '') + '|' + (a.title || '').slice(0, 80);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return !!a.title;
+    }).slice(0, 120).map(a => ({ s: a.symbol, t: (a.title || '').slice(0, 140) }));
+
+    const prompt = `Classify each financial headline as bullish/bearish/neutral FOR THE NAMED TICKER. Reply with ONLY a JSON array — no prose. Each item: {"i": index, "v": "bullish"|"bearish"|"neutral"}.\n\nHeadlines:\n${payload.map((p, i) => `${i}. [${p.s}] ${p.t}`).join('\n')}`;
+
+    if (typeof callClaude !== 'function') throw new Error('AI module not loaded');
+    // Use a one-off Haiku call. callClaude requires an agent key from
+    // AGENT_DEFS — temporarily inject a 'sentiment' def.
+    if (typeof AGENT_DEFS !== 'undefined' && !AGENT_DEFS.sentiment) {
+      AGENT_DEFS.sentiment = {
+        label: 'Sentiment Refiner', model: 'claude-haiku-4-5',
+        modelOpenAI: 'local-model', maxTokens: 2000,
+        system: 'You are a financial-news sentiment classifier. Return ONLY valid JSON.'
+      };
+    }
+    const out = await callClaude('sentiment', prompt);
+
+    // Parse — be tolerant of extra prose around the JSON
+    const m = out.match(/\[[\s\S]+\]/);
+    if (!m) throw new Error('No JSON array in response');
+    const parsed = JSON.parse(m[0]);
+
+    // Rebuild _tickerSentiment from AI labels
+    const rebuilt = {};
+    parsed.forEach(({ i, v }) => {
+      const a = payload[i]; if (!a || !a.s) return;
+      const sym = a.s;
+      if (!rebuilt[sym]) rebuilt[sym] = { bullish: 0, bearish: 0, neutral: 0, score: 0 };
+      if (v === 'bullish') { rebuilt[sym].bullish++; rebuilt[sym].score++; }
+      else if (v === 'bearish') { rebuilt[sym].bearish++; rebuilt[sym].score--; }
+      else { rebuilt[sym].neutral++; }
+    });
+    Object.entries(rebuilt).forEach(([k, vv]) => {
+      vv.label = vv.score >= 1 ? 'bullish' : vv.score <= -1 ? 'bearish' : 'neutral';
+      vv.total = vv.bullish + vv.bearish + vv.neutral;
+    });
+    window._tickerSentiment = rebuilt;
+    if (state) {
+      state._sentimentRefinedAt = new Date().toISOString();
+      state._sentimentAI = true;
+      try { saveState(); } catch(e) {}
+    }
+    // Re-render the surfaces that show sentiment
+    renderSentimentRollup();
+    try { renderAll(); } catch(e) {}
+    try { renderNews(window._newsArticlesCache, Object.keys(rebuilt).length); } catch(e) {}
+    if (window.toast?.success) toast.success(`AI-refined sentiment for ${Object.keys(rebuilt).length} tickers`);
+  } catch(e) {
+    if (window.toast?.error) toast.error('Sentiment refine failed: ' + e.message);
+    console.warn('[sentiment] AI refine failed:', e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sparkles mr-1"></i>Refine with AI'; }
+  }
+}
+
 // Holdings-level rollup card on News > For You. Shows per-ticker
 // bullish/bearish/neutral counts so the user can scan "what's hot" at a glance.
 function renderSentimentRollup() {
@@ -9568,14 +9687,19 @@ function renderSentimentRollup() {
       <span class="text-xs neutral">${v.total} stor${v.total === 1 ? 'y' : 'ies'}</span>
     </div>`;
   };
+  const aiRefined = !!state?._sentimentAI;
   wrap.innerHTML = `
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
       <div class="flex items-center gap-2">
         <i class="fas fa-thermometer-half" style="color:var(--accent);font-size:16px;"></i>
         <span class="font-semibold">Sentiment Rollup</span>
+        <span class="iq-badge">${aiRefined ? 'IQ' : 'Beta'}</span>
         <span class="text-xs neutral">${entries.length} ticker${entries.length === 1 ? '' : 's'} with news</span>
       </div>
-      <span class="text-xs neutral">Keyword-based. Headline-only signal — not advice.</span>
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-xs neutral">${aiRefined ? 'AI-refined · headline-only · not advice' : 'Keyword-based · click Refine for AI classification'}</span>
+        <button id="refineSentimentBtn" onclick="refineSentimentWithAI()" class="btn btn-sm" style="background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-soft-2);font-size:11px;padding:4px 10px;"><i class="fas fa-sparkles mr-1"></i>${aiRefined ? 'Re-refine' : 'Refine with AI'}</button>
+      </div>
     </div>
     ${bull.length ? `<div class="text-xs uppercase neutral font-semibold mb-2 mt-3" style="letter-spacing:0.5px;color:var(--color-green);">Bullish · ${bull.length}</div>
       <div class="flex flex-wrap gap-2 mb-1">${bull.map(chip).join('')}</div>` : ''}
@@ -9601,8 +9725,12 @@ function _holdingSentimentDot(symbol) {
 function renderNews(articles, totalSymbols) {
   const wrap = document.getElementById('newsContent');
   if (!wrap) return;
-  // Compute sentiment up-front so each card and the rollup share it
-  _computeTickerSentiment(articles || []);
+  // Cache for the AI sentiment refiner (lives at module scope, reused)
+  window._newsArticlesCache = articles || [];
+  // Compute sentiment up-front so each card and the rollup share it.
+  // If AI-refined sentiment already exists (from a previous Refine click
+  // this session), keep it — don't clobber with keyword scores.
+  if (!state?._sentimentAI) _computeTickerSentiment(articles || []);
   // Render the rollup card immediately (it lives outside #newsContent)
   try { renderSentimentRollup(); } catch(e) {}
   const fmtTime = (iso) => {
@@ -10901,6 +11029,17 @@ async function init() {
     renderInsightsSection(state.agentResults);
     if (state.agentResults.portfolioScore) updateScoreRing(state.agentResults.portfolioScore);
   }
+
+  // v0.12.2 — Pre-fetch news in the background so sentiment dots show on
+  // Overview + Holdings cards before the user navigates to News. Cheap:
+  // /api/news is cached server-side for 30 min. Errors swallow silently.
+  setTimeout(() => {
+    if (typeof loadNews === 'function') {
+      loadNews().then(() => {
+        try { renderAll(); } catch(e) {}
+      }).catch(() => {});
+    }
+  }, 1500);
 }
 
 if (document.readyState === 'loading') {
