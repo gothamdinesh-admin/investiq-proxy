@@ -2151,6 +2151,9 @@
         </div>
       </div>
 
+      <!-- SENTIMENT ROLLUP — per-ticker bullish/bearish counts from news (For You tab) -->
+      <div class="card mb-6" data-news-tab="foryou" id="newsSentimentRollup" style="padding:18px 20px;display:none;border-left:3px solid var(--accent);"></div>
+
       <!-- YOUR TICKERS — Yahoo per-ticker news (For You tab) -->
       <div class="card" data-news-tab="foryou" style="padding:18px 20px;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -4606,7 +4609,7 @@ function renderHoldingsTable(metrics) {
               ${(h.symbol||'?').slice(0,3).toUpperCase()}
             </div>
             <div class="overview-mobile-meta">
-              <div class="overview-mobile-symbol">${h.symbol}</div>
+              <div class="overview-mobile-symbol">${h.symbol}${_holdingSentimentDot(h.symbol)}</div>
               <div class="overview-mobile-name">${h.name || h.platform} <span class="${getTagClass(h.type)}" style="margin-left:6px;">${h.type}</span></div>
             </div>
           </div>
@@ -5125,12 +5128,30 @@ async function renderPerfKpisAndHeatmap(sym) {
   }
   if (!monthlyReturns.length) return;
 
-  const best  = monthlyReturns.reduce((a, b) => b.pct > a.pct ? b : a, monthlyReturns[0]);
-  const worst = monthlyReturns.reduce((a, b) => b.pct < a.pct ? b : a, monthlyReturns[0]);
-  setText('perfKpiBest', (best.pct >= 0 ? '+' : '') + best.pct.toFixed(2) + '%');
-  setText('perfKpiBestSub', _humanMonth(best.ym));
-  setText('perfKpiWorst', (worst.pct >= 0 ? '+' : '') + worst.pct.toFixed(2) + '%');
-  setText('perfKpiWorstSub', _humanMonth(worst.ym));
+  // Best/Worst month — only meaningful with at least 2 month-over-month
+  // returns. With 1 month, best === worst (same data point), which looked
+  // like a bug. Show clear messaging for the 1-month case.
+  if (monthlyReturns.length < 2) {
+    const only = monthlyReturns[0];
+    if (only.pct >= 0) {
+      setText('perfKpiBest', (only.pct >= 0 ? '+' : '') + only.pct.toFixed(2) + '%');
+      setText('perfKpiBestSub', _humanMonth(only.ym) + ' · only month so far');
+      setText('perfKpiWorst', '–');
+      setText('perfKpiWorstSub', 'Need ≥2 months of history');
+    } else {
+      setText('perfKpiBest', '–');
+      setText('perfKpiBestSub', 'Need ≥2 months of history');
+      setText('perfKpiWorst', only.pct.toFixed(2) + '%');
+      setText('perfKpiWorstSub', _humanMonth(only.ym) + ' · only month so far');
+    }
+  } else {
+    const best  = monthlyReturns.reduce((a, b) => b.pct > a.pct ? b : a, monthlyReturns[0]);
+    const worst = monthlyReturns.reduce((a, b) => b.pct < a.pct ? b : a, monthlyReturns[0]);
+    setText('perfKpiBest', (best.pct >= 0 ? '+' : '') + best.pct.toFixed(2) + '%');
+    setText('perfKpiBestSub', _humanMonth(best.ym));
+    setText('perfKpiWorst', (worst.pct >= 0 ? '+' : '') + worst.pct.toFixed(2) + '%');
+    setText('perfKpiWorstSub', _humanMonth(worst.ym));
+  }
 
   // ── HEATMAP — calendar grid: rows = years, cols = months Jan→Dec ────
   const yearSet = new Set(monthlyReturns.map(m => m.ym.slice(0, 4)));
@@ -9469,9 +9490,121 @@ async function loadNewsAll(forceRefresh = false) {
   ]);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// SENTIMENT SCORING — keyword-based, zero API cost. Scans title + summary
+// for bullish / bearish phrasing. Returns:
+//   { score: number (positive = bullish, negative = bearish, 0 = neutral),
+//     label: 'bullish'|'bearish'|'neutral', tone: hex colour code }
+// Aggregated per ticker for the Holdings rollup and per news card chip.
+// Not a replacement for a real NLP sentiment model — but a useful signal
+// that runs instantly on the client.
+const _SENT_BULLISH = [
+  'beat estimates','beats estimates','beat expectations','outperform','outperformed','upgrade','upgraded',
+  'rally','rallied','surge','surged','soar','soared','jump','jumped','climb','climbed','rise','gains',
+  'record high','all-time high','strong growth','raised guidance','raises guidance','dividend hike',
+  'buyback','share buyback','expansion','acquire','acquisition','approved','breakthrough','milestone',
+  'positive results','strong demand','partnership','new contract','wins contract','better than expected'
+];
+const _SENT_BEARISH = [
+  'miss','missed','missed estimates','downgrade','downgraded','underperform','plunge','plunged','tumble','tumbled',
+  'slump','slumped','crash','crashed','fall','fell','drop','dropped','decline','declined','sink','sank',
+  'concern','concerns','warning','warned','lawsuit','probe','investigation','fine','settlement','recall',
+  'cut guidance','cuts guidance','layoffs','layoff','restructuring','bankruptcy','delisting','halted',
+  'weak demand','disappointing','below expectations','loss','losses','default','sec probe'
+];
+function _scoreArticleSentiment(article) {
+  const text = ((article.title || '') + ' ' + (article.summary || '')).toLowerCase();
+  if (!text.trim()) return { score: 0, label: 'neutral' };
+  let score = 0;
+  for (const kw of _SENT_BULLISH) if (text.includes(kw)) score++;
+  for (const kw of _SENT_BEARISH) if (text.includes(kw)) score--;
+  let label = 'neutral';
+  if (score >= 1)  label = 'bullish';
+  if (score <= -1) label = 'bearish';
+  return { score, label };
+}
+function _sentimentChip(s) {
+  if (s.label === 'bullish') return `<span class="text-xs" style="padding:1px 6px;border-radius:4px;background:rgba(16,185,129,0.15);color:var(--color-green);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:0.4px;"><i class="fas fa-arrow-trend-up" style="font-size:8px;"></i> Bullish</span>`;
+  if (s.label === 'bearish') return `<span class="text-xs" style="padding:1px 6px;border-radius:4px;background:rgba(220,38,38,0.15);color:var(--color-red);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:0.4px;"><i class="fas fa-arrow-trend-down" style="font-size:8px;"></i> Bearish</span>`;
+  return '';
+}
+// Per-ticker sentiment rollup. Returns map: symbol -> { bullish, bearish, neutral, score, label }
+function _computeTickerSentiment(articles) {
+  const m = {};
+  (articles || []).forEach(a => {
+    const sym = a.symbol;
+    if (!sym) return;
+    if (!m[sym]) m[sym] = { bullish: 0, bearish: 0, neutral: 0, score: 0 };
+    const s = _scoreArticleSentiment(a);
+    m[sym][s.label]++;
+    m[sym].score += s.score;
+  });
+  Object.entries(m).forEach(([k, v]) => {
+    v.label = v.score >= 1 ? 'bullish' : v.score <= -1 ? 'bearish' : 'neutral';
+    v.total = v.bullish + v.bearish + v.neutral;
+  });
+  // Stash on window for the Holdings rollup card to read without re-fetching
+  window._tickerSentiment = m;
+  return m;
+}
+
+// Holdings-level rollup card on News > For You. Shows per-ticker
+// bullish/bearish/neutral counts so the user can scan "what's hot" at a glance.
+function renderSentimentRollup() {
+  const map = window._tickerSentiment || {};
+  const entries = Object.entries(map).sort((a, b) => b[1].score - a[1].score);
+  const wrap = document.getElementById('newsSentimentRollup');
+  if (!wrap) return;
+  if (!entries.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const bull = entries.filter(([_, v]) => v.label === 'bullish');
+  const bear = entries.filter(([_, v]) => v.label === 'bearish');
+  const neut = entries.filter(([_, v]) => v.label === 'neutral');
+  const chip = ([sym, v]) => {
+    const colour = v.label === 'bullish' ? 'var(--color-green)' : v.label === 'bearish' ? 'var(--color-red)' : 'var(--text-muted)';
+    return `<div class="flex items-center gap-2" style="padding:6px 10px;border-radius:8px;background:var(--bg-panel-2);border:1px solid ${colour}33;">
+      <span class="font-semibold text-sm" style="color:var(--text-primary);">${_escape(sym)}</span>
+      <span class="text-xs" style="color:${colour};font-weight:700;">${v.score >= 0 ? '+' : ''}${v.score}</span>
+      <span class="text-xs neutral">${v.total} stor${v.total === 1 ? 'y' : 'ies'}</span>
+    </div>`;
+  };
+  wrap.innerHTML = `
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div class="flex items-center gap-2">
+        <i class="fas fa-thermometer-half" style="color:var(--accent);font-size:16px;"></i>
+        <span class="font-semibold">Sentiment Rollup</span>
+        <span class="text-xs neutral">${entries.length} ticker${entries.length === 1 ? '' : 's'} with news</span>
+      </div>
+      <span class="text-xs neutral">Keyword-based. Headline-only signal — not advice.</span>
+    </div>
+    ${bull.length ? `<div class="text-xs uppercase neutral font-semibold mb-2 mt-3" style="letter-spacing:0.5px;color:var(--color-green);">Bullish · ${bull.length}</div>
+      <div class="flex flex-wrap gap-2 mb-1">${bull.map(chip).join('')}</div>` : ''}
+    ${bear.length ? `<div class="text-xs uppercase neutral font-semibold mb-2 mt-3" style="letter-spacing:0.5px;color:var(--color-red);">Bearish · ${bear.length}</div>
+      <div class="flex flex-wrap gap-2 mb-1">${bear.map(chip).join('')}</div>` : ''}
+    ${neut.length ? `<div class="text-xs uppercase neutral font-semibold mb-2 mt-3" style="letter-spacing:0.5px;">Neutral · ${neut.length}</div>
+      <div class="flex flex-wrap gap-2">${neut.map(chip).join('')}</div>` : ''}`;
+}
+
+// Inline sentiment dot used on Overview holding cards + Holdings page —
+// reads from the cached news sentiment rollup. Empty string when no
+// sentiment data yet (news section hasn't been visited or no news for
+// this ticker), so the holding card looks normal until data exists.
+function _holdingSentimentDot(symbol) {
+  const t = window._tickerSentiment?.[symbol];
+  if (!t || !t.total) return '';
+  const tip = `News sentiment: ${t.label} (${t.bullish} bullish · ${t.bearish} bearish · ${t.neutral} neutral)`;
+  const colour = t.label === 'bullish' ? 'var(--color-green)' : t.label === 'bearish' ? 'var(--color-red)' : 'var(--text-muted)';
+  const icon = t.label === 'bullish' ? '▲' : t.label === 'bearish' ? '▼' : '•';
+  return `<span title="${tip}" style="margin-left:6px;color:${colour};font-size:11px;font-weight:700;vertical-align:middle;">${icon}</span>`;
+}
+
 function renderNews(articles, totalSymbols) {
   const wrap = document.getElementById('newsContent');
   if (!wrap) return;
+  // Compute sentiment up-front so each card and the rollup share it
+  _computeTickerSentiment(articles || []);
+  // Render the rollup card immediately (it lives outside #newsContent)
+  try { renderSentimentRollup(); } catch(e) {}
   const fmtTime = (iso) => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -9514,17 +9647,27 @@ function renderNews(articles, totalSymbols) {
     const providerLine = isFund(h)
       ? `<div class="text-xs neutral mt-1">${_escape(h.provider || 'Managed fund')}${h.currentPrice ? ` · last unit price <b>NZ$${h.currentPrice.toFixed(4)}</b>` : ''}${h.manualPriceDate ? ` <span class="neutral">(as of ${_escape(h.manualPriceDate)})</span>` : ''}</div>`
       : '';
-    const headlines = items.slice(0, 5).map(a => `
-      <a href="${_escape(a.url)}" target="_blank" rel="noopener" class="news-headline" style="display:flex;gap:10px;padding:10px 12px;border-radius:8px;text-decoration:none;color:inherit;border:1px solid var(--border);background:var(--bg-panel-2);transition:border-color 0.12s,background 0.12s;">
+    const headlines = items.slice(0, 5).map(a => {
+      const s = _scoreArticleSentiment(a);
+      return `<a href="${_escape(a.url)}" target="_blank" rel="noopener" class="news-headline" style="display:flex;gap:10px;padding:10px 12px;border-radius:8px;text-decoration:none;color:inherit;border:1px solid var(--border);background:var(--bg-panel-2);transition:border-color 0.12s,background 0.12s;">
         ${a.thumbnail ? `<img src="${_escape(a.thumbnail)}" alt="" style="width:64px;height:48px;object-fit:cover;border-radius:6px;flex-shrink:0;background:var(--bg-deep);" onerror="this.style.display='none'">` : ''}
         <div style="flex:1;min-width:0;">
           <div class="text-sm font-semibold" style="color:var(--text-primary);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${_escape(a.title)}</div>
-          <div class="flex items-center gap-2 mt-1">
+          <div class="flex items-center gap-2 mt-1 flex-wrap">
             <span class="text-xs neutral">${_escape(a.publisher || '')}</span>
+            ${_sentimentChip(s)}
             <span class="text-xs neutral" style="margin-left:auto;">${fmtTime(a.published)}</span>
           </div>
         </div>
-      </a>`).join('');
+      </a>`;
+    }).join('');
+    // Per-ticker sentiment chip — sum of all article scores
+    const tickerSent = (window._tickerSentiment || {})[sym];
+    const sentBadge = tickerSent && tickerSent.total ? (() => {
+      const colour = tickerSent.label === 'bullish' ? 'var(--color-green)' : tickerSent.label === 'bearish' ? 'var(--color-red)' : 'var(--text-muted)';
+      const icon = tickerSent.label === 'bullish' ? 'fa-arrow-trend-up' : tickerSent.label === 'bearish' ? 'fa-arrow-trend-down' : 'fa-minus';
+      return `<span class="text-xs" style="padding:2px 8px;border-radius:9999px;background:${colour}1f;color:${colour};border:1px solid ${colour}55;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;font-size:9px;"><i class="fas ${icon} mr-1" style="font-size:8px;"></i>${tickerSent.label} ${tickerSent.score > 0 ? '+' : ''}${tickerSent.score}</span>`;
+    })() : '';
     return `<div class="card p-4 mb-3">
       <div class="flex items-start justify-between gap-3 mb-3">
         <div style="min-width:0;">
@@ -9532,6 +9675,7 @@ function renderNews(articles, totalSymbols) {
             <span class="font-bold" style="color:var(--accent);font-size:14px;">${_escape(sym)}</span>
             <span class="text-sm" style="color:var(--text-primary);">${_escape(name)}</span>
             ${typeChip}
+            ${sentBadge}
           </div>
           ${providerLine}
         </div>
@@ -10773,7 +10917,11 @@ function showSection(name, el) {
   });
   // v0.10 — render the Market Pulse personal exposure card when its
   // section opens. Cheap, recalculated from current portfolio metrics.
-  if (name === 'market') { try { renderMarketExposure(); } catch(e) { console.warn('exposure', e); } }
+  if (name === 'market') {
+    try { renderMarketExposure(); } catch(e) { console.warn('exposure', e); }
+    try { renderMarketImpactCard(); } catch(e) { console.warn('impact', e); }
+  }
+  if (name === 'news') { try { renderSentimentRollup(); } catch(e) {} }
   if (name === 'news') { try { switchNewsTab(_currentNewsTab || 'foryou'); } catch(e) {} }
 }
 
@@ -10793,33 +10941,77 @@ function switchNewsTab(tab) {
 // Build the "Your Exposure" mini-tiles on the Market section. Pulls from
 // the live portfolio: biggest currency exposure, top sector, top region,
 // and today's portfolio % vs the S&P 500 from indices grid (if loaded).
+// Pull the Market Impact agent output into the Portfolio Impact Analysis
+// card on the Market Pulse section. Was rendering empty even after a
+// full agent run because nothing wired it up.
+function renderMarketImpactCard() {
+  const el = document.getElementById('marketImpact');
+  if (!el) return;
+  const txt = state?.agentResults?.marketAnalysis;
+  if (txt && txt.trim()) {
+    el.innerHTML = (typeof formatMarkdown === 'function')
+      ? formatMarkdown(txt)
+      : txt.replace(/\n/g, '<br>');
+    el.style.color = 'var(--text-body)';
+  } else {
+    el.innerHTML = `Run <b>AI Agents</b> from the Insights section to see how current market conditions affect <i>your</i> portfolio. The Market Impact agent's output appears here.`;
+    el.style.color = 'var(--text-secondary)';
+  }
+}
+
+// Best-effort region from ticker suffix when h.region is blank — better
+// than "Unknown". NZ funds are NZ; .NZ is NZ; .AX is Australia; .L is UK;
+// .HK is Hong Kong; .TO is Canada; bare ticker assumed US.
+function _regionFromSymbol(h) {
+  const s = (h.symbol || '').toUpperCase();
+  if (h.type === 'fund' || h.type === 'kiwisaver') return 'New Zealand';
+  if (h.type === 'crypto' || /-USD$/.test(s)) return 'Global (Crypto)';
+  if (s.endsWith('.NZ')) return 'New Zealand';
+  if (s.endsWith('.AX')) return 'Australia';
+  if (s.endsWith('.L') || s.endsWith('.IL')) return 'United Kingdom';
+  if (s.endsWith('.HK')) return 'Hong Kong';
+  if (s.endsWith('.TO')) return 'Canada';
+  if (s.endsWith('.DE') || s.endsWith('.PA')) return 'Europe';
+  if (s.endsWith('.T'))  return 'Japan';
+  return 'United States';
+}
+// Fallback sector when h.sector is blank — uses type as a proxy.
+function _typeFallbackSector(h) {
+  switch (h.type) {
+    case 'crypto':    return 'Cryptocurrency';
+    case 'etf':       return 'ETF';
+    case 'fund':      return 'Managed Fund';
+    case 'kiwisaver': return 'KiwiSaver';
+    case 'bond':      return 'Bond';
+    case 'cash':      return 'Cash';
+    default:          return 'Other';
+  }
+}
+
 function renderMarketExposure() {
-  const holdings = (state?.portfolio || []).filter(h => !h.ignored);
-  if (!holdings.length) return; // tiles keep their '–' placeholders
-  // Aggregate value per currency / sector / region (use NZD-converted value)
-  const fxToNZD = (window._fxToNZD) || {};
-  const valueIn = (h) => {
-    const v = (h.currentPrice || 0) * (h.qty || 0);
-    if (!h.currency || h.currency === 'NZD') return v;
-    const r = fxToNZD[h.currency] || h.fxToBase || 1;
-    return v * r;
-  };
-  const totalVal = holdings.reduce((s, h) => s + valueIn(h), 0) || 1;
+  // Use getMetrics() output — it already has the NZD-converted currentValue
+  // per holding (was previously trying to recompute with wrong field names
+  // h.qty + h.currentPrice + h.fxToBase which left values at 0).
+  const metrics = (typeof getMetrics === 'function') ? getMetrics() : null;
+  const holdings = (metrics?.holdings || []).filter(h => !h.ignored && (h.currentValue || 0) > 0);
+  if (!holdings.length) return;
+  const totalVal = holdings.reduce((s, h) => s + (h.currentValue || 0), 0) || 1;
+  const valueIn = (h) => h.currentValue || 0;
   const bucketize = (keyFn) => {
     const m = {};
     holdings.forEach(h => { const k = keyFn(h) || 'Unknown'; m[k] = (m[k] || 0) + valueIn(h); });
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   };
-  const byCurrency = bucketize(h => h.currency || 'NZD');
-  const bySector   = bucketize(h => h.sector || h.industry || 'Other');
-  const byRegion   = bucketize(h => h.region || h.exchangeRegion || h.country || 'Unknown');
+  const byCurrency = bucketize(h => (h.currency || 'NZD').toUpperCase());
+  const bySector   = bucketize(h => h.sector || h.industry || _typeFallbackSector(h));
+  const byRegion   = bucketize(h => h.region || h.exchangeRegion || h.country || _regionFromSymbol(h));
   const setTile = (id, label, hintId, hint) => {
     const el = document.getElementById(id); if (el) el.textContent = label;
     const h = document.getElementById(hintId); if (h) h.textContent = hint;
   };
   const pct = (v) => ((v / totalVal) * 100).toFixed(0) + '%';
   if (byCurrency[0]) setTile('expCurrency', byCurrency[0][0],            'expCurrencyHint', `${pct(byCurrency[0][1])} of portfolio`);
-  if (bySector[0])   setTile('expSector',   bySector[0][0].slice(0, 14), 'expSectorHint',   `${pct(bySector[0][1])} of portfolio`);
+  if (bySector[0])   setTile('expSector',   bySector[0][0].slice(0, 18), 'expSectorHint',   `${pct(bySector[0][1])} of portfolio`);
   if (byRegion[0])   setTile('expRegion',   byRegion[0][0],              'expRegionHint',   `${pct(byRegion[0][1])} of portfolio`);
 
   // Today's portfolio % vs S&P 500 — derived from holding dayChangePct

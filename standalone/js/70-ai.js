@@ -7,6 +7,11 @@
 //   renderQuickInsights(), logActivity(), toast.
 // ═══════════════════════════════════════════════════════════════════════
 
+// Expand or collapse every agent-report <details> card in one click.
+function toggleAllAgentReports(open) {
+  document.querySelectorAll('.agent-report').forEach(el => { el.open = !!open; });
+}
+
 // KPI tile click target — open the matching <details> panel, smooth-scroll
 // to it, then pulse-highlight. Panels are <details> elements so this just
 // sets the `open` attribute.
@@ -198,9 +203,15 @@ function renderInsightsSection(results) {
   };
 
   document.getElementById('insightsContent').innerHTML = kpiStrip + heroHtml + actionItemHtml + `
-    <div class="text-xs uppercase neutral font-semibold mb-3 mt-4 flex items-center gap-2" style="letter-spacing:0.6px;">
-      <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
-      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click any card to expand · or tap a KPI tile above to jump</span>
+    <div class="flex items-center justify-between mb-3 mt-4 flex-wrap gap-2">
+      <div class="text-xs uppercase neutral font-semibold flex items-center gap-2" style="letter-spacing:0.6px;">
+        <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
+        <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">tap any card to expand</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <button onclick="toggleAllAgentReports(true)"  class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-chevron-down mr-1"></i>Expand all</button>
+        <button onclick="toggleAllAgentReports(false)" class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 10px;"><i class="fas fa-chevron-up mr-1"></i>Collapse all</button>
+      </div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       ${agentCard('fas fa-heartbeat',     'Portfolio Health',  'var(--color-green)',  results.healthAnalysis,  'portfolio',   'agent-report-portfolio')}
