@@ -994,6 +994,14 @@
     }
     .agent-pulse { animation: agentPulse 1.4s ease-out 1; }
 
+    /* Agent report <details> panels — consistent collapsible styling */
+    .agent-report > summary { -webkit-tap-highlight-color: transparent; user-select: none; }
+    .agent-report > summary::-webkit-details-marker { display: none; }
+    .agent-report > summary::marker { display: none; content: ''; }
+    .agent-report .agent-report-chev { transition: transform 0.18s ease; }
+    .agent-report[open] .agent-report-chev { transform: rotate(180deg); }
+    .agent-report[open] > summary { padding-bottom: 6px; }
+
     /* ═══════════════════════════════════════════════════════════════════
        MOBILE DRAWER — slide-in side panel surfacing every section + key
        action when the user taps the hamburger. Off-canvas, transform

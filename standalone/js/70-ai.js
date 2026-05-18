@@ -7,14 +7,23 @@
 //   renderQuickInsights(), logActivity(), toast.
 // ═══════════════════════════════════════════════════════════════════════
 
-// Scroll a KPI tile's target agent-report card into view and pulse-highlight it.
-// Wired to the KPI-tile click handlers in renderInsightsSection.
+// KPI tile click target — open the matching <details> panel, smooth-scroll
+// to it, then pulse-highlight. Panels are <details> elements so this just
+// sets the `open` attribute.
 function focusAgentReport(elementId) {
   const el = document.getElementById(elementId);
   if (!el) return;
+  // If the user keeps clicking the same tile, toggle the panel closed/open
+  // so it doesn't feel "stuck". First click opens; same tile clicked again
+  // when already open + in view = close. Different tile = always open it.
+  const inView = (() => {
+    const r = el.getBoundingClientRect();
+    return r.top >= 0 && r.top < window.innerHeight * 0.5;
+  })();
+  if (el.open && inView) { el.open = false; return; }
+  el.open = true;
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   el.classList.remove('agent-pulse');
-  // force reflow so the animation restarts if user clicks the same tile twice
   void el.offsetWidth;
   el.classList.add('agent-pulse');
 }
@@ -156,37 +165,42 @@ function renderInsightsSection(results) {
       </div>
     </div>`;
 
-  // ── Per-agent detail (always-open cards — uniform layout, no more mix
-  // of expanded/collapsed). Empty-state shows a Run-only-this button so
-  // missing agents stand out and can be filled in individually. ──
+  // ── Per-agent detail — collapsible <details> elements that ALL start
+  // closed by default (consistent — no auto-open asymmetry). Click the
+  // summary to expand, or click a KPI tile above which programmatically
+  // opens its matching panel + scrolls + pulse-highlights. Empty agents
+  // show their empty state inline inside the closed panel preview. ──
   const agentCard = (icon, title, color, body, agentKey, anchorId) => {
     const hasBody = !!(body && body.trim());
-    const emptyState = `
-      <div class="text-center py-6">
-        <i class="${icon}" style="color:${color};font-size:32px;opacity:0.35;"></i>
-        <div class="text-sm neutral mt-3 mb-3">No output yet for this agent.</div>
-        <button onclick="runSingleAgent('${agentKey}')" class="btn btn-sm" style="background:${color}1f;color:${color};border:1px solid ${color}55;">
-          <i class="fas fa-play mr-1"></i>Run only this
-        </button>
-      </div>`;
-    return `<div id="${anchorId}" class="card p-5" style="border-left:3px solid ${color};scroll-margin-top:20px;">
-      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <div class="flex items-center gap-2">
-          <i class="${icon}" style="color:${color};font-size:16px;"></i>
+    const previewBody = hasBody
+      ? `<div class="prose-sm pt-3" style="color:var(--text-body);line-height:1.7;font-size:13px;border-top:1px solid var(--border);">${formatMarkdown(body)}</div>`
+      : `<div class="text-center py-6" style="border-top:1px solid var(--border);padding-top:18px;margin-top:6px;">
+           <i class="${icon}" style="color:${color};font-size:28px;opacity:0.35;"></i>
+           <div class="text-sm neutral mt-3 mb-3">No output yet for this agent.</div>
+           <button onclick="event.stopPropagation();runSingleAgent('${agentKey}')" class="btn btn-sm" style="background:${color}1f;color:${color};border:1px solid ${color}55;">
+             <i class="fas fa-play mr-1"></i>Run only this
+           </button>
+         </div>`;
+    return `<details id="${anchorId}" class="card p-5 agent-report" style="border-left:3px solid ${color};scroll-margin-top:20px;">
+      <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div class="flex items-center gap-2" style="min-width:0;">
+          <i class="${icon}" style="color:${color};font-size:16px;flex-shrink:0;"></i>
           <span class="font-semibold" style="color:${color};">${title}</span>
+          ${!hasBody ? `<span class="text-xs neutral" style="margin-left:6px;font-style:italic;">(empty)</span>` : ''}
         </div>
-        ${hasBody ? `<button onclick="runSingleAgent('${agentKey}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 9px;" title="Re-run only this agent"><i class="fas fa-redo mr-1"></i>Re-run</button>` : ''}
-      </div>
-      ${hasBody
-        ? `<div class="prose-sm pt-3" style="color:var(--text-body);line-height:1.7;font-size:13px;border-top:1px solid var(--border);">${formatMarkdown(body)}</div>`
-        : emptyState}
-    </div>`;
+        <div class="flex items-center gap-2">
+          ${hasBody ? `<button onclick="event.stopPropagation();event.preventDefault();runSingleAgent('${agentKey}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 9px;" title="Re-run only this agent"><i class="fas fa-redo"></i></button>` : ''}
+          <i class="fas fa-chevron-down text-xs neutral agent-report-chev"></i>
+        </div>
+      </summary>
+      ${previewBody}
+    </details>`;
   };
 
   document.getElementById('insightsContent').innerHTML = kpiStrip + heroHtml + actionItemHtml + `
     <div class="text-xs uppercase neutral font-semibold mb-3 mt-4 flex items-center gap-2" style="letter-spacing:0.6px;">
       <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
-      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click a KPI tile above to jump</span>
+      <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;">click any card to expand · or tap a KPI tile above to jump</span>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       ${agentCard('fas fa-heartbeat',     'Portfolio Health',  'var(--color-green)',  results.healthAnalysis,  'portfolio',   'agent-report-portfolio')}
