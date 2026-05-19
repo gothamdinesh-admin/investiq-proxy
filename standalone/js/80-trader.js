@@ -72,10 +72,13 @@ async function loadTradesFromCloud() {
     }
     _tradeSetupsCache = setups || [];
 
-    // Seed default setups for first-time users (table exists but empty)
+    // Seed default setups for first-time users (table exists but empty).
+    // Supabase query builders don't expose .catch directly — await + try
+    // is the right pattern.
     if (_tradeSetupsCache.length === 0) {
       for (const def of _DEFAULT_TRADE_SETUPS) {
-        await _supabase.from('trade_setups').insert(def).catch(() => {});
+        try { await _supabase.from('trade_setups').insert(def); }
+        catch(insErr) { console.warn('[trader] seed setup failed for', def.name, insErr); }
       }
       const { data: refreshed } = await _supabase.from('trade_setups').select('*').order('name');
       _tradeSetupsCache = refreshed || [];
