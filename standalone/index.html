@@ -2233,34 +2233,35 @@
 
     <!-- NZ TAX (FIF) SECTION -->
     <div id="section-tax" style="display:none;">
-      <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-receipt" style="color:var(--color-green);"></i>NZ Foreign Investment Fund (FIF) Check
           </h2>
           <div class="text-xs neutral mt-1">
             NZ residents: if the <b>original cost</b> of your overseas investments exceeds NZD $50,000 at any time during the year, you generally owe FIF income tax.
-            <span style="color:#fbbf24;">This is analysis only, not tax advice — talk to an accountant.</span>
+            <span style="color:var(--color-amber);">This is analysis only, not tax advice — talk to an accountant.</span>
           </div>
         </div>
         <button onclick="refreshFIF()" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Recalculate</button>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="metric-card">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Overseas Cost Basis (NZD)</div>
-          <div class="text-2xl font-bold mono" id="fifCostBasis">NZ$0</div>
-          <div class="text-xs mt-2" id="fifThresholdHint" style="color:#4a6080;">NZ$50,000 threshold</div>
+      <!-- v0.15 — FIF KPI strip styled to match every other section -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Overseas Cost Basis</div>
+          <div class="text-2xl font-bold mono mt-1" id="fifCostBasis" style="color:var(--color-green);line-height:1.1;">NZ$0</div>
+          <div class="text-xs neutral mt-1" id="fifThresholdHint">NZ$50,000 threshold</div>
         </div>
-        <div class="metric-card">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">FIF Status</div>
-          <div class="text-2xl font-bold" id="fifStatus">—</div>
-          <div class="text-xs mt-2" id="fifStatusHint" style="color:#4a6080;">Calculating…</div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">FIF Status</div>
+          <div class="text-2xl font-bold mt-1" id="fifStatus" style="color:var(--color-amber);line-height:1.1;">—</div>
+          <div class="text-xs neutral mt-1" id="fifStatusHint">Calculating…</div>
         </div>
-        <div class="metric-card">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Estimated FIF Income (FDR 5%)</div>
-          <div class="text-2xl font-bold mono" id="fifFdrEstimate">NZ$0</div>
-          <div class="text-xs mt-2" style="color:#4a6080;">Fair Dividend Rate method</div>
+        <div class="card2 p-4" style="border-left:3px solid var(--accent);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Est. FIF Income (FDR 5%)</div>
+          <div class="text-2xl font-bold mono mt-1" id="fifFdrEstimate" style="color:var(--accent);line-height:1.1;">NZ$0</div>
+          <div class="text-xs neutral mt-1">Fair Dividend Rate · conservative view</div>
         </div>
       </div>
 
@@ -2269,12 +2270,15 @@
         <div id="fifHoldingsTable"></div>
       </div>
 
-      <div class="card p-5">
-        <div class="text-sm mb-3" style="color:#c8d6ef;font-weight:600;">About the FIF rules</div>
-        <div class="text-xs neutral" style="line-height:1.8;">
-          • The NZ$50,000 threshold is based on <b>original cost</b> of overseas investments (not current market value).<br>
-          • NZ-listed, ASX-listed (some), and AU-unit-trust holdings are generally exempt.<br>
-          • Two main calculation methods: <b>FDR (Fair Dividend Rate, 5% flat)</b> and <b>CV (Comparative Value, cap at actual gain)</b>.<br>
+      <div class="card p-5" style="border-left:3px solid var(--color-blue);">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fas fa-circle-info" style="color:var(--color-blue);"></i>
+          <span class="font-semibold text-sm" style="color:var(--text-primary);">About the FIF rules</span>
+        </div>
+        <div class="text-xs" style="color:var(--text-body);line-height:1.8;">
+          • The <b>NZ$50,000 threshold</b> is based on <b>original cost</b> of overseas investments (not current market value).<br>
+          • NZ-listed, ASX-listed (some), and AU-unit-trust holdings are generally <b>exempt</b>.<br>
+          • Two main calculation methods: <b>FDR (Fair Dividend Rate, 5% flat)</b> and <b>CV (Comparative Value, capped at actual gain)</b>.<br>
           • InvestIQ shows the FDR estimate as the default conservative view. Your actual liability may be lower under CV.<br>
           • Always consult a qualified NZ tax adviser before filing.
         </div>
