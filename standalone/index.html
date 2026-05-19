@@ -1834,6 +1834,30 @@
           </button>
         </div>
       </div>
+      <!-- v0.15 — Holdings KPI strip. 4 at-a-glance tiles above the table. -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4" id="holdingsKpiStrip">
+        <div class="card2 p-4" style="border-left:3px solid var(--accent);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Holdings</div>
+          <div class="text-2xl font-bold mt-1" id="hKpiCount" style="color:var(--accent);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="hKpiCountSub">across 0 platforms</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Up Today</div>
+          <div class="text-2xl font-bold mt-1" id="hKpiUp" style="color:var(--color-green);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="hKpiUpSub">awaiting prices</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-red);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Down Today</div>
+          <div class="text-2xl font-bold mt-1" id="hKpiDown" style="color:var(--color-red);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="hKpiDownSub">awaiting prices</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Biggest Position</div>
+          <div class="text-2xl font-bold mt-1" id="hKpiBiggest" style="color:var(--text-primary);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="hKpiBiggestSub">–</div>
+        </div>
+      </div>
+
       <!-- Search / filter bar -->
       <div class="flex items-center gap-2 mb-3">
         <div class="flex items-center gap-2 flex-1" style="background:#0f1729;border:1px solid #1e2d4a;border-radius:8px;padding:6px 12px;">
@@ -9016,6 +9040,48 @@ function filterHoldings() {
     renderHoldingsByPlatform(filtered, metrics.totalValue);
   } else {
     renderDetailedHoldings(filtered, metrics.totalValue);
+  }
+  try { renderHoldingsKpiStrip(metrics); } catch(e) { console.warn('[holdings-kpis]', e); }
+}
+
+// v0.15 — Holdings KPI strip. 4 at-a-glance tiles: Holdings count,
+// Up Today, Down Today, Biggest Position. Recomputes on every render.
+function renderHoldingsKpiStrip(metrics) {
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const holdings = (metrics.holdings || []).filter(h => !h.ignored);
+  if (!holdings.length) return;
+  set('hKpiCount', holdings.length);
+  const platforms = new Set(holdings.map(h => h.platform).filter(Boolean));
+  set('hKpiCountSub', `across ${platforms.size} platform${platforms.size === 1 ? '' : 's'}`);
+
+  // Today movers — need dayChangePct
+  const withDay = holdings.filter(h => typeof h.dayChangePct === 'number' && isFinite(h.dayChangePct));
+  const upCount   = withDay.filter(h => h.dayChangePct > 0).length;
+  const downCount = withDay.filter(h => h.dayChangePct < 0).length;
+  set('hKpiUp', upCount);
+  set('hKpiDown', downCount);
+  if (withDay.length) {
+    const topUp   = [...withDay].sort((a, b) => b.dayChangePct - a.dayChangePct)[0];
+    const topDown = [...withDay].sort((a, b) => a.dayChangePct - b.dayChangePct)[0];
+    if (topUp && topUp.dayChangePct > 0)
+      set('hKpiUpSub', `top: ${topUp.symbol} +${topUp.dayChangePct.toFixed(2)}%`);
+    else set('hKpiUpSub', '—');
+    if (topDown && topDown.dayChangePct < 0)
+      set('hKpiDownSub', `worst: ${topDown.symbol} ${topDown.dayChangePct.toFixed(2)}%`);
+    else set('hKpiDownSub', '—');
+  } else {
+    set('hKpiUpSub', 'awaiting prices');
+    set('hKpiDownSub', 'awaiting prices');
+  }
+
+  // Biggest position by current value
+  const biggest = [...holdings].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0))[0];
+  if (biggest) {
+    const big = document.getElementById('hKpiBiggest');
+    if (big) big.textContent = biggest.symbol;
+    const weight = biggest.weight || 0;
+    set('hKpiBiggestSub', `${sym}${fmt(biggest.currentValue)} · ${weight.toFixed(1)}% of portfolio`);
   }
 }
 
