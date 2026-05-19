@@ -4744,11 +4744,9 @@ function renderPerfChart(metrics) {
   if (charts.perf) charts.perf.destroy();
   if (!metrics.holdings.length) return;
 
-  // v0.12.2 — Overview chart was cramming 60+ ticker bars into a 200px-tall
-  // canvas, labels overlapped. Now: top 6 winners + top 6 losers by the
-  // active metric (gain $ or gain %). Cleaner read at a glance; the
-  // Performance page has the full contribution view for deep-dives.
-  const TAKE = 6;
+  // v0.12.3 — Top winners + top losers, with truncated labels so long
+  // names like 'HARBOUR GROWTH FUND' don't overlap on the x-axis.
+  const TAKE = 5;
   const valueFor = (h) => state.perfMode === 'value' ? (h.gain || 0) : (h.gainPct || 0);
   // Filter extreme outliers (likely pence/pound issues) when in % mode
   const valid = metrics.holdings.filter(h => state.perfMode === 'value' ? true : Math.abs(h.gainPct || 0) < 500);
@@ -4758,7 +4756,19 @@ function renderPerfChart(metrics) {
   const combined = [...winners, ...losers];
   if (!combined.length) return;
 
-  const labels = combined.map(h => h.symbol);
+  // Truncate long labels — fund names like 'HARBOUR GROWTH FUND' would
+  // overlap badly. Keep first 6 chars + ellipsis for anything over 7.
+  // Full name still surfaces via the tooltip below.
+  const truncLabel = (s) => {
+    s = String(s || '');
+    if (s.length <= 7) return s;
+    // For multi-word names take first letters of each word (HARBOUR GROWTH FUND -> HGF)
+    const words = s.split(/\s+/);
+    if (words.length >= 2) return words.map(w => w[0]).join('').slice(0, 5).toUpperCase();
+    return s.slice(0, 6) + '…';
+  };
+  const fullLabels = combined.map(h => h.symbol);
+  const labels = combined.map(h => truncLabel(h.symbol));
   const values = combined.map(valueFor);
 
   // Read theme tokens so the chart auto-themes when CSS vars change
@@ -4787,6 +4797,9 @@ function renderPerfChart(metrics) {
         legend: { display: false },
         tooltip: {
           callbacks: {
+            // Tooltip title shows the FULL symbol/name so truncation
+            // (HGF) doesn't hide what it actually represents.
+            title: (items) => fullLabels[items[0].dataIndex] || items[0].label,
             label: (ctx) => {
               const v = ctx.parsed.y;
               return state.perfMode === 'value'
@@ -4799,7 +4812,15 @@ function renderPerfChart(metrics) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0, autoSkip: false }
+          ticks: {
+            color: tickColor,
+            font: { size: 10 },
+            // Allow rotation as a safety net if labels still overflow
+            // on very narrow viewports.
+            maxRotation: 35,
+            minRotation: 0,
+            autoSkip: false
+          }
         },
         y: {
           grid: { color: gridColor },
