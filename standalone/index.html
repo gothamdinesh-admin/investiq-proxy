@@ -2548,6 +2548,9 @@
           <button onclick="adminFixTickers()" class="btn btn-sm" style="background:rgba(129,140,248,0.1);color:#818cf8;border:1px solid rgba(129,140,248,0.3);">
             <i class="fas fa-magic mr-1"></i>Fix Crypto Tickers
           </button>
+          <button onclick="adminCleanBadSnapshots()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete snapshots with $0 value (poisons Performance KPIs)">
+            <i class="fas fa-broom mr-1"></i>Clean $0 Snapshots
+          </button>
           <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
             <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
           </button>
@@ -4185,6 +4188,15 @@ async function recordDailySnapshot(opts = {}) {
   // opts.source   — optional label stored in breakdown (e.g. 'csv-import')
   if (!_supabase || !_supaUser) return;
   if (!state.portfolio.length) return;
+  // v0.14.2 — guard against $0 snapshots. If portfolio loaded but prices
+  // haven't refreshed yet (e.g. proxy cold-start), totalValue can be 0.
+  // That snapshot then poisons every Performance KPI (-100% all-time
+  // return, contribution view empty, etc). Bail before writing.
+  const _peek = (typeof getMetrics === 'function') ? getMetrics() : null;
+  if (!_peek || !_peek.totalValue || _peek.totalValue <= 0) {
+    console.log('[snapshot] skipping — portfolio total is $0 (prices not loaded yet)');
+    return;
+  }
 
   const date = opts.date || new Date().toISOString().slice(0, 10);
   try {
@@ -5452,14 +5464,17 @@ function renderPerformanceSection(metrics) {
 function renderPerfContribution(metrics, sym) {
   const wrap = document.getElementById('contributionView');
   if (!wrap) return;
-  const holdings = (metrics.holdings || []).filter(h => isFinite(h.gainAmount) && Math.abs(h.gainPct || 0) < 500);
+  // v0.14.2 — field is h.gain (NZD dollar P&L), not h.gainAmount.
+  // The bug here was why the contribution view always said 'No portfolio
+  // data yet' even with 62 holdings.
+  const holdings = (metrics.holdings || []).filter(h => isFinite(h.gain) && Math.abs(h.gainPct || 0) < 500);
   if (!holdings.length) { wrap.innerHTML = '<div class="neutral text-sm">No portfolio data yet.</div>'; return; }
-  const sorted = [...holdings].sort((a, b) => (b.gainAmount || 0) - (a.gainAmount || 0));
-  const winners = sorted.filter(h => (h.gainAmount || 0) > 0).slice(0, 5);
-  const losers  = sorted.filter(h => (h.gainAmount || 0) < 0).slice(-5).reverse();
-  const maxAbs = Math.max(...sorted.map(h => Math.abs(h.gainAmount || 0)), 1);
+  const sorted = [...holdings].sort((a, b) => (b.gain || 0) - (a.gain || 0));
+  const winners = sorted.filter(h => (h.gain || 0) > 0).slice(0, 5);
+  const losers  = sorted.filter(h => (h.gain || 0) < 0).slice(-5).reverse();
+  const maxAbs = Math.max(...sorted.map(h => Math.abs(h.gain || 0)), 1);
   const row = (h, kind) => {
-    const amt = h.gainAmount || 0;
+    const amt = h.gain || 0;
     const pct = h.gainPct || 0;
     const color = kind === 'win' ? 'var(--color-green)' : 'var(--color-red)';
     const width = Math.max(2, (Math.abs(amt) / maxAbs) * 100);
@@ -5495,7 +5510,11 @@ async function renderPerfKpisAndHeatmap(sym) {
   // Pull a generous slice of history (10y). loadSnapshotHistory lives in 50-portfolio.js or similar.
   let history = [];
   try { history = await loadSnapshotHistory(3650); } catch(e) { history = []; }
-  if (!history || history.length < 2) return;
+  // v0.14.2 — filter out corrupt $0 snapshots so they don't poison the
+  // CAGR / All-Time Return calc. A snapshot with total_value <= 0 means
+  // the portfolio hadn't loaded yet when it was recorded.
+  history = (history || []).filter(h => Number(h.total_value) > 0);
+  if (history.length < 2) return;
 
   // All-time return: last value vs first value (assumes consistent contributions
   // don't dominate — simple TWR approximation good enough for the user view).
@@ -8553,7 +8572,10 @@ async function loadSnapshotChart(days) {
   if (days != null) _snapshotDays = days;
   renderBenchmarkChips();
 
-  const history = await loadSnapshotHistory(_snapshotDays);
+  // v0.14.2 — filter out corrupt $0 snapshots so the chart doesn't dive
+  // to -100% on bad days. Same logic as the KPI strip.
+  let history = await loadSnapshotHistory(_snapshotDays);
+  history = (history || []).filter(h => Number(h.total_value) > 0);
   const empty = document.getElementById('snapshotChartEmpty');
   const wrap  = document.getElementById('snapshotChartWrap');
   const meta  = document.getElementById('benchmarkMeta');
@@ -11229,6 +11251,41 @@ create policy "Admins read all activity"  on public.investiq_activity_log for se
     }).join('');
   } catch(e) {
     tbody.innerHTML = `<div class="text-center p-6" style="color:#f87171;">Error: ${e.message}</div>`;
+  }
+}
+
+// Wipe snapshots where total_value is null / zero / negative. These get
+// created when recordDailySnapshot fires before prices have loaded, and
+// they poison the Performance KPIs (-100% all-time return because the
+// "last" snapshot is $0).
+async function adminCleanBadSnapshots() {
+  _adminClearOutput();
+  _adminLog('🔍 Scanning investiq_snapshots for $0 / null entries…');
+  if (!_supabase || !_supaUser) { _adminLog('✗ Not signed in.'); return; }
+  try {
+    const { data, error } = await _supabase
+      .from('investiq_snapshots')
+      .select('id, snapshot_date, total_value, holdings_count')
+      .eq('user_id', _supaUser.id)
+      .or('total_value.is.null,total_value.lte.0');
+    if (error) { _adminLog('✗ Scan failed: ' + error.message); return; }
+    if (!data || !data.length) { _adminLog('✓ No bad snapshots found. Performance KPIs should compute correctly.'); return; }
+    _adminLog(`Found ${data.length} bad snapshot(s):`);
+    data.forEach(s => _adminLog(`  • ${s.snapshot_date} — $${s.total_value || 0} (${s.holdings_count || 0} holdings)`));
+    const ok = await showConfirm({
+      title: 'Delete these snapshots?',
+      message: `${data.length} snapshot(s) with $0 or null value will be permanently removed. The Performance section will recompute on next open. This won't touch any holding data.`,
+      confirmLabel: 'Delete', cancelLabel: 'Keep', variant: 'danger'
+    });
+    if (!ok) { _adminLog('Cancelled — no changes made.'); return; }
+    const ids = data.map(s => s.id);
+    const { error: delErr } = await _supabase.from('investiq_snapshots').delete().in('id', ids);
+    if (delErr) { _adminLog('✗ Delete failed: ' + delErr.message); return; }
+    _adminLog(`✓ Deleted ${ids.length} bad snapshot(s).`);
+    _adminLog('  Open Performance section to verify the KPIs recompute correctly.');
+    toast.success(`Cleaned ${ids.length} bad snapshot${ids.length === 1 ? '' : 's'}`);
+  } catch(e) {
+    _adminLog('✗ Exception: ' + e.message);
   }
 }
 
