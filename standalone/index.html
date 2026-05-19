@@ -982,6 +982,30 @@
     /* News headlines (ticker-grouped) */
     .news-headline:hover { border-color: var(--accent) !important; background: var(--accent-soft) !important; }
 
+    /* Settings modal tabs — pill-style buttons mirroring news-tab */
+    .settings-tab {
+      background: none; border: none; cursor: pointer;
+      padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-secondary);
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .settings-tab i { font-size: 11px; }
+    .settings-tab.active { background: var(--bg-panel); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+    .settings-tab:hover:not(.active) { color: var(--text-primary); }
+    /* CSS-only tab gating — hide sections whose tab doesn't match the
+       modal's active tab. Use !important so it wins against the inline
+       display:block we add for signed-in / admin sections. The inverse
+       gate (hide when user isn't signed in / not admin) still works
+       because those sections set display:none which wins regardless. */
+    #settingsModal .modal[data-active-tab="general"]       [data-settings-tab]:not([data-settings-tab="general"])       { display: none !important; }
+    #settingsModal .modal[data-active-tab="notifications"] [data-settings-tab]:not([data-settings-tab="notifications"]) { display: none !important; }
+    #settingsModal .modal[data-active-tab="account"]       [data-settings-tab]:not([data-settings-tab="account"])       { display: none !important; }
+    #settingsModal .modal[data-active-tab="admin"]         [data-settings-tab]:not([data-settings-tab="admin"])         { display: none !important; }
+    #settingsModal .modal[data-active-tab="data"]          [data-settings-tab]:not([data-settings-tab="data"])          { display: none !important; }
+
     /* AI Insights KPI tiles — clickable, lift on hover */
     .kpi-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.18); border-color: var(--accent) !important; }
     .kpi-tile:active { transform: translateY(0); }
@@ -2998,25 +3022,34 @@
 
 <!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="settingsModal" onclick="closeModalBg(event,'settingsModal')">
-  <div class="modal">
-    <div class="flex items-center justify-between mb-6">
+  <div class="modal" data-active-tab="general">
+    <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-bold">Settings</h2>
-      <button onclick="closeModal('settingsModal')" style="color:#4a6080;font-size:20px;background:none;border:none;cursor:pointer;">&times;</button>
+      <button onclick="closeModal('settingsModal')" style="color:var(--text-muted);font-size:24px;background:none;border:none;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+
+    <!-- Settings tab strip -->
+    <div class="flex items-center gap-1 mb-5 p-1 rounded-lg" style="background:var(--bg-panel-2);overflow-x:auto;">
+      <button onclick="switchSettingsTab('general')"       id="stab-general"       class="settings-tab active"><i class="fas fa-sliders"></i> General</button>
+      <button onclick="switchSettingsTab('notifications')" id="stab-notifications" class="settings-tab"><i class="fas fa-bell"></i> Notifications</button>
+      <button onclick="switchSettingsTab('account')"       id="stab-account"       class="settings-tab"><i class="fas fa-user-circle"></i> Account</button>
+      <button onclick="switchSettingsTab('admin')"         id="stab-admin"         class="settings-tab" style="display:none;"><i class="fas fa-shield-alt"></i> Admin</button>
+      <button onclick="switchSettingsTab('data')"          id="stab-data"          class="settings-tab"><i class="fas fa-database"></i> Data</button>
     </div>
 
     <div class="space-y-5">
-      <div>
+      <div data-settings-tab="general">
         <label>Portfolio Name</label>
         <input type="text" id="settingName" class="input" placeholder="My Portfolio">
       </div>
-      <div>
+      <div data-settings-tab="general">
         <label>Base Currency</label>
         <select id="settingCurrency" class="input">
           <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option><option>SGD</option><option>INR</option><option>AED</option>
         </select>
       </div>
       <!-- ═══════════ EMAIL DIGEST ═══════════ -->
-      <div id="digestSection" style="display:none;">
+      <div id="digestSection" data-settings-tab="notifications" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
             <i class="fas fa-envelope" style="color:var(--accent);"></i>
@@ -3033,7 +3066,7 @@
       </div>
 
       <!-- ═══════════ FAMILY (multi-user platform) ═══════════ -->
-      <div id="familySection" style="display:none;">
+      <div id="familySection" data-settings-tab="account" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
@@ -3049,7 +3082,7 @@
       </div>
 
       <!-- ═══════════ PRICE ALERTS ═══════════ -->
-      <div id="alertsSection" style="display:none;">
+      <div id="alertsSection" data-settings-tab="notifications" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center justify-between mb-3">
             <div class="flex items-center gap-2">
@@ -3065,7 +3098,7 @@
       </div>
 
       <!-- ═══════════ PLAN (paywall placeholders) ═══════════ -->
-      <div id="planSection" style="display:none;">
+      <div id="planSection" data-settings-tab="account" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
             <i class="fas fa-crown" style="color:var(--color-amber);"></i>
@@ -3076,7 +3109,7 @@
       </div>
 
       <!-- ═══════════ ACCOUNT INFO — visible when signed in ═══════════ -->
-      <div id="accountInfoSection" style="display:none;">
+      <div id="accountInfoSection" data-settings-tab="account" style="display:none;">
         <div style="border-top:1px solid #1e2d4a;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
             <i class="fas fa-user-circle" style="color:var(--accent);"></i>
@@ -3102,7 +3135,7 @@
 
       <!-- ═══════════ ADMIN-ONLY PLATFORM SETTINGS ═══════════ -->
       <!-- Hidden for regular users. Admin sees + can override platform defaults. -->
-      <div id="adminSettingsSection" style="display:none;">
+      <div id="adminSettingsSection" data-settings-tab="admin" style="display:none;">
         <div style="border-top:1px solid #fbbf24;padding-top:16px;margin-top:8px;">
           <div class="flex items-center gap-2 mb-3">
             <i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>
@@ -3163,8 +3196,12 @@
       <button onclick="closeModal('settingsModal')" class="btn btn-secondary">Cancel</button>
     </div>
 
-    <div style="border-top:1px solid #1e2d4a;margin-top:20px;padding-top:16px;">
-      <div class="text-xs neutral mb-3">Danger Zone</div>
+    <div data-settings-tab="data" style="border-top:1px solid var(--border);margin-top:20px;padding-top:16px;">
+      <div class="flex items-center gap-2 mb-3">
+        <i class="fas fa-triangle-exclamation" style="color:var(--color-red);"></i>
+        <span class="text-xs font-semibold" style="color:var(--color-red);letter-spacing:0.5px;text-transform:uppercase;">Danger Zone</span>
+      </div>
+      <div class="text-xs neutral mb-3" style="line-height:1.6;">Wiping clears your local cache AND your cloud portfolio. Use sparingly — there's no undo.</div>
       <button onclick="clearAllData()" class="btn btn-danger btn-sm">
         <i class="fas fa-trash mr-1"></i>Clear All Data
       </button>
@@ -3553,6 +3590,25 @@ function loadInitialTheme() {
          || 'dark';
   } catch(e) {}
   applyTheme(theme);
+}
+
+// Settings modal tab switcher. Sets data-active-tab on the modal so the
+// CSS gates show only the matching section. Also flips the active class
+// on the tab button. Admin tab visibility is handled separately (only
+// shown to admin users).
+function switchSettingsTab(name) {
+  const modal = document.querySelector('#settingsModal .modal');
+  if (!modal) return;
+  modal.setAttribute('data-active-tab', name);
+  document.querySelectorAll('#settingsModal .settings-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.id === 'stab-' + name);
+  });
+}
+// Show the Admin tab only to admin users — called from the existing
+// updateAuthUI flow which already knows _isAdmin.
+function updateSettingsAdminTabVisibility() {
+  const btn = document.getElementById('stab-admin');
+  if (btn) btn.style.display = (typeof _isAdmin !== 'undefined' && _isAdmin) ? '' : 'none';
 }
 
 // FAB (floating action button) toggle — desktop-only quick actions.
@@ -10496,6 +10552,8 @@ function updateAdminVisibility() {
   if (adminLink)  adminLink.style.display  = _isAdmin ? '' : 'none';
   if (mobTab)     mobTab.style.display     = _isAdmin ? 'flex' : 'none';
   if (adminBadge) adminBadge.style.display = _isAdmin ? 'inline-flex' : 'none';
+  // Admin tab in the Settings modal — show only to admins
+  try { updateSettingsAdminTabVisibility(); } catch(e) {}
   // If Settings modal is open, refresh so admin section shows/hides correctly
   const settingsModal = document.getElementById('settingsModal');
   if (settingsModal?.classList.contains('open')) populateSettingsForm();
