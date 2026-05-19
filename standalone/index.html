@@ -11353,9 +11353,23 @@ function showSection(name, el) {
   }
   if (name === 'news') { try { renderSentimentRollup(); } catch(e) {} }
   if (name === 'trader') {
+    // Immediate paint so the section never appears blank during the
+    // network call. Replaced by renderTraderIQ() once the cache loads.
+    const tlw = document.getElementById('tradeListWrap');
+    if (tlw && !tlw.dataset.painted) {
+      tlw.innerHTML = `<div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TraderIQ…</div>`;
+      tlw.dataset.painted = '1';
+    }
     try {
       if (typeof loadTradesFromCloud === 'function') {
-        loadTradesFromCloud().then(() => { try { renderTraderIQ(); } catch(e) {} });
+        loadTradesFromCloud()
+          .then(() => { try { renderTraderIQ(); } catch(e) { console.warn('[trader] render failed:', e); } })
+          .catch(e => {
+            console.warn('[trader] load failed:', e);
+            if (tlw) tlw.innerHTML = `<div class="text-center py-8" style="color:var(--color-red);">TraderIQ load failed: ${(e && e.message) || 'unknown error'}<br><span class="text-xs neutral">Check the browser console for details.</span></div>`;
+          });
+      } else {
+        if (tlw) tlw.innerHTML = `<div class="text-center py-8" style="color:var(--color-red);">TraderIQ module didn't load. Hard-refresh the page (Ctrl+Shift+R / Cmd+Shift+R).</div>`;
       }
     } catch(e) { console.warn('[trader] section open failed:', e); }
   }

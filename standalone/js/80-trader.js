@@ -41,7 +41,12 @@ function _isMissingTableError(err) {
 }
 
 async function loadTradesFromCloud() {
-  if (!_supabase || !_supaUser) return;
+  if (!_supabase || !_supaUser) {
+    // Not signed in yet — paint a clear message and bail.
+    const wrap = document.getElementById('tradeListWrap');
+    if (wrap) wrap.innerHTML = `<div class="text-center py-8 neutral text-sm">Sign in to use TraderIQ.</div>`;
+    return;
+  }
   try {
     const { data: trades, error: tErr } = await _supabase
       .from('trades').select('*').order('entry_date', { ascending: false, nullsFirst: false });
@@ -183,13 +188,23 @@ function renderTraderIQ() {
   // Setup performance breakdown — group closed trades by setup label
   renderTradeSetupBreakdown(closed, sym);
 
-  // Trade list
+  // Trade list — ALWAYS paint a state so leftover content (e.g. an old
+  // migration banner) can never persist after the cache has refreshed.
   const wrap = document.getElementById('tradeListWrap');
   if (!wrap) return;
   if (!filtered.length) {
     if (_tradesCache.length) {
+      // Has trades but the active filter excludes them all
       wrap.innerHTML = `<div class="text-center py-8 neutral text-sm">No trades match the current filter.</div>`;
-    } // else: keep the empty-state from the HTML markup
+    } else {
+      // True empty state — first-time / no trades yet
+      wrap.innerHTML = `<div class="text-center py-10">
+        <i class="fas fa-chart-line text-4xl mb-3 block" style="color:var(--accent);opacity:0.4;"></i>
+        <div class="text-lg font-semibold mb-1">No trades logged yet</div>
+        <div class="text-xs neutral mb-4">Every trade you log — entry, exit, thesis, lesson — feeds the coach.</div>
+        <button onclick="openTradeModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Log your first trade</button>
+      </div>`;
+    }
     return;
   }
   wrap.innerHTML = filtered.map(t => _renderTradeRow(t, sym)).join('');
