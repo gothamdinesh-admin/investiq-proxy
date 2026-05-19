@@ -1516,6 +1516,7 @@
   <button class="drawer-item" onclick="showSection('news');toggleMobileDrawer(false);"><i class="fas fa-newspaper"></i>News</button>
   <button class="drawer-item" onclick="showSection('tax');toggleMobileDrawer(false);"><i class="fas fa-receipt"></i>NZ Tax (FIF)</button>
   <button class="drawer-item" onclick="showSection('dividends');toggleMobileDrawer(false);"><i class="fas fa-coins"></i>Dividends</button>
+  <button class="drawer-item" onclick="showSection('trader');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>TraderIQ</button>
   <button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas fa-users"></i>Family</button>
   <button class="drawer-item" id="drawerAdminLink" style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>Admin Panel</button>
 
@@ -1576,6 +1577,7 @@
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
+      <div class="nav-link" onclick="showSection('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
       <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
@@ -2290,6 +2292,103 @@
       </div>
     </div>
 
+    <!-- ═══════════════════════════════════════════════════════════════════
+         TraderIQ — sibling section. Trade journal + AI coach. Different
+         worldview from InvestIQ's portfolio tracker: trades you took and
+         exited, not positions you still hold.
+         ═══════════════════════════════════════════════════════════════════ -->
+    <div id="section-trader" style="display:none;">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <span class="brand-mark" style="font-size:20px;">
+              <span class="bm-invest">Trader</span><span class="bm-iq">IQ</span>
+            </span>
+            <span class="iq-badge">Journal</span>
+          </h2>
+          <div class="text-xs neutral mt-1">Every trade you take and exit, with the thesis and the lesson. AI coach surfaces patterns you'd otherwise miss.</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="openTradeModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Log Trade</button>
+          <button onclick="openTradeCoachModal()" class="btn btn-sm btn-secondary" title="AI Coach — pattern analysis on your trade history"><i class="fas fa-brain mr-1"></i>AI Coach</button>
+        </div>
+      </div>
+
+      <!-- TraderIQ KPI strip — at-a-glance trade stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Win Rate</div>
+          <div class="text-2xl font-bold mt-1" id="tradeKpiWinRate" style="color:var(--color-green);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="tradeKpiWinRateSub">awaiting trades</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-blue);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Total P&amp;L</div>
+          <div class="text-2xl font-bold mt-1" id="tradeKpiPnl" style="color:var(--color-blue);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="tradeKpiPnlSub">across closed trades</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Expectancy</div>
+          <div class="text-2xl font-bold mt-1" id="tradeKpiExpectancy" style="color:var(--color-amber);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1">per trade · (win% × avgWin) − (loss% × avgLoss)</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-violet);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Profit Factor</div>
+          <div class="text-2xl font-bold mt-1" id="tradeKpiProfitFactor" style="color:var(--color-violet);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1">gross wins ÷ gross losses</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-teal);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Avg Hold</div>
+          <div class="text-2xl font-bold mt-1" id="tradeKpiAvgHold" style="color:var(--color-teal);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="tradeKpiAvgHoldSub">winners vs losers</div>
+        </div>
+      </div>
+
+      <!-- Setup performance breakdown -->
+      <div class="card p-5 mb-5">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <div class="section-title"><i class="fas fa-layer-group" style="color:var(--accent);"></i> Setup Performance</div>
+            <div class="text-xs neutral mt-1">Win rate + average P&amp;L by setup tag. Tells you which playbook is actually working.</div>
+          </div>
+        </div>
+        <div id="tradeSetupBreakdown">
+          <div class="text-center py-6 neutral text-sm">Tag your trades with a setup name to see this breakdown.</div>
+        </div>
+      </div>
+
+      <!-- Trade list -->
+      <div class="card p-5 mb-5">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <div class="section-title"><i class="fas fa-list-check" style="color:var(--color-green);"></i> Trade Journal</div>
+            <div class="text-xs neutral mt-1">Every trade you've logged. Click a row to edit or read the thesis.</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="tradeFilterStatus" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="renderTraderIQ()">
+              <option value="all">All trades</option>
+              <option value="closed">Closed</option>
+              <option value="open">Open</option>
+              <option value="planned">Planned</option>
+            </select>
+            <select id="tradeFilterSort" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="renderTraderIQ()">
+              <option value="recent">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="pnl-desc">Best P&amp;L</option>
+              <option value="pnl-asc">Worst P&amp;L</option>
+            </select>
+          </div>
+        </div>
+        <div id="tradeListWrap">
+          <div class="text-center py-10">
+            <i class="fas fa-chart-line text-4xl mb-3 block" style="color:var(--accent);opacity:0.4;"></i>
+            <div class="text-lg font-semibold mb-1">No trades logged yet</div>
+            <div class="text-xs neutral mb-4">Every trade you log — entry, exit, thesis, lesson — feeds the coach.</div>
+            <button onclick="openTradeModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Log your first trade</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ADMIN SECTION -->
     <div id="section-admin" style="display:none;">
       <div class="flex items-center justify-between mb-6">
@@ -2488,6 +2587,167 @@
 <!-- ============================================================ -->
 <!-- MODALS -->
 <!-- ============================================================ -->
+
+<!-- TRADERIQ — LOG / EDIT TRADE MODAL -->
+<div class="modal-overlay" id="tradeModal" onclick="closeModalBg(event,'tradeModal')">
+  <div class="modal" style="max-width:680px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <i class="fas fa-chart-line" style="color:var(--accent);"></i>
+        <span id="tradeModalTitle">Log a Trade</span>
+        <span class="iq-badge">TraderIQ</span>
+      </h2>
+      <button onclick="closeModal('tradeModal')" style="color:var(--text-muted);font-size:24px;background:none;border:none;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+
+    <form id="tradeForm" onsubmit="event.preventDefault(); saveTrade();">
+      <input type="hidden" id="tradeId">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Ticker / Symbol *</label>
+          <input id="tradeSymbol" class="input w-full" placeholder="AAPL · NVDA · BTC-USD" required>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Name (optional)</label>
+          <input id="tradeName" class="input w-full" placeholder="Apple Inc.">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Asset Type</label>
+          <select id="tradeAssetType" class="input w-full">
+            <option value="stock">Stock</option>
+            <option value="etf">ETF</option>
+            <option value="crypto">Crypto</option>
+            <option value="fx">FX</option>
+            <option value="option">Option</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Side</label>
+          <select id="tradeSide" class="input w-full">
+            <option value="long">Long</option>
+            <option value="short">Short</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Status</label>
+          <select id="tradeStatus" class="input w-full">
+            <option value="closed">Closed</option>
+            <option value="open">Open</option>
+            <option value="planned">Planned</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Setup</label>
+          <select id="tradeSetup" class="input w-full">
+            <option value="">— No setup —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="text-xs uppercase neutral font-semibold mt-4 mb-2" style="letter-spacing:0.5px;">Entry</div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Date</label>
+          <input id="tradeEntryDate" type="date" class="input w-full">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Price</label>
+          <input id="tradeEntryPrice" type="number" step="any" class="input w-full" placeholder="180.00">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Quantity</label>
+          <input id="tradeEntryQty" type="number" step="any" class="input w-full" placeholder="10">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Currency</label>
+          <select id="tradeEntryCcy" class="input w-full">
+            <option value="NZD">NZD</option><option value="USD">USD</option><option value="AUD">AUD</option><option value="GBP">GBP</option><option value="EUR">EUR</option><option value="JPY">JPY</option><option value="HKD">HKD</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="text-xs uppercase neutral font-semibold mt-2 mb-2" style="letter-spacing:0.5px;">Exit <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;">(leave blank if open / planned)</span></div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Date</label>
+          <input id="tradeExitDate" type="date" class="input w-full">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Price</label>
+          <input id="tradeExitPrice" type="number" step="any" class="input w-full" placeholder="195.50">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Quantity</label>
+          <input id="tradeExitQty" type="number" step="any" class="input w-full" placeholder="10">
+        </div>
+      </div>
+
+      <div class="text-xs uppercase neutral font-semibold mt-2 mb-2" style="letter-spacing:0.5px;">Risk Plan <span class="neutral" style="font-weight:400;text-transform:none;letter-spacing:0;">(optional — best captured pre-trade)</span></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Stop Price</label>
+          <input id="tradeStop" type="number" step="any" class="input w-full" placeholder="172.00">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Target Price</label>
+          <input id="tradeTarget" type="number" step="any" class="input w-full" placeholder="210.00">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Position Size %</label>
+          <input id="tradePosSize" type="number" step="0.1" class="input w-full" placeholder="3.0">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">R:R</label>
+          <input id="tradeRR" type="number" step="0.1" class="input w-full" placeholder="2.5">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="text-xs neutral mb-1 block">Thesis <span class="neutral" style="text-transform:none;">— why are you taking this trade?</span></label>
+        <textarea id="tradeThesis" class="input w-full" rows="2" placeholder="Earnings beat + raised guidance. Breakout above $180 with volume. Stop below 50-day MA."></textarea>
+      </div>
+
+      <div class="mb-4">
+        <label class="text-xs neutral mb-1 block">Lesson <span class="neutral" style="text-transform:none;">— what did you learn after closing?</span></label>
+        <textarea id="tradeLesson" class="input w-full" rows="2" placeholder="Held through volatility. Plan worked. Sized correctly."></textarea>
+      </div>
+
+      <div class="flex items-center gap-2 mt-5 flex-wrap">
+        <button type="submit" class="btn btn-primary flex-1"><i class="fas fa-save mr-1"></i><span id="tradeSubmitLabel">Save Trade</span></button>
+        <button type="button" id="tradeDeleteBtn" onclick="deleteTradeFromModal()" class="btn btn-secondary" style="display:none;color:var(--color-red);border-color:var(--color-red);"><i class="fas fa-trash"></i></button>
+        <button type="button" onclick="closeModal('tradeModal')" class="btn btn-secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TRADERIQ AI COACH MODAL -->
+<div class="modal-overlay" id="tradeCoachModal" onclick="closeModalBg(event,'tradeCoachModal')">
+  <div class="modal" style="max-width:680px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <i class="fas fa-brain" style="color:var(--accent);"></i>
+        AI Trading Coach
+        <span class="iq-badge">IQ</span>
+      </h2>
+      <button onclick="closeModal('tradeCoachModal')" style="color:var(--text-muted);font-size:24px;background:none;border:none;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <div class="text-sm neutral mb-4">Sends your closed trade history (anonymised — symbols + dates + P&amp;L + setup + thesis + lesson) to a specialist agent that surfaces patterns: which setups work, when you trade best, what mistakes recur.</div>
+    <div id="tradeCoachOutput">
+      <div class="text-center py-6 neutral text-sm">Click <b>Analyse</b> to run the coach across your trade journal.</div>
+    </div>
+    <div class="flex items-center gap-2 mt-5">
+      <button onclick="runTradeCoach()" id="tradeCoachRunBtn" class="btn btn-primary flex-1"><i class="fas fa-play mr-1"></i>Analyse my trades</button>
+      <button onclick="closeModal('tradeCoachModal')" class="btn btn-secondary">Close</button>
+    </div>
+  </div>
+</div>
 
 <!-- ADD / EDIT HOLDING MODAL -->
 <div class="modal-overlay" id="addModal" onclick="closeModalBg(event,'addModal')">
@@ -3177,6 +3437,7 @@
 <script src="js/60-import.js"></script>
 <script src="js/50-portfolio.js"></script>
 <script src="js/70-ai.js"></script>
+<script src="js/80-trader.js"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -11082,6 +11343,13 @@ function showSection(name, el) {
     try { renderMarketImpactCard(); } catch(e) { console.warn('impact', e); }
   }
   if (name === 'news') { try { renderSentimentRollup(); } catch(e) {} }
+  if (name === 'trader') {
+    try {
+      if (typeof loadTradesFromCloud === 'function') {
+        loadTradesFromCloud().then(() => { try { renderTraderIQ(); } catch(e) {} });
+      }
+    } catch(e) { console.warn('[trader] section open failed:', e); }
+  }
   if (name === 'news') { try { switchNewsTab(_currentNewsTab || 'foryou'); } catch(e) {} }
 }
 

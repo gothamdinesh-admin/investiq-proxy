@@ -25,6 +25,12 @@ This is the single source of truth for what's next. Priority order is intentiona
 
 ---
 
+## 🆕 v0.13 ACTIVATION TASK
+
+- [ ] **Run migration 014** — paste `supabase/migrations/014_trader_iq.sql` into the Supabase SQL Editor. Creates `trades` + `trade_setups` tables, RLS, indexes, and the auto-touch trigger. Without this, the TraderIQ section will error on first save.
+
+---
+
 ## 🚨 P0 — Verify & harden what just shipped
 
 - [ ] **Run a fresh AI analysis** — Insights section. Sequential execution should produce KPI tiles + Action Items with severity badges. Each agent card minimised by default; click to expand.
