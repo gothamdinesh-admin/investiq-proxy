@@ -5527,29 +5527,36 @@ async function renderPerfKpisAndHeatmap(sym) {
     return;
   }
 
-  // v0.14.3 — Use LIVE portfolio value as 'now' instead of the latest
-  // snapshot. Self-healing: even if the most recent snapshot is corrupt
-  // (and somehow slipped past the filter), the all-time return + CAGR
-  // are computed against the real current value the user can see in
-  // the sidebar. The snapshot history is only used for the 'then'.
+  // v0.14.4 — All-Time Return now uses COST BASIS as the baseline, not
+  // the first snapshot. This matches what the sidebar shows and what
+  // users intuitively expect ('how much have I made vs what I put in').
+  //
+  // Why not the first snapshot? Old snapshots can include holdings the
+  // user has since deleted/ignored — comparing 'portfolio value then'
+  // to 'portfolio value now' becomes apples-to-oranges. Cost basis,
+  // by contrast, only counts what's still in the portfolio.
+  //
+  // CAGR annualises the same cost-basis return over the snapshot history
+  // span (best proxy we have for 'how long have I been invested').
   const liveMetrics = (typeof getMetrics === 'function') ? getMetrics() : null;
-  const liveTotal = (liveMetrics && Number(liveMetrics.totalValue) > 0) ? Number(liveMetrics.totalValue) : null;
-  const first = Number(history[0].total_value) || 0;
-  const lastSnap = Number(history[history.length - 1].total_value) || 0;
-  const last = liveTotal != null ? liveTotal : lastSnap;
-  if (first > 0 && last > 0) {
-    const totalPct = ((last - first) / first) * 100;
-    setText('perfKpiTotal', (totalPct >= 0 ? '+' : '') + totalPct.toFixed(2) + '%');
-    document.getElementById('perfKpiTotal').style.color = totalPct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
-    setText('perfKpiTotalSub', `${sym}${fmt(first)} → ${sym}${fmt(last)}${liveTotal != null ? ' · live' : ''}`);
+  const liveTotal = liveMetrics && Number(liveMetrics.totalValue) > 0 ? Number(liveMetrics.totalValue) : null;
+  const liveCost  = liveMetrics && Number(liveMetrics.totalCost)  > 0 ? Number(liveMetrics.totalCost)  : null;
+  const liveGain  = liveMetrics ? Number(liveMetrics.totalGain) : null;
+  const liveGainPct = liveMetrics ? Number(liveMetrics.totalGainPct) : null;
 
-    // CAGR — annualised. Needs at least 30 days.
+  if (liveTotal != null && liveCost != null && isFinite(liveGainPct)) {
+    setText('perfKpiTotal', (liveGainPct >= 0 ? '+' : '') + liveGainPct.toFixed(2) + '%');
+    document.getElementById('perfKpiTotal').style.color = liveGainPct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
+    const gainStr = (liveGain >= 0 ? '+' : '−') + sym + fmt(Math.abs(liveGain));
+    setText('perfKpiTotalSub', `${sym}${fmt(liveCost)} invested → ${sym}${fmt(liveTotal)} (${gainStr})`);
+
+    // CAGR — annualise the cost-basis return over the snapshot history span.
     const startDate = new Date(history[0].snapshot_date);
-    const endDate   = liveTotal != null ? new Date() : new Date(history[history.length - 1].snapshot_date);
+    const endDate   = new Date();
     const days = (endDate - startDate) / 86400000;
-    if (days >= 30) {
+    if (days >= 30 && liveCost > 0) {
       const years = Math.max(days / 365.25, 1 / 365.25);
-      const cagr = (Math.pow(last / first, 1 / years) - 1) * 100;
+      const cagr = (Math.pow(liveTotal / liveCost, 1 / years) - 1) * 100;
       setText('perfKpiCagr', (cagr >= 0 ? '+' : '') + cagr.toFixed(2) + '%');
       document.getElementById('perfKpiCagr').style.color = cagr >= 0 ? 'var(--color-blue)' : 'var(--color-red)';
       setText('perfKpiCagrSub', `over ${days < 365 ? Math.round(days) + ' days' : (days / 365.25).toFixed(1) + ' years'}`);
@@ -5557,6 +5564,18 @@ async function renderPerfKpisAndHeatmap(sym) {
       setText('perfKpiCagr', '–');
       setText('perfKpiCagrSub', `${Math.round(days)} day${Math.round(days) === 1 ? '' : 's'} of history · needs ≥30`);
     }
+  } else {
+    // Fall back to the snapshot-based calc if live metrics aren't ready
+    const first = Number(history[0].total_value) || 0;
+    const last  = Number(history[history.length - 1].total_value) || 0;
+    if (first > 0 && last > 0) {
+      const totalPct = ((last - first) / first) * 100;
+      setText('perfKpiTotal', (totalPct >= 0 ? '+' : '') + totalPct.toFixed(2) + '%');
+      document.getElementById('perfKpiTotal').style.color = totalPct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
+      setText('perfKpiTotalSub', `${sym}${fmt(first)} → ${sym}${fmt(last)} · snapshots`);
+    }
+    setText('perfKpiCagr', '–');
+    setText('perfKpiCagrSub', 'awaiting live data');
   }
 
   // Bucket snapshots into monthly returns. Use last-snapshot-of-month value.
