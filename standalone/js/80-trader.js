@@ -188,6 +188,9 @@ function renderTraderIQ() {
     setT('tradeKpiAvgHoldSub', `winners ${_fmtHours(m.avgWinHold)} · losers ${_fmtHours(m.avgLossHold)}`);
   }
 
+  // Equity curve — cumulative P&L by date
+  renderTradeEquityCurve(closed, sym);
+
   // Setup performance breakdown — group closed trades by setup label
   renderTradeSetupBreakdown(closed, sym);
 
@@ -211,6 +214,106 @@ function renderTraderIQ() {
     return;
   }
   wrap.innerHTML = filtered.map(t => _renderTradeRow(t, sym)).join('');
+}
+
+// Equity Curve — cumulative P&L over time, rendered as inline SVG so it
+// themes via vars + needs no Chart.js. Sorts trades by exit_date and
+// plots a running total.
+function renderTradeEquityCurve(closed, sym) {
+  const wrap = document.getElementById('tradeEquityCurve');
+  if (!wrap) return;
+  if (!closed.length) { wrap.innerHTML = '<div class="text-center py-6 neutral text-sm">Close some trades to see your equity curve.</div>'; return; }
+  const ordered = [...closed]
+    .filter(t => t.exit_date && isFinite(t.pnl))
+    .sort((a, b) => new Date(a.exit_date) - new Date(b.exit_date));
+  if (ordered.length < 2) { wrap.innerHTML = '<div class="text-center py-6 neutral text-sm">Need at least 2 closed trades for a meaningful curve.</div>'; return; }
+  let cum = 0;
+  const points = ordered.map(t => { cum += Number(t.pnl) || 0; return { x: new Date(t.exit_date), y: cum }; });
+  const minY = Math.min(...points.map(p => p.y), 0);
+  const maxY = Math.max(...points.map(p => p.y), 0);
+  const minX = points[0].x.getTime();
+  const maxX = points[points.length - 1].x.getTime();
+  const W = 800, H = 200, PAD = 8;
+  const xScale = (t) => PAD + ((t - minX) / Math.max(1, maxX - minX)) * (W - 2 * PAD);
+  const yScale = (v) => H - PAD - ((v - minY) / Math.max(1, maxY - minY)) * (H - 2 * PAD);
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.x.getTime()).toFixed(1)} ${yScale(p.y).toFixed(1)}`).join(' ');
+  // Zero line if min < 0 < max
+  const zeroLine = (minY < 0 && maxY > 0)
+    ? `<line x1="${PAD}" y1="${yScale(0).toFixed(1)}" x2="${W - PAD}" y2="${yScale(0).toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3" stroke-width="1"/>`
+    : '';
+  const finalColor = cum >= 0 ? 'var(--color-green)' : 'var(--color-red)';
+  const areaPath = `${path} L ${xScale(points[points.length - 1].x.getTime()).toFixed(1)} ${yScale(minY < 0 ? Math.min(0, minY) : minY).toFixed(1)} L ${xScale(points[0].x.getTime()).toFixed(1)} ${yScale(minY < 0 ? Math.min(0, minY) : minY).toFixed(1)} Z`;
+  wrap.innerHTML = `
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div class="text-xs neutral">First trade: <b style="color:var(--text-primary);">${ordered[0].exit_date.slice(0, 10)}</b> · Latest: <b style="color:var(--text-primary);">${ordered[ordered.length - 1].exit_date.slice(0, 10)}</b></div>
+      <div class="text-xs">Cumulative P&L: <b style="color:${finalColor};">${cum >= 0 ? '+' : '−'}${sym}${fmt(Math.abs(cum))}</b></div>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:200px;display:block;">
+      ${zeroLine}
+      <path d="${areaPath}" fill="${finalColor}" opacity="0.12"/>
+      <path d="${path}" fill="none" stroke="${finalColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      ${points.map(p => `<circle cx="${xScale(p.x.getTime()).toFixed(1)}" cy="${yScale(p.y).toFixed(1)}" r="2.5" fill="${finalColor}"/>`).join('')}
+    </svg>`;
+}
+
+// Import closed/sold InvestIQ holdings into TraderIQ as completed trades.
+// A "closed" InvestIQ holding is one with quantity = 0 (sold out) or one
+// the user has explicitly marked ignored AND has lot data we can use.
+// For now: detect zero-quantity holdings with at least one lot with sell
+// data; turn each lot pair into a trade row.
+async function importClosedHoldingsAsTrades() {
+  if (!_supabase || !_supaUser) { toast.warning('Sign in to import'); return; }
+  if (_traderMigrationMissing) { toast.warning('Run migration 014 first.'); return; }
+  // Candidate holdings: zero quantity OR ignored, but with cost data we can use
+  const candidates = (state.portfolio || []).filter(h => {
+    const totalQty = (h.lots || []).reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+    return totalQty === 0 && (h.lots || []).length > 0;
+  });
+  if (!candidates.length) {
+    toast.info('No closed InvestIQ holdings detected. A "closed" holding has all lots fully sold (net quantity = 0).');
+    return;
+  }
+  const ok = await showConfirm({
+    title: `Import ${candidates.length} closed holding${candidates.length === 1 ? '' : 's'}?`,
+    message: `Each closed holding in InvestIQ becomes a trade in TraderIQ with the lot's entry + exit data, the original cost as the buy price, and the realised P&L as the trade result. You can edit each one afterwards. Duplicate-symbol trades from before today are skipped.`,
+    confirmLabel: 'Import',
+    cancelLabel: 'Cancel',
+    variant: 'warning'
+  });
+  if (!ok) return;
+  let imported = 0, skipped = 0;
+  for (const h of candidates) {
+    // Build a single trade per holding aggregating all lots
+    const buyLots  = (h.lots || []).filter(l => (Number(l.quantity) || 0) > 0);
+    const sellLots = (h.lots || []).filter(l => (Number(l.quantity) || 0) < 0);
+    if (!buyLots.length || !sellLots.length) { skipped++; continue; }
+    const buyQty  = buyLots.reduce((s, l) => s + Number(l.quantity), 0);
+    const sellQty = Math.abs(sellLots.reduce((s, l) => s + Number(l.quantity), 0));
+    const buyValue  = buyLots.reduce((s, l) => s + Number(l.quantity) * Number(l.price || 0), 0);
+    const sellValue = sellLots.reduce((s, l) => s + Math.abs(Number(l.quantity)) * Number(l.price || 0), 0);
+    const buyPrice  = buyQty  > 0 ? buyValue  / buyQty  : 0;
+    const sellPrice = sellQty > 0 ? sellValue / sellQty : 0;
+    const entryDate = buyLots.map(l => l.date).filter(Boolean).sort()[0] || null;
+    const exitDate  = sellLots.map(l => l.date).filter(Boolean).sort().pop() || null;
+    const pnl = (sellPrice - buyPrice) * Math.min(buyQty, sellQty);
+    const pnlPct = buyPrice > 0 ? ((sellPrice - buyPrice) / buyPrice) * 100 : 0;
+    const row = {
+      symbol: h.symbol, name: h.name, asset_type: h.type || 'stock',
+      side: 'long', status: 'closed', setup_label: 'Imported',
+      entry_date: entryDate ? new Date(entryDate + 'T00:00:00').toISOString() : null,
+      entry_price: buyPrice, entry_qty: buyQty, entry_currency: h.currency || 'USD',
+      exit_date: exitDate ? new Date(exitDate + 'T00:00:00').toISOString() : null,
+      exit_price: sellPrice, exit_qty: sellQty,
+      thesis: `Auto-imported from InvestIQ holding (${h.platform || 'unknown platform'}).`,
+      pnl: Number(pnl.toFixed(2)), pnl_pct: Number(pnlPct.toFixed(4)),
+      duration_hours: entryDate && exitDate ? (new Date(exitDate) - new Date(entryDate)) / 3600000 : null
+    };
+    try { await _supabase.from('trades').insert(row); imported++; }
+    catch(e) { console.warn('[trader] import failed for', h.symbol, e); skipped++; }
+  }
+  toast.success(`Imported ${imported} trade${imported === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`);
+  await loadTradesFromCloud();
+  renderTraderIQ();
 }
 
 function renderTradeSetupBreakdown(closed, sym) {

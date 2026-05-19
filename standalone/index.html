@@ -2406,6 +2406,7 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <button onclick="openTradeModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Log Trade</button>
+          <button onclick="importClosedHoldingsAsTrades()" class="btn btn-sm btn-secondary" title="Pull closed/sold InvestIQ holdings into TraderIQ as completed trades"><i class="fas fa-file-import mr-1"></i>Import from InvestIQ</button>
           <button onclick="openTradeCoachModal()" class="btn btn-sm btn-secondary" title="AI Coach — pattern analysis on your trade history"><i class="fas fa-brain mr-1"></i>AI Coach</button>
         </div>
       </div>
@@ -2436,6 +2437,19 @@
           <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Avg Hold</div>
           <div class="text-2xl font-bold mt-1" id="tradeKpiAvgHold" style="color:var(--color-teal);line-height:1.1;">–</div>
           <div class="text-xs neutral mt-1" id="tradeKpiAvgHoldSub">winners vs losers</div>
+        </div>
+      </div>
+
+      <!-- Equity curve — cumulative P&L over time -->
+      <div class="card p-5 mb-5">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <div class="section-title"><i class="fas fa-chart-line" style="color:var(--color-green);"></i> Equity Curve</div>
+            <div class="text-xs neutral mt-1">Cumulative P&amp;L across closed trades over time. Watch for steady ramps vs. choppy drawdowns.</div>
+          </div>
+        </div>
+        <div id="tradeEquityCurve">
+          <div class="text-center py-6 neutral text-sm">Close some trades to see your equity curve.</div>
         </div>
       </div>
 
