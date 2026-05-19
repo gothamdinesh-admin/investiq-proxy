@@ -1540,6 +1540,7 @@
   <button class="drawer-item" onclick="showSection('news');toggleMobileDrawer(false);"><i class="fas fa-newspaper"></i>News</button>
   <button class="drawer-item" onclick="showSection('tax');toggleMobileDrawer(false);"><i class="fas fa-receipt"></i>NZ Tax (FIF)</button>
   <button class="drawer-item" onclick="showSection('dividends');toggleMobileDrawer(false);"><i class="fas fa-coins"></i>Dividends</button>
+  <button class="drawer-item" onclick="showSection('goals');toggleMobileDrawer(false);"><i class="fas fa-bullseye"></i>Goals</button>
   <button class="drawer-item" onclick="showSection('trader');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>TraderIQ</button>
   <button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas fa-users"></i>Family</button>
   <button class="drawer-item" id="drawerAdminLink" style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>Admin Panel</button>
@@ -1601,6 +1602,7 @@
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
+      <div class="nav-link" onclick="showSection('goals',this)"><i class="fas fa-bullseye"></i> Goals</div>
       <div class="nav-link" onclick="showSection('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
       <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
@@ -2332,6 +2334,32 @@
       </div>
     </div>
 
+    <!-- GOALS & TARGETS (v0.15) -->
+    <div id="section-goals" style="display:none;">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-bullseye" style="color:var(--accent);"></i>Goals &amp; Targets
+            <span class="iq-badge">Plan</span>
+          </h2>
+          <div class="text-xs neutral mt-1">Set milestones like "$100k by 2030", track on-track / off-track with a projection that factors current value + contributions + expected return.</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="openGoalModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>New Goal</button>
+        </div>
+      </div>
+
+      <!-- Goals grid — renders all active goals as cards -->
+      <div id="goalsGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card p-8 text-center" id="goalsEmptyState">
+          <i class="fas fa-bullseye text-4xl mb-3 block" style="color:var(--accent);opacity:0.35;"></i>
+          <div class="text-lg font-semibold mb-1">No goals set yet</div>
+          <div class="text-sm neutral mb-4 max-w-md mx-auto">Goals turn "I should save more" into a number on a calendar. Set one, and you'll see whether you're on track every time you open the app.</div>
+          <button onclick="openGoalModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Set your first goal</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════════════════════════════════════════════════════════════
          TraderIQ — sibling section. Trade journal + AI coach. Different
          worldview from InvestIQ's portfolio tracker: trades you took and
@@ -2630,6 +2658,87 @@
 <!-- ============================================================ -->
 <!-- MODALS -->
 <!-- ============================================================ -->
+
+<!-- GOAL MODAL (create / edit) -->
+<div class="modal-overlay" id="goalModal" onclick="closeModalBg(event,'goalModal')">
+  <div class="modal" style="max-width:600px;">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <i class="fas fa-bullseye" style="color:var(--accent);"></i>
+        <span id="goalModalTitle">New Goal</span>
+      </h2>
+      <button onclick="closeModal('goalModal')" style="color:var(--text-muted);font-size:24px;background:none;border:none;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+
+    <form id="goalForm" onsubmit="event.preventDefault(); saveGoal();">
+      <input type="hidden" id="goalId">
+
+      <div class="mb-3">
+        <label class="text-xs neutral mb-1 block">Goal Name *</label>
+        <input id="goalName" class="input w-full" placeholder="First home deposit · Retire at 55 · Emergency fund" required>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Target Amount *</label>
+          <input id="goalTarget" type="number" step="any" min="0" class="input w-full" placeholder="100000" required>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Target Date *</label>
+          <input id="goalDate" type="date" class="input w-full" required>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Currency</label>
+          <select id="goalCurrency" class="input w-full">
+            <option>NZD</option><option>AUD</option><option>USD</option><option>GBP</option><option>EUR</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Icon</label>
+          <input id="goalIcon" class="input w-full" placeholder="🎯" maxlength="4">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Counts toward</label>
+          <select id="goalScope" class="input w-full" onchange="document.getElementById('goalScopeValueWrap').style.display = this.value === 'portfolio' ? 'none' : '';">
+            <option value="portfolio">Whole portfolio</option>
+            <option value="category">Asset type</option>
+            <option value="symbol">Single ticker</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="goalScopeValueWrap" class="mb-3" style="display:none;">
+        <label class="text-xs neutral mb-1 block">Scope value</label>
+        <input id="goalScopeValue" class="input w-full" placeholder="e.g. crypto / kiwisaver / AAPL">
+      </div>
+
+      <div class="text-xs uppercase neutral font-semibold mt-4 mb-2" style="letter-spacing:0.5px;">Projection inputs (optional)</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div>
+          <label class="text-xs neutral mb-1 block">Starting Amount</label>
+          <input id="goalStart" type="number" step="any" min="0" class="input w-full" placeholder="auto = current value">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Monthly Contribution</label>
+          <input id="goalMonthly" type="number" step="any" min="0" class="input w-full" placeholder="500">
+        </div>
+        <div>
+          <label class="text-xs neutral mb-1 block">Expected Return % p.a.</label>
+          <input id="goalReturn" type="number" step="0.1" class="input w-full" placeholder="7.0" value="7.0">
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 mt-5 flex-wrap">
+        <button type="submit" class="btn btn-primary flex-1"><i class="fas fa-save mr-1"></i><span id="goalSubmitLabel">Save Goal</span></button>
+        <button type="button" id="goalDeleteBtn" onclick="deleteGoalFromModal()" class="btn btn-secondary" style="display:none;color:var(--color-red);border-color:var(--color-red);"><i class="fas fa-trash"></i></button>
+        <button type="button" onclick="closeModal('goalModal')" class="btn btn-secondary">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- TRADERIQ — LOG / EDIT TRADE MODAL -->
 <div class="modal-overlay" id="tradeModal" onclick="closeModalBg(event,'tradeModal')">
@@ -3494,6 +3603,7 @@
 <script src="js/50-portfolio.js"></script>
 <script src="js/70-ai.js"></script>
 <script src="js/80-trader.js"></script>
+<script src="js/90-goals.js"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -4499,6 +4609,8 @@ async function signOut() {
     if (typeof _tradesCache !== 'undefined') _tradesCache = [];
     if (typeof _tradeSetupsCache !== 'undefined') _tradeSetupsCache = [];
     if (typeof _traderMigrationMissing !== 'undefined') _traderMigrationMissing = false;
+    if (typeof _goalsCache !== 'undefined') _goalsCache = [];
+    if (typeof _goalsMigrationMissing !== 'undefined') _goalsMigrationMissing = false;
   } catch(e) {}
   // Wipe sentiment cache for the same reason
   try { window._tickerSentiment = {}; window._newsArticlesCache = []; } catch(e) {}
@@ -8514,7 +8626,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin','trader'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin','trader','goals'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -11614,6 +11726,13 @@ function showSection(name, el) {
     try { renderMarketImpactCard(); } catch(e) { console.warn('impact', e); }
   }
   if (name === 'news') { try { renderSentimentRollup(); } catch(e) {} }
+  if (name === 'goals') {
+    try {
+      if (typeof loadGoalsFromCloud === 'function') {
+        loadGoalsFromCloud().then(() => { try { renderGoalsSection(); } catch(e) {} });
+      }
+    } catch(e) { console.warn('[goals] section open failed:', e); }
+  }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
     // network call. Replaced by renderTraderIQ() once the cache loads.
