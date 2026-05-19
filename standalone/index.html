@@ -4409,6 +4409,15 @@ async function signOut() {
   _isAdmin = false;
   // Clear local cache so next user on this device starts fresh
   clearLocalUserData({ keepSettings: true });
+  // Wipe TraderIQ caches so the next user doesn't see the previous user's
+  // trades flash on first section open before Supabase reload finishes.
+  try {
+    if (typeof _tradesCache !== 'undefined') _tradesCache = [];
+    if (typeof _tradeSetupsCache !== 'undefined') _tradeSetupsCache = [];
+    if (typeof _traderMigrationMissing !== 'undefined') _traderMigrationMissing = false;
+  } catch(e) {}
+  // Wipe sentiment cache for the same reason
+  try { window._tickerSentiment = {}; window._newsArticlesCache = []; } catch(e) {}
   updateAuthUI();
   renderAll();
   updateSyncIndicator();

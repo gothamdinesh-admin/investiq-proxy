@@ -17,6 +17,9 @@
 // In-memory caches (refreshed from Supabase on section load)
 let _tradesCache = [];
 let _tradeSetupsCache = [];
+// Set true when we detect the 014 migration hasn't been run. UI surfaces
+// a setup banner instead of throwing on save / coach calls.
+let _traderMigrationMissing = false;
 
 // Default setup library — created on first TraderIQ open if user has none
 const _DEFAULT_TRADE_SETUPS = [
@@ -29,23 +32,52 @@ const _DEFAULT_TRADE_SETUPS = [
   { name: 'Scalp',              description: 'Intraday quick-in-quick-out',          color: '#FB923C' }
 ];
 
+// Detect Postgres "relation does not exist" — fires when the 014
+// migration hasn't been run yet.
+function _isMissingTableError(err) {
+  if (!err) return false;
+  const msg = (err.message || '').toLowerCase();
+  return msg.includes('does not exist') || msg.includes('relation') || err.code === '42P01';
+}
+
 async function loadTradesFromCloud() {
   if (!_supabase || !_supaUser) return;
-  const { data: trades, error: tErr } = await _supabase
-    .from('trades').select('*').order('entry_date', { ascending: false, nullsFirst: false });
-  if (!tErr) _tradesCache = trades || [];
-
-  const { data: setups, error: sErr } = await _supabase
-    .from('trade_setups').select('*').order('name', { ascending: true });
-  if (!sErr) _tradeSetupsCache = setups || [];
-
-  // Seed default setups for first-time users
-  if ((setups || []).length === 0) {
-    for (const def of _DEFAULT_TRADE_SETUPS) {
-      await _supabase.from('trade_setups').insert(def).catch(() => {});
+  try {
+    const { data: trades, error: tErr } = await _supabase
+      .from('trades').select('*').order('entry_date', { ascending: false, nullsFirst: false });
+    if (tErr) {
+      if (_isMissingTableError(tErr)) {
+        _traderMigrationMissing = true;
+        _tradesCache = [];
+        _tradeSetupsCache = [];
+        return; // bail before trying setups
+      }
+      console.warn('[trader] trades load failed:', tErr.message);
+      return;
     }
-    const { data: refreshed } = await _supabase.from('trade_setups').select('*').order('name');
-    _tradeSetupsCache = refreshed || [];
+    _tradesCache = trades || [];
+    _traderMigrationMissing = false;
+
+    const { data: setups, error: sErr } = await _supabase
+      .from('trade_setups').select('*').order('name', { ascending: true });
+    if (sErr) {
+      if (_isMissingTableError(sErr)) _traderMigrationMissing = true;
+      console.warn('[trader] setups load failed:', sErr.message);
+      return;
+    }
+    _tradeSetupsCache = setups || [];
+
+    // Seed default setups for first-time users (table exists but empty)
+    if (_tradeSetupsCache.length === 0) {
+      for (const def of _DEFAULT_TRADE_SETUPS) {
+        await _supabase.from('trade_setups').insert(def).catch(() => {});
+      }
+      const { data: refreshed } = await _supabase.from('trade_setups').select('*').order('name');
+      _tradeSetupsCache = refreshed || [];
+    }
+  } catch(e) {
+    // Network blip — don't crash the app, just log it
+    console.warn('[trader] loadTradesFromCloud unexpected error:', e);
   }
 }
 
@@ -86,6 +118,37 @@ function _fmtHours(h) {
 // TraderIQ section opens, after any trade save/delete, or on filter change.
 function renderTraderIQ() {
   const sym = (typeof CURRENCY_SYMBOLS !== 'undefined' && CURRENCY_SYMBOLS[state.settings?.currency]) || 'NZ$';
+
+  // Migration check: if the 014 SQL hasn't been pasted into Supabase yet,
+  // surface clear setup instructions instead of letting the user save a
+  // trade that will silently fail. Doesn't touch any InvestIQ surface.
+  const migWrap = document.getElementById('tradeListWrap');
+  if (_traderMigrationMissing && migWrap) {
+    migWrap.innerHTML = `
+      <div class="card2 p-5" style="border-left:3px solid var(--color-amber);">
+        <div class="flex items-start gap-3">
+          <i class="fas fa-database" style="color:var(--color-amber);font-size:24px;margin-top:2px;"></i>
+          <div style="flex:1;">
+            <div class="font-semibold text-base mb-2">One setup step needed</div>
+            <div class="text-sm" style="color:var(--text-body);line-height:1.55;margin-bottom:10px;">
+              TraderIQ uses two new database tables (<code>trades</code>, <code>trade_setups</code>) that aren't in your Supabase project yet. InvestIQ keeps working normally; only this section is blocked.
+            </div>
+            <div class="text-sm mb-3" style="color:var(--text-body);">
+              <b>To activate:</b><br>
+              1. Open your <a href="https://app.supabase.com" target="_blank" style="color:var(--accent);text-decoration:underline;">Supabase dashboard</a> → SQL Editor.<br>
+              2. Paste the contents of <code>supabase/migrations/014_trader_iq.sql</code>.<br>
+              3. Click <b>Run</b>.<br>
+              4. Refresh this page and click <b>TraderIQ</b> again.
+            </div>
+            <div class="text-xs neutral">The migration is idempotent — safe to re-run if needed.</div>
+          </div>
+        </div>
+      </div>`;
+    // Zero out the KPI tiles so they don't show stale placeholders
+    const z = (id) => { const el = document.getElementById(id); if (el) el.textContent = '–'; };
+    ['tradeKpiWinRate','tradeKpiPnl','tradeKpiExpectancy','tradeKpiProfitFactor','tradeKpiAvgHold'].forEach(z);
+    return;
+  }
 
   // Filter + sort the trade list per the user's controls
   const statusFilter = document.getElementById('tradeFilterStatus')?.value || 'all';
@@ -246,6 +309,11 @@ function openTradeModal(tradeId) {
 
 async function saveTrade() {
   if (!_supabase || !_supaUser) { if (window.toast) toast.warning('Sign in to save trades'); return; }
+  if (_traderMigrationMissing) {
+    if (window.toast) toast.warning('TraderIQ tables not set up yet — see the setup banner in the section.');
+    closeModal('tradeModal');
+    return;
+  }
   const id           = document.getElementById('tradeId').value || null;
   const symbol       = (document.getElementById('tradeSymbol').value || '').trim().toUpperCase();
   if (!symbol) { if (window.toast) toast.warning('Symbol is required'); return; }
@@ -329,6 +397,10 @@ function openTradeCoachModal() { openModal('tradeCoachModal'); }
 async function runTradeCoach() {
   const btn = document.getElementById('tradeCoachRunBtn');
   const out = document.getElementById('tradeCoachOutput');
+  if (_traderMigrationMissing) {
+    out.innerHTML = `<div class="text-center py-4 neutral text-sm">Run the 014 migration first — see the setup banner on the TraderIQ section.</div>`;
+    return;
+  }
   const closed = _tradesCache.filter(t => t.status === 'closed');
   if (closed.length < 3) {
     out.innerHTML = `<div class="text-center py-4 neutral text-sm">Log at least 3 closed trades before running the coach. You have ${closed.length} so far.</div>`;
