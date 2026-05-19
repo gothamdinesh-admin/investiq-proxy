@@ -5507,43 +5507,72 @@ function renderPerfContribution(metrics, sym) {
 // KPI STRIP + HEATMAP — both derived from snapshot history.
 async function renderPerfKpisAndHeatmap(sym) {
   const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  // Pull a generous slice of history (10y). loadSnapshotHistory lives in 50-portfolio.js or similar.
+  // Pull a generous slice of history (10y).
   let history = [];
   try { history = await loadSnapshotHistory(3650); } catch(e) { history = []; }
-  // v0.14.2 — filter out corrupt $0 snapshots so they don't poison the
-  // CAGR / All-Time Return calc. A snapshot with total_value <= 0 means
-  // the portfolio hadn't loaded yet when it was recorded.
-  history = (history || []).filter(h => Number(h.total_value) > 0);
-  if (history.length < 2) return;
+  // v0.14.2 — filter out corrupt $0 / no-holdings snapshots so they don't
+  // poison the CAGR / All-Time Return calc. Snapshots with total_value <= 0
+  // or holdings_count == 0 mean prices hadn't loaded when recorded.
+  const removed = (history || []).length - (history || []).filter(h => Number(h.total_value) > 0).length;
+  history = (history || []).filter(h => {
+    const v = Number(h.total_value);
+    const c = Number(h.holdings_count);
+    return isFinite(v) && v > 0 && (!isFinite(c) || c > 0);
+  });
+  if (removed > 0) console.log(`[perf] filtered ${removed} corrupt snapshot(s) from history`);
+  if (history.length < 2) {
+    if (removed > 0) {
+      setText('perfKpiTotalSub', `${removed} corrupt snapshot${removed === 1 ? '' : 's'} filtered out — visit Admin Panel → Clean $0 Snapshots to remove them permanently`);
+    }
+    return;
+  }
 
-  // All-time return: last value vs first value (assumes consistent contributions
-  // don't dominate — simple TWR approximation good enough for the user view).
+  // v0.14.3 — Use LIVE portfolio value as 'now' instead of the latest
+  // snapshot. Self-healing: even if the most recent snapshot is corrupt
+  // (and somehow slipped past the filter), the all-time return + CAGR
+  // are computed against the real current value the user can see in
+  // the sidebar. The snapshot history is only used for the 'then'.
+  const liveMetrics = (typeof getMetrics === 'function') ? getMetrics() : null;
+  const liveTotal = (liveMetrics && Number(liveMetrics.totalValue) > 0) ? Number(liveMetrics.totalValue) : null;
   const first = Number(history[0].total_value) || 0;
-  const last  = Number(history[history.length - 1].total_value) || 0;
-  if (first > 0) {
+  const lastSnap = Number(history[history.length - 1].total_value) || 0;
+  const last = liveTotal != null ? liveTotal : lastSnap;
+  if (first > 0 && last > 0) {
     const totalPct = ((last - first) / first) * 100;
     setText('perfKpiTotal', (totalPct >= 0 ? '+' : '') + totalPct.toFixed(2) + '%');
     document.getElementById('perfKpiTotal').style.color = totalPct >= 0 ? 'var(--color-green)' : 'var(--color-red)';
-    setText('perfKpiTotalSub', `${sym}${fmt(first)} → ${sym}${fmt(last)}`);
+    setText('perfKpiTotalSub', `${sym}${fmt(first)} → ${sym}${fmt(last)}${liveTotal != null ? ' · live' : ''}`);
 
     // CAGR — annualised. Needs at least 30 days.
-    const days = (new Date(history[history.length - 1].snapshot_date) - new Date(history[0].snapshot_date)) / 86400000;
+    const startDate = new Date(history[0].snapshot_date);
+    const endDate   = liveTotal != null ? new Date() : new Date(history[history.length - 1].snapshot_date);
+    const days = (endDate - startDate) / 86400000;
     if (days >= 30) {
       const years = Math.max(days / 365.25, 1 / 365.25);
       const cagr = (Math.pow(last / first, 1 / years) - 1) * 100;
       setText('perfKpiCagr', (cagr >= 0 ? '+' : '') + cagr.toFixed(2) + '%');
       document.getElementById('perfKpiCagr').style.color = cagr >= 0 ? 'var(--color-blue)' : 'var(--color-red)';
       setText('perfKpiCagrSub', `over ${days < 365 ? Math.round(days) + ' days' : (days / 365.25).toFixed(1) + ' years'}`);
+    } else {
+      setText('perfKpiCagr', '–');
+      setText('perfKpiCagrSub', `${Math.round(days)} day${Math.round(days) === 1 ? '' : 's'} of history · needs ≥30`);
     }
   }
 
   // Bucket snapshots into monthly returns. Use last-snapshot-of-month value.
+  // Override the current month with the LIVE total so the heatmap shows
+  // today's reality, not a stale snapshot.
   const byMonth = new Map();
   history.forEach(h => {
     const ym = (h.snapshot_date || '').slice(0, 7); // YYYY-MM
     if (!ym) return;
-    byMonth.set(ym, Number(h.total_value) || 0);
+    const v = Number(h.total_value);
+    if (v > 0) byMonth.set(ym, v);
   });
+  if (liveTotal != null) {
+    const thisYm = new Date().toISOString().slice(0, 7);
+    byMonth.set(thisYm, liveTotal);
+  }
   const monthEntries = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   if (monthEntries.length < 2) return;
   const monthlyReturns = [];
