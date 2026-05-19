@@ -8292,7 +8292,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin','trader'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
