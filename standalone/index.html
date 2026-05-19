@@ -2261,6 +2261,22 @@
       <!-- Summary cards -->
       <div id="divSummaryCards" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6"></div>
 
+      <!-- Monthly trend + Top payers row -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 lg:col-span-2">
+          <div class="section-title mb-3"><i class="fas fa-chart-bar" style="color:var(--color-amber);"></i> Monthly Income (last 12 months)</div>
+          <div id="divTrendContent">
+            <div class="text-xs neutral py-3 text-center">Trend appears once you have payments logged.</div>
+          </div>
+        </div>
+        <div class="card p-5">
+          <div class="section-title mb-3"><i class="fas fa-trophy" style="color:var(--color-amber);"></i> Top Payers</div>
+          <div id="divTopPayersContent">
+            <div class="text-xs neutral py-3 text-center">Add payments to see who's paying you the most.</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Ledger table -->
       <div class="card p-5">
         <div class="section-title mb-3"><i class="fas fa-list" style="color:var(--color-amber);"></i> Dividend ledger</div>
@@ -7427,25 +7443,27 @@ function _renderDividendSummary(divs) {
   const netBase = grossBase - withheldBase;
   const topPayer = Object.values(byHolding).sort((a,b) => b.gross - a.gross)[0];
 
+  // v0.14 — KPI tile redesign matching AI Insights / Performance pattern.
+  // Theme-coloured left border + var() colours so light/dark both look right.
   cards.innerHTML = `
-    <div class="metric-card">
-      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Total income</div>
-      <div class="text-2xl font-bold mt-1" style="color:#fbbf24;">${baseSym}${fmt(grossBase)}</div>
+    <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+      <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Total income</div>
+      <div class="text-2xl font-bold mt-1" style="color:var(--color-amber);line-height:1.1;">${baseSym}${fmt(grossBase)}</div>
       <div class="text-xs neutral mt-1">${count} payment${count === 1 ? '' : 's'}, gross</div>
     </div>
-    <div class="metric-card">
-      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">After withholding</div>
-      <div class="text-2xl font-bold mt-1" style="color:#34d399;">${baseSym}${fmt(netBase)}</div>
+    <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+      <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">After Withholding</div>
+      <div class="text-2xl font-bold mt-1" style="color:var(--color-green);line-height:1.1;">${baseSym}${fmt(netBase)}</div>
       <div class="text-xs neutral mt-1">${baseSym}${fmt(withheldBase)} withheld at source</div>
     </div>
-    <div class="metric-card">
-      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Imputation credits</div>
-      <div class="text-2xl font-bold mt-1" style="color:#818cf8;">${baseSym}${fmt(imputeBase)}</div>
+    <div class="card2 p-4" style="border-left:3px solid var(--accent);">
+      <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Imputation Credits</div>
+      <div class="text-2xl font-bold mt-1" style="color:var(--accent);line-height:1.1;">${baseSym}${fmt(imputeBase)}</div>
       <div class="text-xs neutral mt-1">NZ-company tax credits</div>
     </div>
-    <div class="metric-card">
-      <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Top payer</div>
-      <div class="text-2xl font-bold mt-1" style="color:#c8d6ef;">${topPayer ? _escape(topPayer.symbol) : '–'}</div>
+    <div class="card2 p-4" style="border-left:3px solid var(--color-violet);">
+      <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Top Payer</div>
+      <div class="text-2xl font-bold mt-1" style="color:var(--text-primary);line-height:1.1;">${topPayer ? _escape(topPayer.symbol) : '–'}</div>
       <div class="text-xs neutral mt-1">${topPayer ? baseSym + fmt(topPayer.gross) + ' from ' + topPayer.count + ' payment' + (topPayer.count === 1 ? '' : 's') : 'No data'}</div>
     </div>
   `;
@@ -7458,13 +7476,21 @@ function _renderDividendTable(divs) {
     wrap.innerHTML = `
       <div class="text-center py-8">
         <i class="fas fa-coins text-3xl mb-3 block" style="opacity:0.3;color:var(--color-amber);"></i>
-        <div class="text-sm" style="color:#c8d6ef;margin-bottom:4px;">No dividends recorded for this period</div>
+        <div class="text-sm" style="color:var(--text-primary);margin-bottom:4px;">No dividends recorded for this period</div>
         <div class="text-xs neutral mb-4">Add payments as they arrive. NZ tax fields (withholding + imputation) are optional but make IR3 export easier later.</div>
         <button onclick="addDividendPrompt()" class="btn btn-sm btn-primary"><i class="fas fa-plus mr-1"></i>Add your first dividend</button>
       </div>`;
     return;
   }
   const cols = '1fr 1.5fr 1fr 1.2fr 1fr 1fr 100px';
+  // v0.14 — colors via vars so types theme correctly in light mode
+  const TYPE_COLOR = {
+    drip: 'var(--color-violet)',
+    special: 'var(--color-amber)',
+    return_of_capital: 'var(--color-orange)',
+    interest: 'var(--color-green)',
+    cash: 'var(--text-secondary)'
+  };
   wrap.innerHTML = `
     <div class="table-header" style="display:grid;grid-template-columns:${cols};font-size:10px;">
       <span>Pay date</span>
@@ -7478,15 +7504,11 @@ function _renderDividendTable(divs) {
     ${divs.map(d => {
       const sym = CURRENCY_SYMBOLS[d.currency] || (d.currency + ' ');
       const typeDef = DIV_TYPE_LABELS[d.div_type] || d.div_type;
-      const typeColor = d.div_type === 'drip' ? '#a78bfa'
-                      : d.div_type === 'special' ? '#fbbf24'
-                      : d.div_type === 'return_of_capital' ? '#fb923c'
-                      : d.div_type === 'interest' ? '#34d399'
-                      : '#94a3b8';
+      const typeColor = TYPE_COLOR[d.div_type] || 'var(--text-secondary)';
       return `<div class="table-row" style="display:grid;grid-template-columns:${cols};font-size:12px;">
         <span class="text-xs neutral">${d.pay_date}</span>
         <span style="min-width:0;overflow:hidden;">
-          <span class="font-semibold" style="color:#c8d6ef;">${_escape(d.symbol)}</span>
+          <span class="font-semibold" style="color:var(--text-primary);">${_escape(d.symbol)}</span>
           ${d.platform ? `<span class="text-xs neutral"> · ${_escape(d.platform)}</span>` : ''}
           ${d.notes ? `<div class="text-xs neutral" style="font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${_escape(d.notes)}">${_escape(d.notes)}</div>` : ''}
         </span>
@@ -7496,10 +7518,87 @@ function _renderDividendTable(divs) {
         <span class="text-right mono neutral">${d.imputation_credit > 0 ? sym + fmt(d.imputation_credit) : '–'}</span>
         <span class="text-right">
           <button onclick="editDividendPrompt('${d.id}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 6px;" title="Edit"><i class="fas fa-edit"></i></button>
-          <button onclick="deleteDividend('${d.id}')" class="btn btn-sm" style="font-size:10px;padding:3px 6px;background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete"><i class="fas fa-trash"></i></button>
+          <button onclick="deleteDividend('${d.id}')" class="btn btn-sm" style="font-size:10px;padding:3px 6px;background:var(--color-red-soft);color:var(--color-red);border:1px solid var(--color-red);" title="Delete"><i class="fas fa-trash"></i></button>
         </span>
       </div>`;
     }).join('')}`;
+  // Render the new monthly trend + top payers breakdown alongside the table
+  try { _renderDividendTrend(divs); } catch(e) {}
+  try { _renderDividendTopPayers(divs); } catch(e) {}
+}
+
+// Monthly trend (last 12 months) — simple bar chart of total gross per month.
+// Provides visual sense of "is my income growing" without needing Chart.js.
+function _renderDividendTrend(divs) {
+  const el = document.getElementById('divTrendContent');
+  if (!el) return;
+  if (!divs.length) { el.innerHTML = '<div class="text-xs neutral py-3 text-center">Trend appears once you have payments logged.</div>'; return; }
+  const baseSym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+  const baseCcy = state.settings.currency || 'NZD';
+  // Bucket by YYYY-MM, summing gross converted to base
+  const m = {};
+  divs.forEach(d => {
+    const ym = (d.pay_date || '').slice(0, 7);
+    if (!ym) return;
+    const fx = getFxRate(d.currency || 'NZD', baseCcy);
+    m[ym] = (m[ym] || 0) + Number(d.gross_amount || 0) * fx;
+  });
+  // Show last 12 months including current; fill gaps with 0 so the bar
+  // chart is anchored on a real timeline.
+  const months = [];
+  const today = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const ym = d.toISOString().slice(0, 7);
+    months.push({ ym, amt: m[ym] || 0, label: d.toLocaleDateString('en-NZ', { month: 'short' }) });
+  }
+  const maxAmt = Math.max(...months.map(x => x.amt), 0) || 1;
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(12, minmax(0, 1fr));gap:6px;align-items:end;height:140px;">
+      ${months.map(x => {
+        const h = Math.max(2, (x.amt / maxAmt) * 120);
+        const color = x.amt > 0 ? 'var(--color-amber)' : 'var(--border)';
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%;" title="${x.ym}: ${baseSym}${fmt(x.amt)}">
+          <div style="font-size:9px;color:var(--text-muted);font-variant-numeric:tabular-nums;">${x.amt > 0 ? baseSym + fmt(x.amt) : ''}</div>
+          <div style="width:100%;height:${h}px;background:${color};border-radius:4px 4px 0 0;transition:background 0.15s;"></div>
+          <div style="font-size:10px;color:var(--text-secondary);">${x.label}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// Top payers — ranked bar list showing who pays you the most.
+function _renderDividendTopPayers(divs) {
+  const el = document.getElementById('divTopPayersContent');
+  if (!el) return;
+  if (!divs.length) { el.innerHTML = '<div class="text-xs neutral py-3 text-center">No payers yet.</div>'; return; }
+  const baseSym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
+  const baseCcy = state.settings.currency || 'NZD';
+  const byHolding = {};
+  divs.forEach(d => {
+    const fx = getFxRate(d.currency || 'NZD', baseCcy);
+    const sym = d.symbol || '?';
+    if (!byHolding[sym]) byHolding[sym] = { sym, gross: 0, count: 0 };
+    byHolding[sym].gross += Number(d.gross_amount || 0) * fx;
+    byHolding[sym].count++;
+  });
+  const ranked = Object.values(byHolding).sort((a, b) => b.gross - a.gross).slice(0, 8);
+  const total = ranked.reduce((s, x) => s + x.gross, 0) || 1;
+  el.innerHTML = ranked.map(p => {
+    const pct = (p.gross / total) * 100;
+    return `<div style="padding:8px 10px;border-radius:8px;background:var(--bg-panel-2);margin-bottom:6px;">
+      <div class="flex items-center justify-between mb-1">
+        <div class="font-semibold text-sm" style="color:var(--text-primary);">${_escape(p.sym)}</div>
+        <div class="mono text-sm" style="color:var(--color-amber);">${baseSym}${fmt(p.gross)}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;height:5px;background:var(--bg-deep);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:var(--color-amber);border-radius:3px;"></div>
+        </div>
+        <div class="text-xs neutral" style="white-space:nowrap;">${p.count} pay${p.count === 1 ? '' : 's'}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // Open the add/edit dividend modal. `prefill` may contain { symbol, currency, platform }
