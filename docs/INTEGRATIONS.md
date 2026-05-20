@@ -133,34 +133,119 @@ Three canonical entities, generated client-side in `standalone/js/95-integration
 
 ---
 
-## Apex Clearing (deferred to v0.17)
+## Apex Clearing
 
-**Goal:** pull broker-side positions and transactions automatically.
+### What we pull
 
-**Approach:**
-- Apex provides REST APIs for `/accounts`, `/positions`, `/transactions`.
-- Authentication via API key + per-account access token.
-- Proxy stores the API key as env var; per-user tokens stored encrypted
-  in `profiles.apex_token_encrypted` (new column).
-- Cron job in Supabase Edge Functions pulls positions nightly,
-  reconciles against `investiq_portfolios.portfolio`.
+Three Apex REST endpoints proxied through `/api/integrations/apex`:
 
-**Estimate:** 2-3 weeks read-only; +4-6 weeks for order placement with
-FMA wrap.
+| Endpoint | What it returns | When pulled |
+|---|---|---|
+| `/positions` | Current broker-side holdings (symbol, qty, avg cost, market value) | Nightly cron + manual refresh button |
+| `/transactions` | Last 90 days of buys/sells/dividends/fees | Nightly cron |
+| `/account` | Cash balance, buying power, account status | On-demand |
+
+### Today's behaviour (demo / preview mode)
+
+- Admin enters an Apex Account ID in **Settings → Admin → Apex Clearing**
+  (or leaves blank).
+- **Admin Panel → Test Apex Sync** pulls all three endpoints via the
+  proxy, which returns deterministic mock data shaped exactly like the
+  real Apex responses.
+- The browser-side reconciler compares Apex positions against the
+  user's current InvestIQ portfolio and reports the diff:
+  *in both* / *only in Apex* / *only in ours*.
+- Lets the demo show "broker says you own AAPL but InvestIQ doesn't
+  have it — add to portfolio?" UX without a real Apex account.
+
+### To enable real reads
+
+1. Apex provides an API key for the integration partner — set as
+   `APEX_API_KEY` env var on Render.
+2. Per-user account access tokens captured during onboarding, stored
+   encrypted in `profiles.apex_token_encrypted` (column add in a
+   future migration).
+3. Update `_proxy_apex` in `claude_proxy.py` to switch the
+   preview-mode mock return for a real `urllib.request` call to
+   `https://api.apexclearing.com/v1/<endpoint>` with the per-user token.
+4. Add a Supabase Edge Function `apex-nightly-sync` on a pg_cron
+   schedule to pull positions for every user with a token.
+
+### Read-only vs order placement
+
+| Capability | Effort | Compliance load |
+|---|---|---|
+| Read positions + transactions | 2-3 weeks | Low — Apex is the broker of record |
+| Place orders | +4-6 weeks | High — needs Harbour's FMA licence wrap, suitability check, disclosure flow |
+
+Recommend shipping read-only first.
 
 ---
 
-## Forms by Air (deferred to v0.17)
+## Forms by Air
 
-**Goal:** built-in onboarding form (KYC questions, risk profile, T&Cs).
+### What we receive
 
-**Approach:**
-- Form on Forms by Air sends a webhook on submit.
-- Supabase Edge Function receives the webhook, validates the signature,
-  upserts the data into the user's `profiles` row.
-- Triggers Dynamics Lead → Contact conversion.
+A single webhook per form submission. Today the schema we handle:
 
-**Estimate:** 3-5 days.
+```json
+{
+  "form_id": "investiq-onboarding-v1",
+  "submission_id": "fba_abc123",
+  "submitted_at": "2026-05-19T10:30:00Z",
+  "submitter_email": "user@example.com",
+  "fields": {
+    "full_name": "...", "preferred_name": "...",
+    "date_of_birth": "...", "nzbn_or_ird": "...",
+    "phone": "...", "tax_residency": "NZ",
+    "pep_status": false, "sanctions_check_consent": true,
+    "risk_q1_horizon": 5, "risk_q2_volatility_comfort": 4,
+    "risk_q3_loss_tolerance": 3, "risk_q4_income_dependence": 4,
+    "risk_q5_experience": 4, "computed_risk_profile": "Growth",
+    "primary_goal": "Retirement",
+    "target_amount": 1500000, "target_date": "2050-01-01",
+    "monthly_contribution": 2000,
+    "terms_accepted": true, "privacy_policy_accepted": true,
+    "marketing_optin": false
+  }
+}
+```
+
+### Field mapping (form → InvestIQ tables)
+
+| Form field | InvestIQ destination |
+|---|---|
+| `preferred_name` | `profiles.display_name` |
+| `tax_residency` | `profiles.country` |
+| `computed_risk_profile` | `profiles.risk_profile` (new column) |
+| `phone` | `profiles.phone` (new column) |
+| `pep_status` | `profiles.pep_flagged` (new column) |
+| `primary_goal` + `target_amount` + `target_date` + `monthly_contribution` | `investment_goals` row (auto-created via migration 015) |
+| `terms_accepted` + `privacy_policy_accepted` | `profiles.tcs_accepted_at` (new column) — required for legal sign-off audit |
+
+### Today's behaviour (demo)
+
+- **Admin Panel → Test Onboarding Webhook** simulates a submission
+  with realistic data.
+- The proxy `/api/integrations/forms-webhook` receives, returns a
+  `202 preview_accepted` echoing the field mapping it would apply.
+- Demonstrable end-to-end without a real Forms by Air subscription.
+
+### To enable real webhooks
+
+1. Sign up for Forms by Air, create a form using their templates +
+   add custom risk-profiling questions.
+2. Set the webhook URL to `{PROXY}/api/integrations/forms-webhook`.
+3. Set the webhook secret as `FORMSBYAIR_WEBHOOK_SECRET` env var on
+   Render — proxy validates the HMAC signature on every call.
+4. Update `_proxy_forms_webhook` to replace the preview-mode return
+   with a real Supabase upsert into `profiles` + insert into
+   `investment_goals` via the service-role key.
+5. Trigger an automatic Dynamics Lead → Contact conversion once the
+   webhook lands (via Supabase trigger or Edge Function).
+
+**Estimate to production:** 3-5 days once the Forms by Air account
+is set up.
 
 ---
 

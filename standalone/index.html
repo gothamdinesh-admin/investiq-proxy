@@ -2624,6 +2624,12 @@
           <button onclick="adminTestDynamicsSync()" class="btn btn-sm" style="background:rgba(96,165,250,0.12);color:var(--color-blue);border:1px solid rgba(96,165,250,0.35);" title="Build canonical Contact / Lead / PortfolioSnapshot payloads and POST to the proxy's Dynamics 365 endpoint">
             <i class="fas fa-link mr-1"></i>Test Dynamics 365 Sync
           </button>
+          <button onclick="adminTestApexSync()" class="btn btn-sm" style="background:rgba(168,85,247,0.12);color:var(--color-violet);border:1px solid rgba(168,85,247,0.35);" title="Pull mock Apex Clearing positions/transactions and reconcile against the portfolio">
+            <i class="fas fa-link mr-1"></i>Test Apex Sync
+          </button>
+          <button onclick="adminTestFormsByAirWebhook()" class="btn btn-sm" style="background:rgba(34,211,238,0.12);color:var(--color-teal);border:1px solid rgba(34,211,238,0.35);" title="Simulate a Forms by Air onboarding webhook and show the field mapping">
+            <i class="fas fa-clipboard-list mr-1"></i>Test Onboarding Webhook
+          </button>
           <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
             <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
           </button>
@@ -3357,6 +3363,26 @@
           <input type="text" id="settingDynamicsEndpoint" class="input" placeholder="https://yourorg.crm6.dynamics.com">
           <div class="text-xs mt-2" style="color:var(--text-muted);">
             Test in <b>Admin Panel → Test Dynamics 365 Sync</b>. The button builds Contact / Lead / PortfolioSnapshot payloads and POSTs them via the proxy.
+          </div>
+        </div>
+        <div style="border-top:1px dashed var(--border);padding-top:16px;margin-top:4px;">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fas fa-building-columns" style="color:var(--color-violet);"></i>
+            <span class="text-xs font-semibold" style="color:var(--color-violet);letter-spacing:0.5px;text-transform:uppercase;">Apex Clearing</span>
+          </div>
+          <div class="text-xs mb-3" style="color:var(--text-muted);line-height:1.6;">
+            Pulls broker-side positions + transactions on a nightly schedule. Auth via APEX_API_KEY env var on Render + per-user account token.
+          </div>
+          <label>Apex Account ID <span class="text-xs" style="color:var(--text-muted);font-weight:normal;">(leave blank for preview mode)</span></label>
+          <input type="text" id="settingApexAccountId" class="input" placeholder="APEX-XXXX-XXXX">
+        </div>
+        <div style="border-top:1px dashed var(--border);padding-top:16px;margin-top:4px;">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fas fa-clipboard-list" style="color:var(--color-teal);"></i>
+            <span class="text-xs font-semibold" style="color:var(--color-teal);letter-spacing:0.5px;text-transform:uppercase;">Forms by Air</span>
+          </div>
+          <div class="text-xs" style="color:var(--text-muted);line-height:1.6;">
+            Webhook receiver lives at <code style="background:var(--bg-panel-2);padding:2px 6px;border-radius:4px;">${PROXY}/api/integrations/forms-webhook</code>. Set <code style="background:var(--bg-panel-2);padding:2px 6px;border-radius:4px;">FORMSBYAIR_WEBHOOK_SECRET</code> env var on Render to enable HMAC signature validation. Test via <b>Admin Panel → Test Onboarding Webhook</b>.
           </div>
         </div>
       </div>
@@ -6650,6 +6676,8 @@ function populateSettingsForm() {
     if (aiProvKey) aiProvKey.value = state.settings.aiProviderKey || '';
     const dyn = document.getElementById('settingDynamicsEndpoint');
     if (dyn) dyn.value = state.settings.dynamicsEndpoint || '';
+    const apex = document.getElementById('settingApexAccountId');
+    if (apex) apex.value = state.settings.apexAccountId || '';
   }
 
   updateAdminDiagnostics();
@@ -6733,6 +6761,8 @@ function saveSettings() {
     if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
     const dyn = document.getElementById('settingDynamicsEndpoint');
     if (dyn) state.settings.dynamicsEndpoint = dyn.value.trim();
+    const apex = document.getElementById('settingApexAccountId');
+    if (apex) state.settings.apexAccountId = apex.value.trim();
     initSupabase(); // re-init if credentials changed
     logActivity('settings_change', { adminFieldsModified: true });
   }

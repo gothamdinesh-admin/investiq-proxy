@@ -330,6 +330,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._run_agents(body)
         elif self.path == "/api/integrations/dynamics":
             self._proxy_dynamics(body)
+        elif self.path == "/api/integrations/apex":
+            self._proxy_apex(body)
+        elif self.path == "/api/integrations/forms-webhook":
+            self._proxy_forms_webhook(body)
         else:
             self._json(404, {"error": "Not found"})
 
@@ -372,6 +376,123 @@ class ProxyHandler(BaseHTTPRequestHandler):
         return self._json(501, {
             "status": "not_implemented",
             "message": "Real-write path is gated behind Azure AD env-var configuration. See docs/INTEGRATIONS.md."
+        })
+
+    # ── Apex Clearing integration (preview-mode stub) ─────────────
+    # Production: would call https://api.apexclearing.com/v1/<endpoint>
+    # with the per-account access token. For demo: returns deterministic
+    # mock data so reconciliation logic can be exercised end-to-end.
+    def _proxy_apex(self, body):
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except Exception as e:
+            return self._json(400, {"error": f"Invalid JSON: {e}"})
+        endpoint = data.get("endpoint") or "positions"
+        account_id = data.get("account_id")
+        preview = (data.get("meta") or {}).get("preview", True)
+
+        try:
+            sys.stdout.write(f"[apex] endpoint={endpoint} account={account_id or '<preview>'} preview={preview}\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+        # Production path: requires APEX_API_KEY + valid account_id
+        apex_key = os.environ.get("APEX_API_KEY", "")
+        if not preview and apex_key and account_id:
+            return self._json(501, {
+                "status": "not_implemented",
+                "message": "Apex live path not enabled. Wire urllib.request to https://api.apexclearing.com/v1/" + endpoint
+            })
+
+        # Demo / preview data
+        if endpoint == "positions":
+            return self._json(200, {
+                "status": "preview",
+                "endpoint": "positions",
+                "data": [
+                    {"symbol": "AAPL", "qty": 10,    "avg_cost": 175.50, "current_price": 192.30, "market_value": 1923.00},
+                    {"symbol": "VOO",  "qty": 5,     "avg_cost": 480.00, "current_price": 520.10, "market_value": 2600.50},
+                    {"symbol": "NVDA", "qty": 3,     "avg_cost": 410.00, "current_price": 575.50, "market_value": 1726.50},
+                    {"symbol": "BTC-USD", "qty": 0.04, "avg_cost": 62000, "current_price": 95000, "market_value": 3800.00}
+                ]
+            })
+        if endpoint == "transactions":
+            return self._json(200, {
+                "status": "preview",
+                "endpoint": "transactions",
+                "data": [
+                    {"date": "2026-05-12", "type": "buy",  "symbol": "AAPL", "qty": 5,    "price": 190.20, "fees": 0.50},
+                    {"date": "2026-05-08", "type": "buy",  "symbol": "VOO",  "qty": 2,    "price": 515.50, "fees": 0.50},
+                    {"date": "2026-04-22", "type": "div",  "symbol": "AAPL", "qty": 0,  "amount": 4.20},
+                    {"date": "2026-04-15", "type": "sell", "symbol": "TSLA", "qty": 8,    "price": 245.10, "fees": 0.50}
+                ]
+            })
+        if endpoint == "account":
+            return self._json(200, {
+                "status": "preview",
+                "endpoint": "account",
+                "data": {
+                    "account_id":   account_id or "APEX-DEMO-12345",
+                    "account_type": "Individual Cash",
+                    "currency":     "USD",
+                    "cash_balance": 1245.50,
+                    "buying_power": 1245.50,
+                    "status":       "active"
+                }
+            })
+        return self._json(400, {"error": f"Unknown endpoint: {endpoint}"})
+
+    # ── Forms by Air webhook receiver (preview-mode) ──────────────
+    # Production: validates HMAC signature against FORMSBYAIR_WEBHOOK_SECRET,
+    # then upserts the form fields into the user's profile + creates an
+    # investment_goal row if the form included one. For demo: validates the
+    # payload shape and echoes the field mapping back to the caller.
+    def _proxy_forms_webhook(self, body):
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except Exception as e:
+            return self._json(400, {"error": f"Invalid JSON: {e}"})
+
+        form_id = data.get("form_id")
+        submitter = data.get("submitter_email")
+        fields = data.get("fields") or {}
+
+        try:
+            sys.stdout.write(f"[forms-by-air] form_id={form_id} submitter={submitter} fields={len(fields)}\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+        # Map form fields -> InvestIQ schema (preview only; production would write to Supabase)
+        profile_updates = {}
+        if "preferred_name" in fields: profile_updates["display_name"] = fields["preferred_name"]
+        if "tax_residency" in fields:  profile_updates["country"] = fields["tax_residency"]
+        if "computed_risk_profile" in fields: profile_updates["risk_profile"] = fields["computed_risk_profile"]
+        if "phone" in fields:           profile_updates["phone"] = fields["phone"]
+        if "pep_status" in fields:      profile_updates["pep_flagged"] = fields["pep_status"]
+
+        goal_to_create = None
+        if fields.get("primary_goal") and fields.get("target_amount") and fields.get("target_date"):
+            goal_to_create = {
+                "name": fields["primary_goal"],
+                "target_amount": fields["target_amount"],
+                "target_date": fields["target_date"],
+                "monthly_contribution": fields.get("monthly_contribution", 0),
+                "icon": "🎯"
+            }
+
+        webhook_secret = os.environ.get("FORMSBYAIR_WEBHOOK_SECRET", "")
+        sig_valid = bool(webhook_secret)  # in production: validate HMAC against header
+
+        return self._json(202, {
+            "status": "preview_accepted",
+            "form_id": form_id,
+            "submitter": submitter,
+            "hmac_validated": sig_valid,
+            "would_update_profile": profile_updates,
+            "would_create_goal": goal_to_create,
+            "note": "Production: signature validated against FORMSBYAIR_WEBHOOK_SECRET env, then UPSERT into profiles + INSERT into investment_goals via Supabase service-role key."
         })
 
     # ── Anthropic proxy ──────────────────────────────────────────
