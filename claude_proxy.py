@@ -328,8 +328,51 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._proxy_akahu(body)
         elif self.path == "/api/agents":
             self._run_agents(body)
+        elif self.path == "/api/integrations/dynamics":
+            self._proxy_dynamics(body)
         else:
             self._json(404, {"error": "Not found"})
+
+    # ── Dynamics 365 integration (preview-mode stub) ───────────────
+    # Production note: this would exchange Azure AD service-principal
+    # credentials for a Dynamics Web API access token, then POST the
+    # payload to https://<tenant>.crm6.dynamics.com/api/data/v9.2/<entity>s.
+    # For the demo we accept the payload, log it, and return a synthetic
+    # success response so the round-trip is observable without needing a
+    # real tenant.
+    def _proxy_dynamics(self, body):
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except Exception as e:
+            return self._json(400, {"error": f"Invalid JSON: {e}"})
+        entity = data.get("entity") or "Unknown"
+        target = data.get("target_url")
+        payload = data.get("payload") or {}
+        preview = (data.get("meta") or {}).get("preview", True)
+
+        # Always log what we received (visible in Render logs for the demo)
+        try:
+            sys.stdout.write(f"[dynamics] entity={entity} preview={preview} fields={list(payload.keys())} target={target or '<not set>'}\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+        if preview or not target:
+            return self._json(200, {
+                "status": "preview",
+                "entity": entity,
+                "would_post_to": f"{target}/api/data/v9.2/{entity.lower()}s" if target else "(no target_url set)",
+                "fields_received": list(payload.keys()),
+                "note": "Production proxy would exchange Azure AD credentials and POST the payload to Dynamics. Configure DYNAMICS_TENANT_ID / DYNAMICS_CLIENT_ID / DYNAMICS_CLIENT_SECRET env vars on Render to enable live writes."
+            })
+
+        # Real-write path would live here. Left as a stub so accidentally
+        # configuring a target without the Azure AD env vars can't write
+        # to a real Dynamics tenant.
+        return self._json(501, {
+            "status": "not_implemented",
+            "message": "Real-write path is gated behind Azure AD env-var configuration. See docs/INTEGRATIONS.md."
+        })
 
     # ── Anthropic proxy ──────────────────────────────────────────
     def _proxy_anthropic(self, body):

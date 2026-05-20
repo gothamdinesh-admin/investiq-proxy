@@ -2621,6 +2621,9 @@
           <button onclick="adminCleanBadSnapshots()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete snapshots with $0 value (poisons Performance KPIs)">
             <i class="fas fa-broom mr-1"></i>Clean $0 Snapshots
           </button>
+          <button onclick="adminTestDynamicsSync()" class="btn btn-sm" style="background:rgba(96,165,250,0.12);color:var(--color-blue);border:1px solid rgba(96,165,250,0.35);" title="Build canonical Contact / Lead / PortfolioSnapshot payloads and POST to the proxy's Dynamics 365 endpoint">
+            <i class="fas fa-link mr-1"></i>Test Dynamics 365 Sync
+          </button>
           <button onclick="adminForceReload()" class="btn btn-sm btn-secondary">
             <i class="fas fa-sync mr-1"></i>Force Reload from Cloud
           </button>
@@ -3337,9 +3340,23 @@
           <input type="text" id="settingAiProviderUrl" class="input mb-2" placeholder="http://localhost:1234/v1">
           <label>Provider API key <span class="text-xs" style="color:#4a6080;font-weight:normal;">(optional — LM Studio doesn't need one)</span></label>
           <input type="password" id="settingAiProviderKey" class="input" placeholder="sk-... or leave blank">
-          <div class="text-xs mt-2" style="color:#4a6080;line-height:1.6;">
-            <b>LM Studio:</b> default URL <code style="background:#141e33;padding:2px 6px;border-radius:4px;">http://localhost:1234/v1</code> · <b>Ollama:</b> <code style="background:#141e33;padding:2px 6px;border-radius:4px;">http://localhost:11434/v1</code><br>
+          <div class="text-xs mt-2" style="color:var(--text-muted);line-height:1.6;">
+            <b>LM Studio:</b> default URL <code style="background:var(--bg-panel-2);padding:2px 6px;border-radius:4px;">http://localhost:1234/v1</code> · <b>Ollama:</b> <code style="background:var(--bg-panel-2);padding:2px 6px;border-radius:4px;">http://localhost:11434/v1</code><br>
             For local providers, set the URL and keep the key blank. To use LM Studio from the deployed dashboard, you'd need a public tunnel (ngrok/cloudflare) in front.
+          </div>
+        </div>
+        <div style="border-top:1px dashed var(--border);padding-top:16px;margin-top:4px;">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fas fa-link" style="color:var(--color-blue);"></i>
+            <span class="text-xs font-semibold" style="color:var(--color-blue);letter-spacing:0.5px;text-transform:uppercase;">Microsoft Dynamics 365</span>
+          </div>
+          <div class="text-xs mb-3" style="color:var(--text-muted);line-height:1.6;">
+            Outbound CRM sync. The proxy uses Azure AD service-principal credentials (set as env vars on Render) to exchange for a Dynamics Web API token. Leave blank to preview payloads only.
+          </div>
+          <label>Dynamics 365 endpoint URL <span class="text-xs" style="color:var(--text-muted);font-weight:normal;">(e.g. https://harbour.crm6.dynamics.com)</span></label>
+          <input type="text" id="settingDynamicsEndpoint" class="input" placeholder="https://yourorg.crm6.dynamics.com">
+          <div class="text-xs mt-2" style="color:var(--text-muted);">
+            Test in <b>Admin Panel → Test Dynamics 365 Sync</b>. The button builds Contact / Lead / PortfolioSnapshot payloads and POSTs them via the proxy.
           </div>
         </div>
       </div>
@@ -3646,6 +3663,7 @@
 <script src="js/70-ai.js"></script>
 <script src="js/80-trader.js"></script>
 <script src="js/90-goals.js"></script>
+<script src="js/95-integrations.js"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6630,6 +6648,8 @@ function populateSettingsForm() {
     if (aiProv)    aiProv.value    = state.settings.aiProvider    || PLATFORM_CONFIG.aiProvider || 'claude';
     if (aiProvUrl) aiProvUrl.value = state.settings.aiProviderUrl || '';
     if (aiProvKey) aiProvKey.value = state.settings.aiProviderKey || '';
+    const dyn = document.getElementById('settingDynamicsEndpoint');
+    if (dyn) dyn.value = state.settings.dynamicsEndpoint || '';
   }
 
   updateAdminDiagnostics();
@@ -6711,6 +6731,8 @@ function saveSettings() {
     if (aiProv)    state.settings.aiProvider    = aiProv.value;
     if (aiProvUrl) state.settings.aiProviderUrl = aiProvUrl.value.trim();
     if (aiProvKey) state.settings.aiProviderKey = aiProvKey.value.trim();
+    const dyn = document.getElementById('settingDynamicsEndpoint');
+    if (dyn) state.settings.dynamicsEndpoint = dyn.value.trim();
     initSupabase(); // re-init if credentials changed
     logActivity('settings_change', { adminFieldsModified: true });
   }
