@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harbour Investor Hub — Powered by InvestIQ</title>
+  <meta name="description" content="A concept investor hub from Harbour Asset Management, powered by InvestIQ — the New Zealand-native portfolio dashboard that tracks Harbour funds alongside every other holding you own." />
+  <meta property="og:title" content="Harbour Investor Hub — Powered by InvestIQ" />
+  <meta property="og:description" content="A consolidated, NZ-tax-aware view of every investment you hold — including your Harbour funds." />
+  <meta name="theme-color" content="#0E2A47" />
+  <link rel="icon" type="image/svg+xml" href="../assets/invest_iq_app_icon.svg" />
+  <link rel="apple-touch-icon" href="../assets/invest_iq_app_icon.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Harbour-style wealth-management palette
+            navy:        '#0E2A47',   // deep harbour navy (primary)
+            'navy-2':    '#122E50',
+            'navy-deep': '#081A2D',
+            steel:       '#3C5573',
+            'steel-2':   '#5C7390',
+            mist:        '#E9EEF3',
+            cream:       '#F5F1E8',
+            'cream-2':   '#FAF7F0',
+            gold:        '#B89A3F',   // Harbour-style accent
+            'gold-2':    '#D4B965',
+            'gold-soft': '#E8D9A8',
+            ink:         '#1A1F2C',
+            // InvestIQ accents (for the "powered by" pill / dashboard mock)
+            'iq-blue':   '#1D4ED8',
+            'iq-emerald':'#10B981',
+            'iq-cyan':   '#22D3EE',
+          },
+          fontFamily: {
+            serif:  ['"Spectral"', 'Georgia', 'serif'],
+            sans:   ['"Inter"', 'system-ui', 'sans-serif'],
+          },
+          boxShadow: {
+            card:     '0 1px 3px rgba(14,42,71,0.06), 0 8px 24px rgba(14,42,71,0.08)',
+            cardHover:'0 4px 12px rgba(14,42,71,0.10), 0 20px 48px rgba(14,42,71,0.16)',
+            hero:     '0 20px 60px rgba(8,26,45,0.35)',
+          },
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Spectral:wght@300;400;500;600;700&display=swap');
+
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', system-ui, sans-serif; color: #1A1F2C; -webkit-font-smoothing: antialiased; }
+
+    /* Editorial serif headings — Harbour-style */
+    h1, h2, h3, .serif { font-family: 'Spectral', Georgia, serif; letter-spacing: -0.01em; }
+
+    /* Gold underline accent */
+    .gold-rule::after {
+      content: ''; display: block; width: 56px; height: 3px;
+      background: #B89A3F; margin-top: 18px; border-radius: 2px;
+    }
+    .gold-rule.center::after { margin-left: auto; margin-right: auto; }
+
+    /* Hero wave background */
+    .hero-bg {
+      background: linear-gradient(135deg, #081A2D 0%, #0E2A47 45%, #16365C 100%);
+      position: relative; overflow: hidden;
+    }
+    .hero-bg::before {
+      content: '';
+      position: absolute; inset: 0;
+      background-image:
+        radial-gradient(circle at 80% 20%, rgba(184,154,63,0.15), transparent 50%),
+        radial-gradient(circle at 10% 90%, rgba(34,211,238,0.08), transparent 50%);
+      pointer-events: none;
+    }
+
+    /* Subtle paper texture for cream sections */
+    .paper {
+      background-color: #FAF7F0;
+      background-image:
+        radial-gradient(rgba(184,154,63,0.05) 1px, transparent 1px);
+      background-size: 22px 22px;
+    }
+
+    /* Feature card hover lift */
+    .feat-card { transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+    .feat-card:hover { transform: translateY(-4px); border-color: #B89A3F !important; }
+
+    /* Eyebrow text */
+    .eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.18em;
+      text-transform: uppercase; color: #B89A3F;
+    }
+
+    /* Faux dashboard panel (hero illustration) */
+    .dash-mock {
+      background: linear-gradient(180deg, #07111F 0%, #0F172A 100%);
+      border: 1px solid #1e2d4a;
+      border-radius: 14px;
+      color: #F8FAFC;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.45);
+    }
+    .dash-spark path { fill: none; stroke-width: 2; }
+
+    /* FAQ accordion */
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    details[open] .caret { transform: rotate(180deg); }
+    .caret { transition: transform .2s ease; }
+
+    /* Nav underline */
+    .nav-link { position: relative; padding-bottom: 4px; }
+    .nav-link::after {
+      content: ''; position: absolute; left: 0; bottom: 0;
+      width: 0; height: 2px; background: #B89A3F;
+      transition: width .25s ease;
+    }
+    .nav-link:hover::after, .nav-link.active::after { width: 100%; }
+
+    /* Tag pill */
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* Compliance banner */
+    .concept-banner {
+      background: #FFF8E1; border-bottom: 1px solid #E8D9A8;
+      color: #5C4A12; font-size: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .hero-h1 { font-size: 2.5rem !important; line-height: 1.1; }
+    }
+  </style>
+</head>
+<body class="bg-white text-ink">
+
+  <!-- Concept-site disclaimer banner -->
+  <div class="concept-banner py-2.5 px-4 text-center">
+    <i class="fa-solid fa-circle-info text-gold mr-1.5"></i>
+    <strong>Concept site.</strong> Partnership proposal between Harbour Asset Management and InvestIQ — not an actively offered Harbour product. See footer.
+  </div>
+
+  <!-- ─────────────────────────── TOP NAV ─────────────────────────── -->
+  <header class="bg-white sticky top-0 z-40 border-b border-mist">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 py-5 flex items-center justify-between">
+      <a href="#top" class="flex items-center gap-3 group">
+        <!-- Stylized Harbour mark (anchor + H) -->
+        <svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="2" y="2" width="60" height="60" rx="10" fill="#0E2A47"/>
+          <!-- Stylized H + wave -->
+          <path d="M18 18 L18 46 M46 18 L46 46 M18 32 L46 32" stroke="#FAF7F0" stroke-width="3.2" stroke-linecap="round"/>
+          <path d="M14 52 Q22 48 32 52 T50 52" stroke="#B89A3F" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="leading-tight">
+          <div class="serif text-xl font-semibold text-navy tracking-tight">Harbour</div>
+          <div class="text-[10px] uppercase tracking-[0.18em] text-steel font-medium">Asset Management</div>
+        </div>
+      </a>
+
+      <nav class="hidden lg:flex items-center gap-8 text-sm font-medium text-navy">
+        <a href="#what" class="nav-link">Overview</a>
+        <a href="#for-you" class="nav-link">For Harbour clients</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#tax" class="nav-link">Tax &amp; compliance</a>
+        <a href="#family" class="nav-link">Family</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+      </nav>
+
+      <div class="flex items-center gap-3">
+        <a href="#access" class="hidden sm:inline-flex items-center gap-2 bg-navy text-cream-2 px-5 py-2.5 rounded-md text-sm font-semibold hover:bg-navy-deep transition">
+          Request access <i class="fa-solid fa-arrow-right text-xs"></i>
+        </a>
+        <button id="navToggle" class="lg:hidden text-navy text-xl" aria-label="Open menu">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile menu -->
+    <div id="mobileNav" class="hidden lg:hidden border-t border-mist px-6 py-4 space-y-3 text-sm font-medium text-navy">
+      <a href="#what" class="block">Overview</a>
+      <a href="#for-you" class="block">For Harbour clients</a>
+      <a href="#features" class="block">Features</a>
+      <a href="#tax" class="block">Tax &amp; compliance</a>
+      <a href="#family" class="block">Family</a>
+      <a href="#faq" class="block">FAQ</a>
+      <a href="#access" class="block bg-navy text-cream-2 px-4 py-2 rounded-md text-center">Request access</a>
+    </div>
+  </header>
+
+  <!-- ─────────────────────────── HERO ─────────────────────────── -->
+  <section id="top" class="hero-bg text-cream-2">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 py-20 lg:py-28 relative grid lg:grid-cols-12 gap-12 items-center">
+      <div class="lg:col-span-7 relative z-10">
+        <div class="pill bg-gold/15 text-gold-2 border border-gold/30 mb-6">
+          <i class="fa-solid fa-sparkles text-[10px]"></i> Powered by InvestIQ
+        </div>
+        <h1 class="hero-h1 text-5xl lg:text-6xl font-medium leading-[1.05] mb-6">
+          Harbour <span class="text-gold-2">Investor Hub</span>
+        </h1>
+        <p class="text-xl text-mist/90 font-light leading-relaxed mb-3 max-w-2xl">
+          A single, intelligent view of every investment you hold — your Harbour funds, your KiwiSaver, your shares, your term deposits.
+        </p>
+        <p class="text-base text-steel-2/90 mb-10 max-w-2xl">
+          Built natively for New Zealand investors. Tax-aware. Family-ready. Quietly powered by Claude AI.
+        </p>
+
+        <div class="flex flex-wrap gap-4 mb-12">
+          <a href="#access" class="inline-flex items-center gap-2 bg-gold hover:bg-gold-2 text-navy-deep px-7 py-3.5 rounded-md font-semibold transition shadow-hero">
+            Request early access <i class="fa-solid fa-arrow-right text-xs"></i>
+          </a>
+          <a href="#what" class="inline-flex items-center gap-2 border border-cream-2/30 hover:border-gold-2/60 text-cream-2 px-7 py-3.5 rounded-md font-semibold transition">
+            <i class="fa-solid fa-play text-xs"></i> Take the 2-minute tour
+          </a>
+        </div>
+
+        <!-- Trust strip -->
+        <div class="flex flex-wrap items-center gap-6 text-xs uppercase tracking-[0.14em] text-steel-2/80 font-medium">
+          <span><i class="fa-solid fa-shield-halved text-gold mr-1.5"></i> Bank-grade RLS</span>
+          <span><i class="fa-solid fa-flag text-gold mr-1.5"></i> NZ FMA-aligned wording</span>
+          <span><i class="fa-solid fa-lock text-gold mr-1.5"></i> Privacy Act 2020</span>
+          <span><i class="fa-solid fa-rotate text-gold mr-1.5"></i> Daily backups</span>
+        </div>
+      </div>
+
+      <!-- Hero illustration: dashboard mock -->
+      <div class="lg:col-span-5 relative z-10">
+        <div class="dash-mock p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full bg-red-400/70"></div>
+              <div class="w-2.5 h-2.5 rounded-full bg-yellow-400/70"></div>
+              <div class="w-2.5 h-2.5 rounded-full bg-green-400/70"></div>
+            </div>
+            <div class="text-[10px] text-slate-400 font-mono">harbour.investiq.app</div>
+          </div>
+
+          <div class="mb-4">
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 mb-1">Total portfolio · NZD</div>
+            <div class="flex items-baseline gap-3">
+              <div class="text-3xl font-bold text-white tabular-nums">$342,580</div>
+              <div class="text-sm font-semibold text-emerald-400">+$4,128 <span class="text-emerald-400/70 font-normal">(+1.22%)</span></div>
+            </div>
+          </div>
+
+          <!-- Sparkline -->
+          <svg viewBox="0 0 320 80" class="w-full h-20 mb-4 dash-spark">
+            <defs>
+              <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#10B981" stop-opacity="0.45"/>
+                <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M0 60 L25 55 L50 58 L75 48 L100 50 L125 42 L150 45 L175 35 L200 38 L225 28 L250 30 L275 22 L300 18 L320 12 L320 80 L0 80 Z" fill="url(#sparkFill)" stroke="none"/>
+            <path d="M0 60 L25 55 L50 58 L75 48 L100 50 L125 42 L150 45 L175 35 L200 38 L225 28 L250 30 L275 22 L300 18 L320 12" stroke="#10B981"/>
+          </svg>
+
+          <!-- Holding rows -->
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between text-xs bg-white/[0.03] rounded-md px-3 py-2">
+              <div class="flex items-center gap-2.5">
+                <span class="w-7 h-7 rounded bg-gold/20 text-gold-2 flex items-center justify-center font-bold text-[10px]">HRB</span>
+                <div>
+                  <div class="font-semibold text-white">Harbour Australasian Equity</div>
+                  <div class="text-slate-400 text-[10px]">NZ Managed Fund · PIE</div>
+                </div>
+              </div>
+              <div class="text-right tabular-nums">
+                <div class="text-white font-semibold">$84,210</div>
+                <div class="text-emerald-400 text-[10px]">+2.4%</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs bg-white/[0.03] rounded-md px-3 py-2">
+              <div class="flex items-center gap-2.5">
+                <span class="w-7 h-7 rounded bg-iq-blue/20 text-iq-blue flex items-center justify-center font-bold text-[10px]">FNZ</span>
+                <div>
+                  <div class="font-semibold text-white">Smartshares NZ Top 50</div>
+                  <div class="text-slate-400 text-[10px]">NZX ETF</div>
+                </div>
+              </div>
+              <div class="text-right tabular-nums">
+                <div class="text-white font-semibold">$38,402</div>
+                <div class="text-emerald-400 text-[10px]">+0.8%</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs bg-white/[0.03] rounded-md px-3 py-2">
+              <div class="flex items-center gap-2.5">
+                <span class="w-7 h-7 rounded bg-iq-cyan/20 text-iq-cyan flex items-center justify-center font-bold text-[10px]">VOO</span>
+                <div>
+                  <div class="font-semibold text-white">Vanguard S&amp;P 500</div>
+                  <div class="text-slate-400 text-[10px]">FIF · USD</div>
+                </div>
+              </div>
+              <div class="text-right tabular-nums">
+                <div class="text-white font-semibold">$62,150</div>
+                <div class="text-red-400 text-[10px]">-0.3%</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- AI brief -->
+          <div class="mt-4 p-3 rounded-md bg-gradient-to-br from-iq-blue/15 to-iq-emerald/10 border border-iq-blue/30">
+            <div class="flex items-center gap-2 mb-1.5">
+              <i class="fa-solid fa-wand-magic-sparkles text-iq-cyan text-xs"></i>
+              <div class="text-[10px] uppercase tracking-wider text-iq-cyan font-semibold">Daily Brief · 7:00am</div>
+            </div>
+            <div class="text-[11px] text-slate-200 leading-relaxed">
+              Your portfolio holds 38% NZ equity — Harbour Australasian leads gains today on Mainfreight strength. FIF threshold OK at NZ$62k overseas.
+            </div>
+          </div>
+        </div>
+
+        <!-- Floating "powered by" lockup -->
+        <div class="absolute -bottom-4 -right-4 lg:right-2 bg-cream-2 text-navy-deep px-4 py-2.5 rounded-lg shadow-card flex items-center gap-2 text-xs font-semibold">
+          <div class="w-7 h-7 rounded-md bg-gradient-to-br from-iq-blue to-iq-emerald flex items-center justify-center text-white text-[10px] font-bold">IQ</div>
+          Built on InvestIQ
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── WHAT IS IT ─────────────────────────── -->
+  <section id="what" class="bg-white py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="grid lg:grid-cols-12 gap-12 lg:gap-20 items-start">
+        <div class="lg:col-span-5">
+          <div class="eyebrow mb-3">About the Hub</div>
+          <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule mb-8">
+            One view of your wealth.<br/>Built for the way New Zealanders actually invest.
+          </h2>
+          <p class="text-steel text-lg leading-relaxed mb-5">
+            Most portfolio tools were built somewhere else — for someone else. They tag your Harbour fund as "international", forget PIE tax exists, and quietly miss your FIF threshold.
+          </p>
+          <p class="text-steel leading-relaxed">
+            Harbour Investor Hub is different. It assumes you live in Auckland, hold a Harbour fund, contribute to KiwiSaver, run a Sharesies account on the side, and pay NZ tax under either FIF or PIE. It does the maths for you.
+          </p>
+        </div>
+
+        <div class="lg:col-span-7 grid sm:grid-cols-3 gap-5">
+          <div class="feat-card border border-mist rounded-xl p-6 bg-cream-2/40 shadow-card">
+            <div class="w-12 h-12 rounded-lg bg-navy text-cream-2 flex items-center justify-center mb-4">
+              <i class="fa-solid fa-layer-group"></i>
+            </div>
+            <h3 class="serif text-xl font-semibold text-navy mb-2">Whole-of-life view</h3>
+            <p class="text-sm text-steel leading-relaxed">
+              Harbour funds, KiwiSaver, eToro, Sharesies, ANZ, BNZ, term deposits — consolidated in one dashboard.
+            </p>
+          </div>
+          <div class="feat-card border border-mist rounded-xl p-6 bg-cream-2/40 shadow-card">
+            <div class="w-12 h-12 rounded-lg bg-navy text-cream-2 flex items-center justify-center mb-4">
+              <i class="fa-solid fa-scale-balanced"></i>
+            </div>
+            <h3 class="serif text-xl font-semibold text-navy mb-2">NZ-tax aware</h3>
+            <p class="text-sm text-steel leading-relaxed">
+              FIF threshold tracking, FDR vs CV comparison, PIE treatment for NZ funds, IR3-ready exports.
+            </p>
+          </div>
+          <div class="feat-card border border-mist rounded-xl p-6 bg-cream-2/40 shadow-card">
+            <div class="w-12 h-12 rounded-lg bg-navy text-cream-2 flex items-center justify-center mb-4">
+              <i class="fa-solid fa-brain"></i>
+            </div>
+            <h3 class="serif text-xl font-semibold text-navy mb-2">AI-guided</h3>
+            <p class="text-sm text-steel leading-relaxed">
+              A four-agent AI panel (Claude Haiku + Opus) gives daily briefings and per-holding context — never advice, always information.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FOR HARBOUR CLIENTS ─────────────────────────── -->
+  <section id="for-you" class="paper py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="max-w-3xl mb-14">
+        <div class="eyebrow mb-3">Why it matters to you</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule">
+          If you hold a Harbour fund,<br/>here's what changes.
+        </h2>
+      </div>
+
+      <div class="grid lg:grid-cols-2 gap-x-12 gap-y-10">
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">01</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">Your Harbour funds, kept current</h3>
+            <p class="text-steel leading-relaxed">
+              Unit prices for every Harbour fund — Australasian Equity, Income, Active Growth, the lot — refreshed daily and shown alongside the rest of your wealth. No more checking the fund-update email when you want a portfolio snapshot.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">02</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">PIE tax handled separately</h3>
+            <p class="text-steel leading-relaxed">
+              Your Harbour fund income is taxed via PIE — your provider reports to IRD on your behalf. The Hub keeps it visually separated from FIF-zone holdings so you can see your <em>true</em> after-tax position at a glance.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">03</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">See your full NZ equity exposure</h3>
+            <p class="text-steel leading-relaxed">
+              Hold a Harbour Australasian fund <em>and</em> Smartshares NZ Top 50? The Hub shows your total NZ-equity weighting — Mainfreight, F&amp;P Healthcare, Auckland International — across both. No more wondering if you're double-up.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">04</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">Harbour commentary, at the moment of decision</h3>
+            <p class="text-steel leading-relaxed">
+              The AI assistant has Harbour's published research and house views built into its context. When you ask "should I add to NZ utilities?", the answer references Harbour commentary — not random Reddit threads.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">05</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">Concentration &amp; rebalance alerts</h3>
+            <p class="text-steel leading-relaxed">
+              The Hub watches your fund weightings and pings you when a holding crosses thresholds — concentration limits, rebalance triggers, or when a Harbour fund drifts above your target allocation.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-5">
+          <div class="flex-shrink-0 w-12 h-12 rounded-full bg-navy text-gold-2 flex items-center justify-center text-lg font-semibold serif">06</div>
+          <div>
+            <h3 class="serif text-2xl font-semibold text-navy mb-2">A household view — not just yours</h3>
+            <p class="text-steel leading-relaxed">
+              Your partner's KiwiSaver, your kids' custodial accounts, your shared term deposit — the Hub rolls them into one household picture. You decide who sees what.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FEATURES GRID ─────────────────────────── -->
+  <section id="features" class="bg-white py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="max-w-3xl mb-14">
+        <div class="eyebrow mb-3">What's inside</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule">
+          Everything you need to manage<br/>a real-world New Zealand portfolio.
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-layer-group text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Multi-platform consolidation</h3>
+          <p class="text-sm text-steel leading-relaxed">One dashboard for eToro, Sharesies, Harbour, Indus, ANZ, BNZ, and every major KiwiSaver provider.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-arrow-right-arrow-left text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Live multi-currency FX</h3>
+          <p class="text-sm text-steel leading-relaxed">USD, GBP (pence-aware for LSE), AUD, EUR, all FX-corrected to NZD automatically.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-newspaper text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Eight-source news brief</h3>
+          <p class="text-sm text-steel leading-relaxed">RNZ, NZ Herald, Stuff, BBC, MarketWatch, CNBC, Investing, Guardian — AI-summarised each morning.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-bell text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Price &amp; portfolio alerts</h3>
+          <p class="text-sm text-steel leading-relaxed">Per-ticker or whole-portfolio email triggers. Quiet by default, useful when it matters.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-chart-line text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Daily snapshots</h3>
+          <p class="text-sm text-steel leading-relaxed">Time-travel your portfolio. Audit-ready history of every position, every day.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-arrows-up-to-line text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Benchmark overlay</h3>
+          <p class="text-sm text-steel leading-relaxed">Compare your return against NZX 50, S&amp;P 500, NASDAQ, FTSE, ASX 200 — same scale, same period.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-envelope-open-text text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Weekly digest</h3>
+          <p class="text-sm text-steel leading-relaxed">A Monday-morning email recap. Optional, opt-in, easily turned off.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-circle-nodes text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Per-holding deep-dive</h3>
+          <p class="text-sm text-steel leading-relaxed">One-year price chart, per-lot P&amp;L, ticker-specific news, AI commentary — all on a single page.</p>
+        </div>
+        <div class="feat-card border border-mist rounded-xl p-7 bg-white shadow-card">
+          <i class="fa-solid fa-file-arrow-down text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-xl font-semibold text-navy mb-2">Tax-ready exports</h3>
+          <p class="text-sm text-steel leading-relaxed">CSV outputs your accountant (or Xero) can read straight in. FIF, PIE, dividends, realised gains.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── TAX & COMPLIANCE ─────────────────────────── -->
+  <section id="tax" class="bg-navy text-cream-2 py-20 lg:py-28 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-10">
+      <svg viewBox="0 0 1200 400" preserveAspectRatio="none" class="w-full h-full">
+        <path d="M0 200 Q300 100 600 200 T1200 200 L1200 400 L0 400 Z" fill="#B89A3F"/>
+      </svg>
+    </div>
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 relative grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <div>
+        <div class="eyebrow text-gold mb-3">Tax &amp; Compliance</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium gold-rule mb-8">
+          Built around NZ tax — not bolted on.
+        </h2>
+        <p class="text-mist/90 text-lg leading-relaxed mb-6">
+          FIF, PIE, RWT, imputation credits, foreign withholding — all the things that send your accountant a long email at year-end. The Hub keeps them tidy as you go.
+        </p>
+
+        <ul class="space-y-4 text-mist/90">
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">FIF threshold tracking</strong> — automatic NZ$50k overseas check, per person, with a warning before year-end.</div>
+          </li>
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">FDR vs Comparative Value</strong> — both methods calculated, the better outcome flagged.</div>
+          </li>
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">PIE separation</strong> — Harbour and other NZ funds are correctly excluded from the FIF calculation.</div>
+          </li>
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">Dividend ledger</strong> — RWT, NRWT, imputation, foreign withholding — every credit tracked, IR3-ready.</div>
+          </li>
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">FMA-aligned wording</strong> — the Hub provides information, not financial advice. Always.</div>
+          </li>
+          <li class="flex gap-3">
+            <i class="fa-solid fa-circle-check text-gold mt-1"></i>
+            <div><strong class="text-cream-2">Privacy Act 2020</strong> — data classification audited; no third-party sharing of identified holdings.</div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Tax visual card -->
+      <div class="bg-navy-2 border border-steel/30 rounded-2xl p-7 shadow-hero">
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <div class="text-xs uppercase tracking-wider text-gold mb-1">FIF position · 2026 tax year</div>
+            <div class="serif text-2xl font-semibold text-cream-2">NZ$62,400 overseas</div>
+          </div>
+          <span class="pill bg-yellow-500/15 text-yellow-300 border border-yellow-500/30">
+            <i class="fa-solid fa-triangle-exclamation text-[10px]"></i> Above threshold
+          </span>
+        </div>
+
+        <!-- Threshold bar -->
+        <div class="relative h-3 bg-navy-deep rounded-full mb-2 overflow-hidden">
+          <div class="absolute inset-y-0 left-0 bg-gradient-to-r from-emerald-500 to-yellow-400" style="width:78%"></div>
+          <div class="absolute inset-y-0 left-[63%] w-px bg-gold-2"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-steel-2 mb-6">
+          <span>$0</span>
+          <span class="text-gold-2 font-semibold">$50k threshold</span>
+          <span>$80k</span>
+        </div>
+
+        <!-- Method comparison -->
+        <div class="grid grid-cols-2 gap-3 mb-6">
+          <div class="bg-navy-deep/60 rounded-lg p-4">
+            <div class="text-[10px] uppercase tracking-wider text-steel-2 mb-1">FDR method</div>
+            <div class="serif text-2xl font-semibold text-cream-2 mb-1">$3,120</div>
+            <div class="text-xs text-steel-2">5% of opening value</div>
+          </div>
+          <div class="bg-navy-deep/60 rounded-lg p-4 border border-gold/40">
+            <div class="text-[10px] uppercase tracking-wider text-gold mb-1">CV method <i class="fa-solid fa-trophy text-[9px]"></i></div>
+            <div class="serif text-2xl font-semibold text-gold-2 mb-1">$1,840</div>
+            <div class="text-xs text-steel-2">Actual gain — saves $1,280</div>
+          </div>
+        </div>
+
+        <div class="bg-gold/10 border border-gold/30 rounded-lg p-3 text-xs text-cream-2/90">
+          <i class="fa-solid fa-lightbulb text-gold mr-1.5"></i>
+          The Hub suggests using <strong class="text-gold-2">Comparative Value</strong> this year. Save ~NZ$1,280 in FIF tax. Information only — confirm with your accountant.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FAMILY ─────────────────────────── -->
+  <section id="family" class="paper py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10 grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <div>
+        <div class="eyebrow mb-3">Built for households</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule mb-8">
+          Five roles. One household.<br/>You decide who sees what.
+        </h2>
+        <p class="text-steel text-lg leading-relaxed mb-6">
+          Investing isn't a solo activity. Your partner has a KiwiSaver. Your kids might have a custodial account. Your accountant needs read-only access at tax time. The Hub treats this as the default.
+        </p>
+        <ul class="space-y-4 text-steel">
+          <li class="flex gap-3 items-start">
+            <span class="pill bg-navy text-cream-2 mt-0.5">Owner</span>
+            <span class="text-sm">Full control — the household principal.</span>
+          </li>
+          <li class="flex gap-3 items-start">
+            <span class="pill bg-navy/80 text-cream-2 mt-0.5">Partner</span>
+            <span class="text-sm">Equal-rights spouse with shared view and edit.</span>
+          </li>
+          <li class="flex gap-3 items-start">
+            <span class="pill bg-steel text-cream-2 mt-0.5">Adult child</span>
+            <span class="text-sm">Older kids tracking their own KiwiSaver, visible to parents in aggregate only.</span>
+          </li>
+          <li class="flex gap-3 items-start">
+            <span class="pill bg-gold text-navy-deep mt-0.5">Child</span>
+            <span class="text-sm">Custodial accounts with special privacy protection (Privacy Act 2020).</span>
+          </li>
+          <li class="flex gap-3 items-start">
+            <span class="pill bg-mist text-navy mt-0.5">Accountant</span>
+            <span class="text-sm">Read-only, time-limited, scoped to tax-relevant tables.</span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Family graphic -->
+      <div class="relative">
+        <div class="bg-white rounded-2xl shadow-card border border-mist p-8">
+          <div class="text-xs uppercase tracking-wider text-gold mb-2">Household · The Dineshes</div>
+          <div class="serif text-3xl font-semibold text-navy mb-1 tabular-nums">$612,840</div>
+          <div class="text-sm text-steel mb-6">Total household net worth · NZD</div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-cream-2 rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-navy text-cream-2 flex items-center justify-center font-semibold text-sm">G</div>
+                <div>
+                  <div class="font-semibold text-navy text-sm">Gotham</div>
+                  <div class="text-[11px] text-steel">Owner</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold text-navy text-sm tabular-nums">$342,580</div>
+                <div class="text-[11px] text-emerald-600">+1.22%</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-cream-2 rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-navy/80 text-cream-2 flex items-center justify-center font-semibold text-sm">S</div>
+                <div>
+                  <div class="font-semibold text-navy text-sm">Sarah</div>
+                  <div class="text-[11px] text-steel">Partner</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold text-navy text-sm tabular-nums">$218,440</div>
+                <div class="text-[11px] text-emerald-600">+0.94%</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-cream-2 rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-gold text-navy-deep flex items-center justify-center font-semibold text-sm">M</div>
+                <div>
+                  <div class="font-semibold text-navy text-sm">Maya · KiwiSaver Junior</div>
+                  <div class="text-[11px] text-steel">Child · custodial</div>
+                </div>
+              </div>
+              <div class="text-right">
+                <div class="font-semibold text-navy text-sm tabular-nums">$8,420</div>
+                <div class="text-[11px] text-emerald-600">+2.10%</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-3 border border-dashed border-mist rounded-lg">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-mist text-navy flex items-center justify-center font-semibold text-sm">+</div>
+                <div class="text-sm text-steel">Invite household member</div>
+              </div>
+              <i class="fa-solid fa-paper-plane text-gold"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── AI AGENTS ─────────────────────────── -->
+  <section class="bg-white py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="max-w-3xl mb-14">
+        <div class="eyebrow mb-3">AI assistant</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule">
+          Four AI agents, one synthesised view.<br/>Information — never advice.
+        </h2>
+        <p class="text-steel text-lg leading-relaxed mt-6">
+          The Hub uses Anthropic's Claude models — Haiku for the cheap, parallel agents and Opus for the senior synthesis. Harbour clients see Harbour-flavoured commentary references embedded in the agent context.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div class="border border-mist rounded-xl overflow-hidden shadow-card bg-cream-2/40">
+          <div class="bg-navy text-cream-2 p-5">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-gold-2 mb-2">Agent 01 · Haiku</div>
+            <h3 class="serif text-xl font-semibold">Portfolio Health</h3>
+          </div>
+          <div class="p-5 text-sm text-steel leading-relaxed">
+            Diversification, concentration risk, asset-class breakdown. Outputs a 0-100 Health Score and three concrete improvements.
+          </div>
+        </div>
+        <div class="border border-mist rounded-xl overflow-hidden shadow-card bg-cream-2/40">
+          <div class="bg-navy text-cream-2 p-5">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-gold-2 mb-2">Agent 02 · Haiku</div>
+            <h3 class="serif text-xl font-semibold">Market Impact</h3>
+          </div>
+          <div class="p-5 text-sm text-steel leading-relaxed">
+            Three macro factors hitting <em>your</em> portfolio today — not generic CNBC headlines. NZ-specific weighting.
+          </div>
+        </div>
+        <div class="border border-mist rounded-xl overflow-hidden shadow-card bg-cream-2/40">
+          <div class="bg-navy text-cream-2 p-5">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-gold-2 mb-2">Agent 03 · Haiku</div>
+            <h3 class="serif text-xl font-semibold">Opportunity Scout</h3>
+          </div>
+          <div class="p-5 text-sm text-steel leading-relaxed">
+            Sector and geographic gaps. Suggests fund and ticker ideas — including Harbour fund options — that fit the gap.
+          </div>
+        </div>
+        <div class="border border-gold rounded-xl overflow-hidden shadow-card bg-navy text-cream-2">
+          <div class="bg-navy-deep p-5">
+            <div class="text-[10px] uppercase tracking-[0.18em] text-gold-2 mb-2">Agent 04 · Opus</div>
+            <h3 class="serif text-xl font-semibold">Senior Advisor</h3>
+          </div>
+          <div class="p-5 text-sm text-mist/90 leading-relaxed">
+            Synthesises the three Haiku agents into a five-action plan, ordered by impact. The only agent that "talks" to you directly.
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-8 p-5 bg-cream-2 border border-gold-soft rounded-xl text-sm text-steel">
+        <i class="fa-solid fa-shield-halved text-gold mr-2"></i>
+        <strong class="text-navy">FMA-aligned by design.</strong> The Hub provides information to help you think; it does not give personalised financial advice. Talk to a licensed adviser before acting.
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── SECURITY ─────────────────────────── -->
+  <section class="bg-cream-2/60 py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="text-center max-w-3xl mx-auto mb-14">
+        <div class="eyebrow mb-3">Security &amp; trust</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule center">
+          Your wealth data deserves<br/>institutional-grade safeguards.
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-lock text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">Row-level security</h3>
+          <p class="text-sm text-steel leading-relaxed">Every database table enforces RLS — even an admin can't peek into another household by accident.</p>
+        </div>
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-cloud-arrow-down text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">Daily encrypted backups</h3>
+          <p class="text-sm text-steel leading-relaxed">All eight data tables snapshotted nightly. 30-day retention. Full restore playbook ready.</p>
+        </div>
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-eye-slash text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">No data sale, ever</h3>
+          <p class="text-sm text-steel leading-relaxed">Privacy Act 2020 compliant. Anonymised analytics only — no broker or fund manager sees identified holdings.</p>
+        </div>
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-bell text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">Privacy-aware monitoring</h3>
+          <p class="text-sm text-steel leading-relaxed">Sentry SDK with PII scrubbing — error reports never leak email addresses or holdings.</p>
+        </div>
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-clock-rotate-left text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">Idle session timeout</h3>
+          <p class="text-sm text-steel leading-relaxed">30-minute auto-logout. Phone left on the bus? Your portfolio doesn't stay open.</p>
+        </div>
+        <div class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <i class="fa-solid fa-flag text-2xl text-gold mb-4"></i>
+          <h3 class="serif text-lg font-semibold text-navy mb-2">FMA wording audit</h3>
+          <p class="text-sm text-steel leading-relaxed">Every AI output reviewed against FMA guidance — "information", never "advice"; no "buy" or "sell" recommendations.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── ACCESS / PRICING ─────────────────────────── -->
+  <section id="access" class="bg-navy text-cream-2 py-20 lg:py-28">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="text-center max-w-3xl mx-auto mb-14">
+        <div class="eyebrow text-gold mb-3">Get access</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-cream-2 gold-rule center mb-6">
+          Three ways into the Hub.
+        </h2>
+        <p class="text-mist/80 text-lg">
+          The Hub is offered to Harbour clients in three tiers. Pricing reflects the partnership — Harbour fund holders get the full experience at a meaningful discount.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Free -->
+        <div class="bg-navy-2 border border-steel/30 rounded-2xl p-7">
+          <div class="text-xs uppercase tracking-[0.18em] text-steel-2 mb-2">Foundation</div>
+          <div class="serif text-4xl font-medium text-cream-2 mb-1">Included</div>
+          <div class="text-sm text-mist/70 mb-5">For all Harbour clients</div>
+          <ul class="space-y-3 text-sm text-mist/80 mb-7">
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> All Harbour fund unit prices</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> One non-Harbour platform</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Basic FIF threshold check</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> 20-holding limit</li>
+          </ul>
+          <a href="#contact" class="block text-center py-3 border border-cream-2/30 hover:border-gold rounded-md text-sm font-semibold transition">
+            Activate with Harbour login
+          </a>
+        </div>
+
+        <!-- Pro -->
+        <div class="bg-navy-2 border-2 border-gold rounded-2xl p-7 relative -translate-y-2 shadow-hero">
+          <div class="absolute top-0 right-6 -translate-y-1/2 bg-gold text-navy-deep px-3 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider">Most chosen</div>
+          <div class="text-xs uppercase tracking-[0.18em] text-gold mb-2">Pro</div>
+          <div class="serif text-4xl font-medium text-cream-2 mb-1">NZ$5<span class="text-lg text-mist/60">/mo</span></div>
+          <div class="text-sm text-mist/70 mb-5">Harbour-client price (RRP NZ$8)</div>
+          <ul class="space-y-3 text-sm text-mist/80 mb-7">
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Unlimited holdings, unlimited platforms</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> All four AI agents</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Daily &amp; weekly briefings</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Price alerts</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> FDR + CV tax comparison</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Tax-ready CSV export</li>
+          </ul>
+          <a href="#contact" class="block text-center py-3 bg-gold hover:bg-gold-2 text-navy-deep rounded-md text-sm font-semibold transition">
+            Start Pro
+          </a>
+        </div>
+
+        <!-- Family -->
+        <div class="bg-navy-2 border border-steel/30 rounded-2xl p-7">
+          <div class="text-xs uppercase tracking-[0.18em] text-steel-2 mb-2">Family</div>
+          <div class="serif text-4xl font-medium text-cream-2 mb-1">NZ$12<span class="text-lg text-mist/60">/mo</span></div>
+          <div class="text-sm text-mist/70 mb-5">Harbour-client price (RRP NZ$15)</div>
+          <ul class="space-y-3 text-sm text-mist/80 mb-7">
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Pro × six household members</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Aggregate household view</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Joint goal tracking</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Accountant read-only seat</li>
+            <li><i class="fa-solid fa-check text-gold mr-2"></i> Child custodial accounts</li>
+          </ul>
+          <a href="#contact" class="block text-center py-3 border border-cream-2/30 hover:border-gold rounded-md text-sm font-semibold transition">
+            Start Family
+          </a>
+        </div>
+      </div>
+
+      <p class="text-center text-mist/60 text-xs mt-8">
+        Indicative pricing. Final terms set when the Hub launches under partnership.
+      </p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── PARTNERSHIP ─────────────────────────── -->
+  <section class="bg-white py-20 lg:py-28">
+    <div class="max-w-5xl mx-auto px-6 lg:px-10 text-center">
+      <div class="eyebrow mb-3">The partnership</div>
+      <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule center mb-8">
+        Harbour × InvestIQ
+      </h2>
+      <p class="text-steel text-lg leading-relaxed mb-6">
+        Harbour Asset Management is one of New Zealand's most trusted active fund managers, with deep expertise in Australasian equities, fixed income, and KiwiSaver. InvestIQ is a New Zealand-built portfolio intelligence platform — fluent in FIF, PIE, Sharesies, KiwiSaver, and the way Kiwis actually invest.
+      </p>
+      <p class="text-steel text-lg leading-relaxed mb-10">
+        The Investor Hub is what happens when Harbour's research and stewardship meet InvestIQ's product engineering. A trusted manager. A modern interface. One household view.
+      </p>
+
+      <div class="flex flex-wrap items-center justify-center gap-8">
+        <div class="flex items-center gap-3">
+          <svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true">
+            <rect x="2" y="2" width="60" height="60" rx="10" fill="#0E2A47"/>
+            <path d="M18 18 L18 46 M46 18 L46 46 M18 32 L46 32" stroke="#FAF7F0" stroke-width="3.2" stroke-linecap="round"/>
+            <path d="M14 52 Q22 48 32 52 T50 52" stroke="#B89A3F" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+          </svg>
+          <div class="text-left">
+            <div class="serif text-lg font-semibold text-navy">Harbour</div>
+            <div class="text-[10px] uppercase tracking-[0.18em] text-steel">Asset Management</div>
+          </div>
+        </div>
+
+        <div class="text-2xl text-gold serif">×</div>
+
+        <div class="flex items-center gap-3">
+          <img src="../assets/invest_iq_app_icon.svg" alt="InvestIQ" class="w-11 h-11 rounded-lg" />
+          <div class="text-left">
+            <div class="serif text-lg font-semibold text-navy">InvestIQ</div>
+            <div class="text-[10px] uppercase tracking-[0.18em] text-steel">Intelligent Investing</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FAQ ─────────────────────────── -->
+  <section id="faq" class="bg-cream-2/60 py-20 lg:py-28">
+    <div class="max-w-4xl mx-auto px-6 lg:px-10">
+      <div class="mb-12">
+        <div class="eyebrow mb-3">FAQ</div>
+        <h2 class="serif text-4xl lg:text-5xl font-medium text-navy gold-rule">Questions, honestly answered.</h2>
+      </div>
+
+      <div class="space-y-4">
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">Is the Hub giving me financial advice?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            No. The Hub provides information about your own holdings and the market — never personalised financial advice. The AI agents say "consider", "explore", "you may wish to" — never "buy" or "sell". For advice tailored to your circumstances, speak to a licensed financial adviser.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">Does Harbour see my non-Harbour holdings?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            Identified holdings? Never. Row-level security ensures your portfolio is invisible to Harbour staff. Anonymised, aggregated trends (e.g. "X% of Hub users hold KiwiSaver outside Harbour") may inform Harbour product decisions — and you can opt out of even that.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">What happens to my data if I stop using the Hub?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            You can export every byte as JSON or CSV, then delete your account in one click. We keep backups for 30 days (for restore purposes only), then they're irrevocably purged. Harbour's record-keeping is unaffected — that data lives with Harbour, as it always did.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">How does the FIF threshold check actually work?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            The Hub tracks the cost of every overseas holding (excluding Australian shares treated as NZ resident, and PIE funds). It sums them per person — your spouse's are tracked separately — and flags when you cross the NZ$50,000 threshold. From there, it runs both the FDR (5% method) and CV (actual gain) calculations and shows you the better outcome.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">Can I use it without being a Harbour client?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            Yes — the underlying product is InvestIQ and it's available to any New Zealand investor. The Hub is a partnership flavour for Harbour clients, with Harbour-specific pricing, Harbour commentary built into AI context, and a Harbour-branded experience. Non-Harbour clients access the same platform under the InvestIQ name.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">What about my KiwiSaver — does that get tracked too?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            Yes. Whether your KiwiSaver is with Harbour, Milford, Generate, Booster, ANZ, ASB, Fisher, or any of the 18 major schemes — the Hub tracks unit prices and balances. It's treated as a PIE for tax purposes, just like a Harbour fund.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">What does the AI know about Harbour funds?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            For Harbour clients, the AI agents are loaded with Harbour's published research, fund objectives, and house views as context (subject to partnership agreement). When you ask "what's driving my Harbour Australasian fund this quarter?", you get a Harbour-informed answer — not a generic search result.
+          </p>
+        </details>
+
+        <details class="bg-white border border-mist rounded-xl p-6 shadow-card">
+          <summary class="flex items-center justify-between">
+            <h3 class="serif text-lg font-semibold text-navy">When can I sign up?</h3>
+            <i class="fa-solid fa-chevron-down caret text-gold"></i>
+          </summary>
+          <p class="text-steel text-sm leading-relaxed mt-4">
+            The Hub is a partnership concept at proposal stage between Harbour Asset Management and InvestIQ. It's not yet generally available. Register your interest below and we'll let you know when a pilot opens.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── CONTACT / FINAL CTA ─────────────────────────── -->
+  <section id="contact" class="hero-bg text-cream-2 py-20 lg:py-28">
+    <div class="max-w-4xl mx-auto px-6 lg:px-10 text-center relative z-10">
+      <h2 class="serif text-4xl lg:text-5xl font-medium gold-rule center mb-6">
+        Be among the first.
+      </h2>
+      <p class="text-mist/85 text-lg mb-10 max-w-2xl mx-auto">
+        Register your interest in the Harbour Investor Hub pilot. We'll reach out when access opens.
+      </p>
+
+      <form class="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto" onsubmit="event.preventDefault(); document.getElementById('formMsg').classList.remove('hidden');">
+        <input type="email" required placeholder="your.email@example.com"
+               class="flex-1 px-5 py-3.5 rounded-md bg-cream-2 text-navy-deep placeholder-steel/60 outline-none focus:ring-2 focus:ring-gold" />
+        <button type="submit" class="bg-gold hover:bg-gold-2 text-navy-deep px-7 py-3.5 rounded-md font-semibold transition">
+          Register interest
+        </button>
+      </form>
+      <p id="formMsg" class="hidden mt-5 text-gold-2 text-sm">
+        <i class="fa-solid fa-circle-check mr-1"></i> Thank you — we'll be in touch.
+      </p>
+
+      <div class="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs text-steel-2/80 uppercase tracking-[0.14em]">
+        <span><i class="fa-solid fa-envelope text-gold mr-1.5"></i> hello@harbour.investiq.app</span>
+        <span><i class="fa-solid fa-location-dot text-gold mr-1.5"></i> Auckland, NZ</span>
+        <span><i class="fa-solid fa-handshake text-gold mr-1.5"></i> Partnership inquiries welcome</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────── FOOTER ─────────────────────────── -->
+  <footer class="bg-navy-deep text-mist py-14">
+    <div class="max-w-7xl mx-auto px-6 lg:px-10">
+      <div class="grid md:grid-cols-4 gap-10 mb-10">
+        <div class="md:col-span-2">
+          <div class="flex items-center gap-3 mb-4">
+            <svg width="36" height="36" viewBox="0 0 64 64">
+              <rect x="2" y="2" width="60" height="60" rx="10" fill="#122E50"/>
+              <path d="M18 18 L18 46 M46 18 L46 46 M18 32 L46 32" stroke="#FAF7F0" stroke-width="3.2" stroke-linecap="round"/>
+              <path d="M14 52 Q22 48 32 52 T50 52" stroke="#B89A3F" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            </svg>
+            <div>
+              <div class="serif text-lg font-semibold text-cream-2">Harbour Investor Hub</div>
+              <div class="text-[10px] uppercase tracking-[0.18em] text-steel-2">Powered by InvestIQ</div>
+            </div>
+          </div>
+          <p class="text-sm text-steel-2 leading-relaxed max-w-md">
+            A consolidated, NZ-tax-aware view of your wealth. Built for the way New Zealanders actually invest — Harbour funds, KiwiSaver, shares, and everything in between.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="text-cream-2 font-semibold text-sm mb-3 uppercase tracking-wider text-xs">Product</h4>
+          <ul class="space-y-2 text-sm text-steel-2">
+            <li><a href="#what" class="hover:text-gold-2">Overview</a></li>
+            <li><a href="#features" class="hover:text-gold-2">Features</a></li>
+            <li><a href="#tax" class="hover:text-gold-2">Tax &amp; compliance</a></li>
+            <li><a href="#family" class="hover:text-gold-2">Family</a></li>
+            <li><a href="#access" class="hover:text-gold-2">Pricing</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="text-cream-2 font-semibold text-sm mb-3 uppercase tracking-wider text-xs">Resources</h4>
+          <ul class="space-y-2 text-sm text-steel-2">
+            <li><a href="#faq" class="hover:text-gold-2">FAQ</a></li>
+            <li><a href="#contact" class="hover:text-gold-2">Contact</a></li>
+            <li><a href="#" class="hover:text-gold-2">Privacy policy</a></li>
+            <li><a href="#" class="hover:text-gold-2">Terms of service</a></li>
+            <li><a href="../index.html" class="hover:text-gold-2">Open the dashboard <i class="fa-solid fa-arrow-right text-[10px]"></i></a></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Disclaimers -->
+      <div class="border-t border-steel/30 pt-8 text-xs text-steel-2/80 leading-relaxed space-y-3">
+        <p>
+          <strong class="text-cream-2">Concept site notice.</strong> This page is a partnership proposal mockup between Harbour Asset Management Limited and InvestIQ. It does not represent a currently offered Harbour product, service, or endorsement. The Harbour name, mark, and references are used illustratively for the partnership concept described in InvestIQ's Pitch Brief (Section 7). Any pilot, white-label, or commercial relationship would require formal agreement between the parties.
+        </p>
+        <p>
+          <strong class="text-cream-2">No financial advice.</strong> Information provided on this site and within the Hub is for general informational purposes only and does not constitute personalised financial advice under the Financial Markets Conduct Act 2013 or guidance issued by the Financial Markets Authority of New Zealand. Always consult a licensed financial adviser before making investment decisions.
+        </p>
+        <p>
+          <strong class="text-cream-2">Tax disclaimer.</strong> FIF, PIE, RWT, imputation and dividend calculations shown are estimates based on data you provide. Confirm with a chartered accountant or tax professional before filing.
+        </p>
+        <p class="pt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+          <span>© 2026 InvestIQ. Built in Auckland, Aotearoa New Zealand.</span>
+          <span class="opacity-60">Last updated: May 2026</span>
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile nav toggle
+    const navToggle = document.getElementById('navToggle');
+    const mobileNav = document.getElementById('mobileNav');
+    navToggle?.addEventListener('click', () => mobileNav.classList.toggle('hidden'));
+    mobileNav?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => mobileNav.classList.add('hidden')));
+
+    // Active nav-link highlight on scroll
+    const sections = ['what','for-you','features','tax','family','faq'];
+    const links = Array.from(document.querySelectorAll('header nav a'));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const id = e.target.id;
+          links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + id));
+        }
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    sections.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+  </script>
+
+</body>
+</html>
