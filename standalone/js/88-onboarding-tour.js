@@ -36,21 +36,21 @@ const _TOUR_STEPS = [
     position: 'bottom'
   },
   {
-    selector: '.sidebar nav .nav-link[onclick*="\'insights\'"]',
+    selector: '#navLinkInsights',
     selectorFallback: '#mobileDrawerBtn',
     title: '🧠 AI Insights — the centrepiece',
     body: 'This nav link opens the four-agent analysis. Health · Sentiment · Risk · Opportunity Scout — each gives a separate read on your portfolio, then a Senior Advisor synthesises prioritised action items with severity tags (Critical / High / Medium / Low / Watch).',
     position: 'right'
   },
   {
-    selector: '.sidebar nav .nav-link[onclick*="\'goals\'"]',
+    selector: '#navLinkGoals',
     selectorFallback: '#mobileDrawerBtn',
     title: '🎯 Goals — what you\'re aiming for',
     body: 'Set targets like <b>"$100k by 2030"</b>. The projection factors current value + monthly contributions + expected return. If you\'re off-track, it tells you the catch-up monthly.',
     position: 'right'
   },
   {
-    selector: '.sidebar nav .nav-link[onclick*="\'trader\'"]',
+    selector: '#navLinkTrader',
     selectorFallback: '#mobileDrawerBtn',
     title: '📈 TraderIQ — for active investors',
     body: 'Sibling app, same login. Trade journal · win rate · expectancy · profit factor · equity curve. The AI Coach reads your closed trades and surfaces patterns: "your Breakout setup wins 71% but you only took 7 — scale this up".',
