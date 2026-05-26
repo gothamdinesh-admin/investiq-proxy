@@ -14,13 +14,53 @@
 //   - position → 'bottom' | 'top' | 'left' | 'right' | 'center'
 // ═══════════════════════════════════════════════════════════════════════
 
-// Tour stays on the Overview page throughout — points at SIDEBAR NAV ITEMS
-// (always present, always positioned, never empty) rather than jumping
-// between sections which caused the 'highlighting empty boxes' problem
-// (sections need time to render after a switch; ring fires before paint).
-//
-// `selector` finds the element to ring; selectorFallback for mobile.
-const _TOUR_STEPS = [
+// Two tour tracks: DESKTOP points at sidebar nav links; MOBILE points
+// at different elements (hamburger, bottom tab bar, FAB drawer) because
+// the sidebar is hidden < 768px and would all collapse to the same icon.
+
+const _IS_MOBILE = () => window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+
+// MOBILE TOUR — uses elements that are actually visible on phones.
+const _TOUR_STEPS_MOBILE = [
+  {
+    selector: null,
+    title: '👋 Welcome to InvestIQ',
+    body: 'Quick 5-step phone tour. <b>Skip</b> any time, replay from <b>Help & FAQ</b>.',
+    position: 'center'
+  },
+  {
+    selector: '#overviewGreeting',
+    selectorFallback: 'main',
+    title: 'Your portfolio at a glance',
+    body: 'Greeting · total value · today\'s move. Scroll down for the full breakdown — Total Value · Return · Day Change · Diversification (all tappable).',
+    position: 'bottom'
+  },
+  {
+    selector: '#mobileDrawerBtn',
+    title: '☰ Full menu',
+    body: 'Tap here to reach every section: Holdings · Performance · Market · AI Insights · News · Tax · Dividends · Calendar · Reports · Goals · Family · TraderIQ.',
+    position: 'bottom'
+  },
+  {
+    selector: '#mobileTabBar',
+    title: 'Bottom bar — quick jumps',
+    body: 'Five most-used sections at the bottom: Overview · Holdings · Performance · Market · AI Insights. Everything else lives in the menu.',
+    position: 'top'
+  },
+  {
+    selector: '#mobileTabBar .mob-tab[data-section="insights"]',
+    selectorFallback: '#mobileTabBar',
+    title: '🧠 AI Insights',
+    body: 'The centrepiece. Four Claude agents analyse your portfolio in parallel and produce a prioritised action plan with severity tags.',
+    position: 'top',
+    finalCta: true
+  }
+];
+
+// DESKTOP TOUR — points at SIDEBAR NAV ITEMS (always present, never
+// transient). Jumping between sections caused 'highlighting empty
+// boxes' because sections need time to render after a switch.
+const _TOUR_STEPS_DESKTOP = [
   {
     selector: null,
     title: '👋 Welcome to InvestIQ',
@@ -60,11 +100,18 @@ const _TOUR_STEPS = [
     selector: '#fab',
     selectorFallback: '#mobileDrawerBtn',
     title: 'Quick actions',
-    body: 'Floating button bottom-right on desktop, hamburger ☰ menu on mobile. Add Holding · Refresh Prices · Run AI Agents · Export · Backup. <b>That\'s the tour — you\'re set.</b>',
+    body: 'Floating button bottom-right on desktop. Add Holding · Refresh Prices · Run AI Agents · Export · Backup. <b>That\'s the tour — you\'re set.</b>',
     position: 'left',
     finalCta: true
   }
 ];
+
+// Pick the right step set based on the current viewport. Re-evaluated
+// at tour start so rotating a tablet mid-flight doesn't trap the user
+// in the wrong track.
+function _activeSteps() {
+  return _IS_MOBILE() ? _TOUR_STEPS_MOBILE : _TOUR_STEPS_DESKTOP;
+}
 
 let _tourStep = 0;
 let _tourActive = false;
@@ -79,8 +126,8 @@ function startOnboardingTour(force) {
 
 function _renderTourStep() {
   if (!_tourActive) return;
-  if (_tourStep >= _TOUR_STEPS.length) return _endTour(true);
-  const step = _TOUR_STEPS[_tourStep];
+  if (_tourStep >= _activeSteps().length) return _endTour(true);
+  const step = _activeSteps()[_tourStep];
 
   // Navigate to the target section first
   if (step.targetSection && typeof showSection === 'function') {
@@ -185,8 +232,11 @@ function _paintTourStep(step, target) {
 
   const card = document.createElement('div');
   card.id = 'tourCard';
-  card.style.cssText = 'position:fixed;z-index:9992;max-width:380px;padding:20px 22px;background:var(--bg-panel);border:1px solid var(--accent-soft-2);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.5);';
-  const total = _TOUR_STEPS.length;
+  // Card width adapts: 380px max, but clamped to (viewport - 24px margin)
+  // so it never overflows narrow phones.
+  const cardMaxW = Math.min(380, window.innerWidth - 24);
+  card.style.cssText = `position:fixed;z-index:9992;width:${cardMaxW}px;max-width:${cardMaxW}px;padding:18px 20px;background:var(--bg-panel);border:1px solid var(--accent-soft-2);border-radius:14px;box-shadow:0 16px 40px rgba(0,0,0,0.5);box-sizing:border-box;`;
+  const total = _activeSteps().length;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-2">
       <span class="iq-badge">Tour</span>
@@ -208,30 +258,35 @@ function _paintTourStep(step, target) {
 function _positionTourCard(card, rect, position) {
   const cw = card.offsetWidth, ch = card.offsetHeight;
   const vw = window.innerWidth, vh = window.innerHeight;
-  const GAP = 16;
+  const GAP = 14;
   let left, top;
+  const mobile = _IS_MOBILE();
 
-  if (!rect || position === 'center') {
+  // On mobile we never place the card LEFT or RIGHT — viewport is too
+  // narrow. Force top/bottom/center.
+  let pos = position;
+  if (mobile && (pos === 'left' || pos === 'right')) pos = 'bottom';
+
+  if (!rect || pos === 'center') {
     left = (vw - cw) / 2;
     top  = (vh - ch) / 2;
   } else {
-    // Auto-pick the best side if 'auto' or if requested side doesn't fit
     const room = {
       top:    rect.top - GAP,
       bottom: vh - rect.bottom - GAP,
       left:   rect.left - GAP,
       right:  vw - rect.right - GAP
     };
-    let pos = position;
-    // Re-pick if the requested side doesn't have enough space
-    const needV = ch + GAP;
-    const needH = cw + GAP;
+    const needV = ch + GAP, needH = cw + GAP;
     if ((pos === 'bottom' && room.bottom < needV) ||
         (pos === 'top'    && room.top    < needV) ||
         (pos === 'right'  && room.right  < needH) ||
         (pos === 'left'   && room.left   < needH)) {
-      const best = Object.entries(room).sort((a, b) => b[1] - a[1])[0][0];
-      pos = best;
+      // Pick whichever side has the most room. On mobile only vertical.
+      const candidates = mobile
+        ? [['bottom', room.bottom], ['top', room.top]]
+        : Object.entries(room);
+      pos = candidates.sort((a, b) => b[1] - a[1])[0][0];
     }
     if (pos === 'bottom') { left = rect.left + rect.width/2 - cw/2; top  = rect.bottom + GAP; }
     if (pos === 'top')    { left = rect.left + rect.width/2 - cw/2; top  = rect.top - ch - GAP; }
@@ -239,9 +294,11 @@ function _positionTourCard(card, rect, position) {
     if (pos === 'left')   { left = rect.left - cw - GAP;            top  = rect.top + rect.height/2 - ch/2; }
   }
 
-  // Clamp to viewport with breathing margin
+  // Clamp to viewport with breathing margin. On mobile, account for the
+  // mobile tab bar at the bottom (~80px).
+  const bottomMargin = mobile ? 96 : 12;
   left = Math.max(12, Math.min(vw - cw - 12, left));
-  top  = Math.max(12, Math.min(vh - ch - 12, top));
+  top  = Math.max(12, Math.min(vh - ch - bottomMargin, top));
   card.style.left = left + 'px';
   card.style.top  = top + 'px';
 }
@@ -251,7 +308,7 @@ function _positionTourCard(card, rect, position) {
 function _onTourResize() {
   if (!_tourActive) return;
   // Re-render the current step against the new viewport
-  const step = _TOUR_STEPS[_tourStep];
+  const step = _activeSteps()[_tourStep];
   if (!step) return;
   const target = step.selector ? document.querySelector(step.selector) : null;
   _paintTourStep(step, target && _isVisible(target) ? target : null);
