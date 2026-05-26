@@ -14,52 +14,53 @@
 //   - position → 'bottom' | 'top' | 'left' | 'right' | 'center'
 // ═══════════════════════════════════════════════════════════════════════
 
-// Each step targets a SPECIFIC small element (not a whole section) so the
-// spotlight is meaningful + the tooltip can sit beside it. `targetSection`
-// runs showSection() first; `selector` finds the element to ring; `position`
-// hints where to place the tooltip.
+// Tour stays on the Overview page throughout — points at SIDEBAR NAV ITEMS
+// (always present, always positioned, never empty) rather than jumping
+// between sections which caused the 'highlighting empty boxes' problem
+// (sections need time to render after a switch; ring fires before paint).
+//
+// `selector` finds the element to ring; selectorFallback for mobile.
 const _TOUR_STEPS = [
   {
-    targetSection: 'overview',
-    selector: null, // Show centered welcome card with no target
+    selector: null,
     title: '👋 Welcome to InvestIQ',
-    body: 'Two-minute tour. I\'ll point at the 6 things that matter most. <b>Skip</b> at any time — you can replay this from <b>Help & FAQ</b>.',
+    body: 'Two-minute tour. I\'ll point at the things that matter most — they all live on this page. <b>Skip</b> at any time. You can replay this from <b>Help & FAQ</b>.',
     position: 'center'
   },
   {
     targetSection: 'overview',
-    selector: '#totalValue',
-    title: 'Your portfolio at a glance',
-    body: 'Total Value, Return, Day Change, Diversification — and every tile is <b>clickable</b>. Click Total Value to jump to Holdings, Total Return to Performance, etc.',
+    selector: '#overviewGreeting',
+    selectorFallback: 'main',
+    title: 'Your portfolio summary',
+    body: 'Greeting · total value · today\'s move · all-time return. This is your "how am I doing right now" view. The 4 tiles below it (Total Value · Return · Day Change · Diversification) are all <b>clickable shortcuts</b> to the right section.',
     position: 'bottom'
   },
   {
-    targetSection: 'overview',
-    selector: '.sidebar nav .nav-link.active',
-    title: 'Your map',
-    body: 'All sections live in the sidebar — Holdings, Performance, Market, AI Insights, News, Tax, Dividends, Calendar, Reports, Goals, Family, TraderIQ. On mobile, the hamburger ☰ at the top opens the same menu.',
+    selector: '.sidebar nav .nav-link[onclick*="\'insights\'"]',
+    selectorFallback: '#mobileDrawerBtn',
+    title: '🧠 AI Insights — the centrepiece',
+    body: 'This nav link opens the four-agent analysis. Health · Sentiment · Risk · Opportunity Scout — each gives a separate read on your portfolio, then a Senior Advisor synthesises prioritised action items with severity tags (Critical / High / Medium / Low / Watch).',
     position: 'right'
   },
   {
-    targetSection: 'insights',
-    selector: '#section-insights h2',
-    title: '🧠 AI Insights — the centrepiece',
-    body: 'Four specialist Claude agents analyse your portfolio in parallel — Health · Sentiment · Risk · Opportunity — then a senior advisor synthesises prioritised action items with severity tags.',
-    position: 'bottom'
-  },
-  {
-    targetSection: 'goals',
-    selector: '#section-goals h2',
-    title: '🎯 Goals & Targets',
-    body: 'Turn "I should save more" into "$100k by 2030 · on track". The projection factors current value, planned monthly contributions, and expected return — and tells you the catch-up monthly if you\'re off-track.',
-    position: 'bottom'
-  },
-  {
-    targetSection: 'overview',
-    selector: '#fab .fab-btn',
+    selector: '.sidebar nav .nav-link[onclick*="\'goals\'"]',
     selectorFallback: '#mobileDrawerBtn',
-    title: 'Quick actions — anywhere',
-    body: 'Floating button bottom-right on desktop, hamburger menu on mobile. Gets you to Add Holding, Refresh Prices, Run AI Agents, Export, Backup. <b>Done — you\'re set.</b>',
+    title: '🎯 Goals — what you\'re aiming for',
+    body: 'Set targets like <b>"$100k by 2030"</b>. The projection factors current value + monthly contributions + expected return. If you\'re off-track, it tells you the catch-up monthly.',
+    position: 'right'
+  },
+  {
+    selector: '.sidebar nav .nav-link[onclick*="\'trader\'"]',
+    selectorFallback: '#mobileDrawerBtn',
+    title: '📈 TraderIQ — for active investors',
+    body: 'Sibling app, same login. Trade journal · win rate · expectancy · profit factor · equity curve. The AI Coach reads your closed trades and surfaces patterns: "your Breakout setup wins 71% but you only took 7 — scale this up".',
+    position: 'right'
+  },
+  {
+    selector: '#fab',
+    selectorFallback: '#mobileDrawerBtn',
+    title: 'Quick actions',
+    body: 'Floating button bottom-right on desktop, hamburger ☰ menu on mobile. Add Holding · Refresh Prices · Run AI Agents · Export · Backup. <b>That\'s the tour — you\'re set.</b>',
     position: 'left',
     finalCta: true
   }
@@ -136,48 +137,50 @@ function _isVisible(el) {
 function _paintTourStep(step, target) {
   _clearTourOverlay();
 
-  // Cap the highlighted region size so very large targets (whole sections)
-  // don't create a useless rectangle covering everything.
+  // Measure the target's rect. Cap only the MAX so a giant target
+  // doesn't fill the screen. We do NOT pad the rect to look bigger —
+  // small elements stay small with the ring exactly on them.
   let rect = target ? target.getBoundingClientRect() : null;
+  if (rect && (rect.width === 0 || rect.height === 0)) rect = null;
   if (rect) {
     const vw = window.innerWidth, vh = window.innerHeight;
-    const MAX_W = Math.min(vw * 0.8, 640);
-    const MAX_H = Math.min(vh * 0.5, 280);
+    const MAX_W = Math.min(vw * 0.85, 720);
+    const MAX_H = Math.min(vh * 0.6, 360);
     if (rect.width > MAX_W) {
       const cx = rect.left + rect.width / 2;
-      rect = { ...rect, left: cx - MAX_W / 2, width: MAX_W, right: cx + MAX_W / 2 };
+      rect = { left: cx - MAX_W / 2, top: rect.top, width: MAX_W, height: rect.height, right: cx + MAX_W / 2, bottom: rect.bottom };
     }
     if (rect.height > MAX_H) {
       const cy = rect.top + rect.height / 2;
-      rect = { ...rect, top: cy - MAX_H / 2, height: MAX_H, bottom: cy + MAX_H / 2 };
+      rect = { left: rect.left, top: cy - MAX_H / 2, width: rect.width, height: MAX_H, right: rect.right, bottom: cy + MAX_H / 2 };
     }
   }
 
   const overlay = document.createElement('div');
   overlay.id = 'tourOverlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:9990;pointer-events:auto;cursor:default;';
+  // Darker overlay so the highlighted element really pops. Adjustable.
+  const DIM = 'rgba(7,17,31,0.82)';
   overlay.innerHTML = `<svg width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none;">
     <defs>
       <mask id="tourMask">
         <rect width="100%" height="100%" fill="white"/>
-        ${rect ? `<rect x="${rect.left - 6}" y="${rect.top - 6}" width="${rect.width + 12}" height="${rect.height + 12}" rx="10" fill="black"/>` : ''}
+        ${rect ? `<rect x="${rect.left - 8}" y="${rect.top - 8}" width="${rect.width + 16}" height="${rect.height + 16}" rx="12" fill="black"/>` : ''}
       </mask>
     </defs>
-    <rect width="100%" height="100%" fill="rgba(7,17,31,0.72)" mask="url(#tourMask)"/>
+    <rect width="100%" height="100%" fill="${DIM}" mask="url(#tourMask)"/>
   </svg>`;
-  // Click outside the spotlight + tooltip dismisses the tour
-  overlay.addEventListener('click', (e) => {
-    if (e.target.id === 'tourOverlay') {
-      // ignore — keep open so user can read; require explicit Skip / Esc
-    }
-  });
   document.body.appendChild(overlay);
 
   if (rect) {
+    // Bright amber/gold ring — stands out clearly against any background
     const ring = document.createElement('div');
     ring.id = 'tourRing';
-    ring.style.cssText = `position:fixed;left:${rect.left - 6}px;top:${rect.top - 6}px;width:${rect.width + 12}px;height:${rect.height + 12}px;border:2px solid var(--accent);border-radius:10px;box-shadow:0 0 0 4px rgba(96,165,250,0.25),0 0 24px rgba(96,165,250,0.4);z-index:9991;pointer-events:none;animation:tourPulse 1.6s ease-in-out infinite;`;
+    ring.style.cssText = `position:fixed;left:${rect.left - 8}px;top:${rect.top - 8}px;width:${rect.width + 16}px;height:${rect.height + 16}px;border:3px solid #FCD34D;border-radius:12px;box-shadow:0 0 0 6px rgba(252,211,77,0.22),0 0 36px rgba(252,211,77,0.55);z-index:9991;pointer-events:none;animation:tourPulse 1.4s ease-in-out infinite;`;
     document.body.appendChild(ring);
+
+    // Console-debug aid so anything that ever looks 'off' can be inspected
+    try { console.debug('[tour]', _tourStep + 1, step.title, '→', step.selector, target, rect); } catch(e) {}
   }
 
   const card = document.createElement('div');
@@ -301,8 +304,8 @@ function replayOnboardingTour() { startOnboardingTour(true); }
   const st = document.createElement('style');
   st.id = 'tourKeyframes';
   st.textContent = `@keyframes tourPulse {
-    0%,100% { box-shadow: 0 0 0 4px rgba(96,165,250,0.25), 0 0 24px rgba(96,165,250,0.4); }
-    50%     { box-shadow: 0 0 0 8px rgba(96,165,250,0.18), 0 0 32px rgba(96,165,250,0.55); }
+    0%,100% { box-shadow: 0 0 0 6px rgba(252,211,77,0.22), 0 0 36px rgba(252,211,77,0.55); }
+    50%     { box-shadow: 0 0 0 10px rgba(252,211,77,0.14), 0 0 48px rgba(252,211,77,0.7); }
   }`;
   document.head.appendChild(st);
 })();
