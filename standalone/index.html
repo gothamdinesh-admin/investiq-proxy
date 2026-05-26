@@ -986,6 +986,14 @@
     /* News headlines (ticker-grouped) */
     .news-headline:hover { border-color: var(--accent) !important; background: var(--accent-soft) !important; }
 
+    /* Reports — mobile overflow hint visible only on narrow screens */
+    @media (max-width: 768px) {
+      #reportMobileHint { display: block !important; }
+      /* Force the report preview's KPI grid to 2 cols on phone (was 4) */
+      #reportPreview div[style*="grid-template-columns:repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+      #reportPreview div[style*="grid-template-columns:repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+
     /* Settings modal tabs — pill-style buttons mirroring news-tab */
     .settings-tab {
       background: none; border: none; cursor: pointer;
@@ -1997,7 +2005,7 @@
             <button onclick="refreshSnapshotDropdown()" class="btn btn-sm btn-secondary" title="Reload dates"><i class="fas fa-sync-alt"></i></button>
           </div>
         </div>
-        <div id="snapshotHoldingsView">
+        <div id="snapshotHoldingsView" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
           <div class="text-center py-6 neutral text-sm">Pick a date above to see which holdings you had then and their values.</div>
         </div>
       </div>
@@ -2466,11 +2474,20 @@
         </div>
       </div>
 
-      <!-- Report preview — printable -->
-      <div id="reportPreview" class="card p-6" style="background:#fff;color:#0B1220;min-height:400px;">
-        <div class="text-center py-10" style="color:#64748B;">
-          Pick a report type above and click <b>Refresh Preview</b> to see it here.
+      <!-- Report preview — printable. Wrapped in an overflow container so
+           the wide tables can scroll horizontally on phones without
+           breaking out of the card. -->
+      <div class="card p-0 mb-2" style="overflow:hidden;">
+        <div id="reportPreviewScroll" style="overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;color:#0B1220;">
+          <div id="reportPreview" style="padding:24px;min-width:680px;min-height:400px;">
+            <div class="text-center py-10" style="color:#64748B;">
+              Pick a report type above and click <b>Refresh Preview</b> to see it here.
+            </div>
+          </div>
         </div>
+      </div>
+      <div class="text-xs neutral mb-4" id="reportMobileHint" style="display:none;text-align:center;">
+        <i class="fas fa-arrows-left-right"></i> Scroll horizontally to see all columns — they'll all print on A4.
       </div>
     </div>
 
@@ -2523,8 +2540,9 @@
         </div>
       </div>
 
-      <!-- TraderIQ KPI strip — at-a-glance trade stats -->
-      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+      <!-- TraderIQ KPI strip — 2 cols on phone, 3 on tablet, 5 on desktop.
+           Avoids the lopsided '2-2-1' mobile fold of grid-cols-2 + 5 tiles. -->
+      <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
         <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
           <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Win Rate</div>
           <div class="text-2xl font-bold mt-1" id="tradeKpiWinRate" style="color:var(--color-green);line-height:1.1;">–</div>
