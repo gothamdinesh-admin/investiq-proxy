@@ -1540,6 +1540,8 @@
   <button class="drawer-item" onclick="showSection('news');toggleMobileDrawer(false);"><i class="fas fa-newspaper"></i>News</button>
   <button class="drawer-item" onclick="showSection('tax');toggleMobileDrawer(false);"><i class="fas fa-receipt"></i>NZ Tax (FIF)</button>
   <button class="drawer-item" onclick="showSection('dividends');toggleMobileDrawer(false);"><i class="fas fa-coins"></i>Dividends</button>
+  <button class="drawer-item" onclick="showSection('calendar');toggleMobileDrawer(false);"><i class="fas fa-calendar-days"></i>Calendar</button>
+  <button class="drawer-item" onclick="showSection('reports');toggleMobileDrawer(false);"><i class="fas fa-file-pdf"></i>Reports</button>
   <button class="drawer-item" onclick="showSection('goals');toggleMobileDrawer(false);"><i class="fas fa-bullseye"></i>Goals</button>
   <button class="drawer-item" onclick="showSection('trader');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>TraderIQ</button>
   <button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas fa-users"></i>Family</button>
@@ -1602,6 +1604,8 @@
       <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
       <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
       <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
+      <div class="nav-link" onclick="showSection('calendar',this)"><i class="fas fa-calendar-days"></i> Calendar</div>
+      <div class="nav-link" onclick="showSection('reports',this)"><i class="fas fa-file-pdf"></i> Reports</div>
       <div class="nav-link" onclick="showSection('goals',this)"><i class="fas fa-bullseye"></i> Goals</div>
       <div class="nav-link" onclick="showSection('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
       <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
@@ -2359,6 +2363,110 @@
 
       <div id="familyViewContent">
         <div class="text-center py-10 neutral text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Loading household…</div>
+      </div>
+    </div>
+
+    <!-- CALENDAR / EVENTS (v0.17) — earnings, dividends, FIF deadlines -->
+    <div id="section-calendar" style="display:none;">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-calendar-days" style="color:var(--color-teal);"></i>Calendar
+          </h2>
+          <div class="text-xs neutral mt-1">Earnings dates, dividend pay dates, FIF deadlines, NZ tax year — every date that matters for your portfolio in one place.</div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <select id="calendarRange" class="input" style="font-size:12px;padding:6px 8px;width:auto;" onchange="renderCalendarSection()">
+            <option value="upcoming">Upcoming 30 days</option>
+            <option value="upcoming90">Upcoming 90 days</option>
+            <option value="all">All events</option>
+            <option value="past">Past 30 days</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- KPI strip: counts of upcoming events by type -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div class="card2 p-4" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Dividends Coming</div>
+          <div class="text-2xl font-bold mt-1" id="calKpiDividends" style="color:var(--color-amber);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="calKpiDividendsSub">in selected range</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-blue);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Earnings Coming</div>
+          <div class="text-2xl font-bold mt-1" id="calKpiEarnings" style="color:var(--color-blue);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="calKpiEarningsSub">in selected range</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Tax Events</div>
+          <div class="text-2xl font-bold mt-1" id="calKpiTax" style="color:var(--color-green);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="calKpiTaxSub">FIF / IR3 deadlines</div>
+        </div>
+        <div class="card2 p-4" style="border-left:3px solid var(--accent);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">This Week</div>
+          <div class="text-2xl font-bold mt-1" id="calKpiThisWeek" style="color:var(--accent);line-height:1.1;">–</div>
+          <div class="text-xs neutral mt-1" id="calKpiThisWeekSub">events within 7 days</div>
+        </div>
+      </div>
+
+      <!-- Timeline of events grouped by date -->
+      <div class="card p-5">
+        <div class="section-title mb-4"><i class="fas fa-stream" style="color:var(--color-teal);"></i> Event Timeline</div>
+        <div id="calendarTimeline">
+          <div class="text-center py-10 neutral text-sm">Loading events…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS (v0.17) — printable portfolio summary -->
+    <div id="section-reports" style="display:none;">
+      <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-file-pdf" style="color:var(--color-red);"></i>Reports
+          </h2>
+          <div class="text-xs neutral mt-1">Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.</div>
+        </div>
+      </div>
+
+      <!-- Report builder card -->
+      <div class="card p-5 mb-5">
+        <div class="section-title mb-4"><i class="fas fa-sliders" style="color:var(--accent);"></i> Report Settings</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <div>
+            <label class="text-xs neutral mb-1 block">Report Type</label>
+            <select id="reportType" class="input w-full" onchange="renderReportPreview()">
+              <option value="summary">Portfolio Summary</option>
+              <option value="performance">Performance Report</option>
+              <option value="tax">Tax Year Report (FIF)</option>
+              <option value="dividends">Dividend Income Report</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs neutral mb-1 block">As of Date</label>
+            <input id="reportDate" type="date" class="input w-full" onchange="renderReportPreview()">
+          </div>
+          <div>
+            <label class="text-xs neutral mb-1 block">Include</label>
+            <select id="reportScope" class="input w-full" onchange="renderReportPreview()">
+              <option value="all">All holdings</option>
+              <option value="active">Active only (exclude ignored)</option>
+              <option value="byplatform">Grouped by platform</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="exportReportPdf()" class="btn btn-primary"><i class="fas fa-download mr-1"></i>Download PDF</button>
+          <button onclick="window.print()" class="btn btn-secondary"><i class="fas fa-print mr-1"></i>Print</button>
+          <button onclick="renderReportPreview()" class="btn btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Refresh Preview</button>
+        </div>
+      </div>
+
+      <!-- Report preview — printable -->
+      <div id="reportPreview" class="card p-6" style="background:#fff;color:#0B1220;min-height:400px;">
+        <div class="text-center py-10" style="color:#64748B;">
+          Pick a report type above and click <b>Refresh Preview</b> to see it here.
+        </div>
       </div>
     </div>
 
@@ -3688,6 +3796,7 @@
 <script src="js/50-portfolio.js"></script>
 <script src="js/70-ai.js"></script>
 <script src="js/80-trader.js"></script>
+<script src="js/85-calendar-reports.js"></script>
 <script src="js/90-goals.js"></script>
 <script src="js/95-integrations.js"></script>
 <script>
@@ -8720,7 +8829,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin','trader','goals'].forEach(s => {
+  ['overview','holdings','performance','market','insights','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -11868,6 +11977,13 @@ function showSection(name, el) {
         loadGoalsFromCloud().then(() => { try { renderGoalsSection(); } catch(e) {} });
       }
     } catch(e) { console.warn('[goals] section open failed:', e); }
+  }
+  if (name === 'calendar') { try { renderCalendarSection(); } catch(e) { console.warn('[calendar]', e); } }
+  if (name === 'reports')  {
+    // Default report date to today if blank
+    const d = document.getElementById('reportDate');
+    if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
+    try { renderReportPreview(); } catch(e) { console.warn('[reports]', e); }
   }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
