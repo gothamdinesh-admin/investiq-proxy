@@ -11,6 +11,10 @@
   <link rel="icon" type="image/svg+xml" href="assets/invest_iq_app_icon.svg">
   <link rel="apple-touch-icon" href="assets/invest_iq_app_icon.png">
   <link rel="shortcut icon" href="assets/invest_iq_app_icon.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="InvestIQ">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
@@ -3797,6 +3801,7 @@
 <script src="js/70-ai.js"></script>
 <script src="js/80-trader.js"></script>
 <script src="js/85-calendar-reports.js"></script>
+<script src="js/88-onboarding-tour.js"></script>
 <script src="js/90-goals.js"></script>
 <script src="js/95-integrations.js"></script>
 <script>
@@ -10842,6 +10847,11 @@ function setOnboardingStep(n) {
 // Replay the welcome tour from anywhere (Help modal link)
 function restartOnboarding() {
   closeModal('helpModal');
+  // Prefer the new overlay tour if it's available; fall back to the modal flow
+  if (typeof replayOnboardingTour === 'function') {
+    replayOnboardingTour();
+    return;
+  }
   state.settings.onboardingComplete = false;
   setOnboardingStep(1);
   document.getElementById('onboardingModal')?.classList.add('open');
@@ -11879,6 +11889,12 @@ async function init() {
         }
         // Show onboarding for new users who have no holdings yet
         maybeShowOnboarding();
+        // Fire the new overlay tour for any signed-in user who hasn't seen it
+        // (independent of the modal-style onboarding above). 5s delay so it
+        // appears after the page has fully painted and toasts have cleared.
+        if (typeof startOnboardingTour === 'function' && !state.settings.onboardingTourDone) {
+          setTimeout(() => { try { startOnboardingTour(); } catch(e) { console.warn('[tour]', e); } }, 5000);
+        }
       } else {
         updateAuthUI();
       }

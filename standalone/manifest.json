@@ -1,0 +1,44 @@
+{
+  "name": "InvestIQ — Intelligent Investing Dashboard",
+  "short_name": "InvestIQ",
+  "description": "NZ-aware portfolio tracker with AI insights, family aggregation, and trade journaling.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#07111F",
+  "background_color": "#07111F",
+  "lang": "en-NZ",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/invest_iq_app_icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/invest_iq_app_icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Holdings",
+      "url": "/?section=holdings",
+      "icons": [{ "src": "/assets/invest_iq_app_icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI Insights",
+      "url": "/?section=insights",
+      "icons": [{ "src": "/assets/invest_iq_app_icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Performance",
+      "url": "/?section=performance",
+      "icons": [{ "src": "/assets/invest_iq_app_icon.png", "sizes": "192x192" }]
+    }
+  ]
+}
