@@ -4839,6 +4839,28 @@ function _withTimeout(promise, ms, label) {
   ]);
 }
 
+// Get a valid Supabase JWT for authenticated Edge Function calls. Refreshes
+// the session if the access token is missing or within 60s of expiry — this
+// is the fix for 'This endpoint requires a valid Bearer token', which fires
+// when a stale/empty token is sent to a Verify-JWT Edge Function.
+async function _getFreshJwt() {
+  if (!_supabase) return null;
+  try {
+    let { data } = await _supabase.auth.getSession();
+    let session = data?.session;
+    const now = Math.floor(Date.now() / 1000);
+    // Refresh if no token, or it expires within 60s
+    if (!session?.access_token || (session.expires_at && session.expires_at - now < 60)) {
+      const refreshed = await _supabase.auth.refreshSession();
+      session = refreshed?.data?.session || session;
+    }
+    return session?.access_token || null;
+  } catch(e) {
+    console.warn('[auth] _getFreshJwt failed:', e.message);
+    return null;
+  }
+}
+
 async function signIn(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
   try {
@@ -7401,8 +7423,15 @@ async function inviteFamilyMemberPrompt(familyId) {
 
     // Fire the Edge Function to send the email (non-blocking — the row exists either way)
     const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
-    const sess = await _supabase.auth.getSession();
-    const jwt = sess?.data?.session?.access_token || '';
+    // v0.18.4 — refresh the session token first. A stale/empty JWT was the
+    // cause of 'This endpoint requires a valid Bearer token'.
+    const jwt = await _getFreshJwt();
+    if (!jwt) {
+      toast.warning(`Invite saved, but couldn't send email (session expired — sign in again to email). Share the code instead: ${invite.code}`);
+      logActivity('family_invite_sent', { family_id: familyId, email, role });
+      loadFamilyMembers(familyId);
+      return;
+    }
     try {
       const res = await fetch(supaUrl + '/functions/v1/family-invite', {
         method:  'POST',
@@ -11622,11 +11651,10 @@ async function adminTestDigest() {
 
   // Get the current user's Supabase JWT so the Verify-JWT gateway lets the
   // request through. Our function's own auth uses X-Cron-Secret separately.
+  // v0.18.4 — use the session-refresh helper so a near-expiry token gets
+  // renewed before the call instead of being rejected.
   let userJwt = '';
-  try {
-    const sess = await _supabase.auth.getSession();
-    userJwt = sess?.data?.session?.access_token || '';
-  } catch(e) { /* fall through with empty JWT */ }
+  try { userJwt = (await _getFreshJwt()) || ''; } catch(e) { /* fall through */ }
   if (!userJwt) {
     _adminLog('⚠ No active Supabase session — Verify-JWT gateway will reject. Sign in first.');
   }
