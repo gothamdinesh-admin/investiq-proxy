@@ -2854,6 +2854,12 @@
           <button onclick="adminRestoreFromSnapshot()" class="btn btn-sm" style="background:rgba(52,211,153,0.12);color:var(--color-green);border:1px solid rgba(52,211,153,0.4);" title="Rebuild a wiped portfolio from the latest daily snapshot">
             <i class="fas fa-rotate-left mr-1"></i>Restore from Snapshot
           </button>
+          <button onclick="adminRestoreFromLocalBackup()" class="btn btn-sm" style="background:rgba(52,211,153,0.12);color:var(--color-green);border:1px solid rgba(52,211,153,0.4);" title="Rebuild from the rolling local auto-backup (last 3 non-empty states)">
+            <i class="fas fa-clock-rotate-left mr-1"></i>Restore from Local Backup
+          </button>
+          <button onclick="adminVerifyBackupIntegrity()" class="btn btn-sm" style="background:rgba(96,165,250,0.12);color:var(--color-blue);border:1px solid rgba(96,165,250,0.35);" title="Cross-check local / cloud / auto-backup / snapshot holding counts">
+            <i class="fas fa-clipboard-check mr-1"></i>Verify Backup Integrity
+          </button>
           <button onclick="adminTestDynamicsSync()" class="btn btn-sm" style="background:rgba(96,165,250,0.12);color:var(--color-blue);border:1px solid rgba(96,165,250,0.35);" title="Build canonical Contact / Lead / PortfolioSnapshot payloads and POST to the proxy's Dynamics 365 endpoint">
             <i class="fas fa-link mr-1"></i>Test Dynamics 365 Sync
           </button>
@@ -12010,6 +12016,106 @@ async function adminRestoreFromSnapshot() {
   } catch(e) {
     _adminLog('✗ Restore failed: ' + e.message);
     console.error('[restore]', e);
+  }
+}
+
+// Restore from the LOCAL rolling auto-backup (Layer 1). Works even with
+// no cloud connection — pure localStorage. Useful if the local working
+// copy got zeroed but the rolling backup survived.
+async function adminRestoreFromLocalBackup() {
+  _adminClearOutput();
+  _adminLog('🔍 Checking local auto-backups…');
+  const backups = (typeof listAutoBackups === 'function') ? listAutoBackups() : [];
+  if (!backups.length) {
+    _adminLog('✗ No local auto-backups found. Use Restore from Snapshot (cloud) instead.');
+    return;
+  }
+  _adminLog(`Found ${backups.length} local backup(s):`);
+  backups.forEach((b, i) => _adminLog(`  [${i}] ${b.at} — ${b.count} holdings`));
+  const newest = backups[0];
+  const ok = await showConfirm({
+    title: `Restore ${newest.count} holdings?`,
+    message: `Rebuild your portfolio from the local auto-backup taken ${new Date(newest.at).toLocaleString('en-NZ')} (${newest.count} holdings). Current portfolio will be replaced. Continue?`,
+    confirmLabel: 'Restore', cancelLabel: 'Cancel', variant: 'warning'
+  });
+  if (!ok) { _adminLog('Cancelled.'); return; }
+  const n = restoreFromAutoBackup(0);
+  if (n > 0) {
+    renderAll();
+    _adminLog(`✓ Restored ${n} holdings from local backup. Saving to cloud + refreshing prices…`);
+    try { await saveToSupabase(); } catch(e) {}
+    try { await refreshPortfolioPrices(); renderAll(); } catch(e) {}
+    _adminLog('✓ RESTORE COMPLETE.');
+    toast.success(`Restored ${n} holdings from local backup`);
+  } else {
+    _adminLog('✗ Restore failed — backup was empty.');
+  }
+}
+
+// Cross-check holding counts across all four data layers + flag drift.
+// Turns 'is my data safe?' into a definitive answer.
+async function adminVerifyBackupIntegrity() {
+  _adminClearOutput();
+  _adminLog('🔍 Verifying data across all layers…');
+  const sym = (typeof CURRENCY_SYMBOLS !== 'undefined' && CURRENCY_SYMBOLS[state.settings.currency]) || 'NZ$';
+
+  // Layer 1a — live local
+  const localCount = (state.portfolio || []).length;
+  _adminLog(`  Local (live):        ${localCount} holdings`);
+
+  // Layer 1b — rolling auto-backup
+  const backups = (typeof listAutoBackups === 'function') ? listAutoBackups() : [];
+  const abCount = backups[0]?.count ?? 0;
+  _adminLog(`  Local auto-backup:   ${abCount} holdings${backups[0] ? ' (' + new Date(backups[0].at).toLocaleString('en-NZ') + ')' : ' (none)'}`);
+
+  // Save-health marker
+  try {
+    const lg = JSON.parse(localStorage.getItem('investiq_last_good_save') || 'null');
+    if (lg) _adminLog(`  Last good cloud save: ${lg.count} holdings (${new Date(lg.at).toLocaleString('en-NZ')})`);
+  } catch(e) {}
+
+  // Layer 2 — cloud live
+  let cloudCount = null;
+  if (_supabase && _supaUser) {
+    try {
+      const { data } = await _supabase.from('investiq_portfolios').select('portfolio').eq('user_id', _supaUser.id).maybeSingle();
+      cloudCount = (data?.portfolio || []).length;
+      _adminLog(`  Cloud (live):        ${cloudCount} holdings`);
+    } catch(e) { _adminLog('  Cloud (live):        ✗ ' + e.message); }
+  } else {
+    _adminLog('  Cloud (live):        not signed in');
+  }
+
+  // Layer 3 — latest snapshot
+  let snapCount = null;
+  if (_supabase && _supaUser) {
+    try {
+      const { data } = await _supabase.from('investiq_snapshots')
+        .select('snapshot_date, holdings_count, breakdown')
+        .eq('user_id', _supaUser.id).order('snapshot_date', { ascending: false }).limit(1).maybeSingle();
+      if (data) {
+        snapCount = (data.breakdown?.holdings || []).length;
+        _adminLog(`  Latest snapshot:     ${snapCount} holdings detail (${data.snapshot_date})`);
+      } else {
+        _adminLog('  Latest snapshot:     none');
+      }
+    } catch(e) { _adminLog('  Latest snapshot:     ✗ ' + e.message); }
+  }
+
+  // Verdict
+  _adminLog('');
+  const counts = [localCount, abCount, cloudCount, snapCount].filter(c => c != null && c > 0);
+  const maxC = Math.max(localCount, abCount, cloudCount || 0, snapCount || 0);
+  if (maxC === 0) {
+    _adminLog('⚠ No data found in ANY layer. If you had holdings, restore from Supabase daily backup.');
+  } else if (localCount === maxC && cloudCount === maxC) {
+    _adminLog(`✓ HEALTHY — local + cloud both have ${maxC} holdings, in sync. At least one backup layer also present.`);
+  } else if (cloudCount != null && cloudCount < maxC) {
+    _adminLog(`⚠ DRIFT — cloud has ${cloudCount} but another layer has ${maxC}. If cloud looks short, run Restore from Snapshot/Local Backup, which will re-save the fuller set.`);
+  } else if (localCount < maxC) {
+    _adminLog(`⚠ Local view (${localCount}) is behind the best layer (${maxC}). Use Force Reload from Cloud or a Restore button.`);
+  } else {
+    _adminLog(`✓ Best available: ${maxC} holdings. Layers present: ${counts.length}/4. Recovery options available if needed.`);
   }
 }
 

@@ -182,6 +182,14 @@ async function saveToSupabase() {
     } else {
       state.settings.updatedAt = nowIso;
       localStorage.setItem('investiq_updated_at', nowIso);
+      // Save-health: record the last KNOWN-GOOD cloud save (count + time).
+      // Powers the 'Verify Backup Integrity' admin tool + answers
+      // 'is my data safely backed up?' definitively.
+      try {
+        localStorage.setItem('investiq_last_good_save', JSON.stringify({
+          at: nowIso, count: dedupedPortfolio.length
+        }));
+      } catch(e) {}
       console.log(`✓ Saved to Supabase (${dedupedPortfolio.length} unique holdings, ${nowIso})`);
       updateSyncIndicator();
     }
