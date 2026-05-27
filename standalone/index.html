@@ -4936,18 +4936,32 @@ async function signUp(email, password) {
 }
 
 async function signOut() {
-  // First flush any pending cloud writes so we don't lose unsaved changes
+  // First flush any pending cloud writes so we don't lose unsaved changes.
+  // Capped so a slow save can't block the whole sign-out.
   if (_savePending) {
     clearTimeout(_savePending);
     _savePending = null;
     if (_supabase && _supaUser) {
-      try { await saveToSupabase(); } catch(e) { console.warn('[signOut] flush failed:', e); }
+      try { await _withTimeout(saveToSupabase(), 5000, 'Sign-out flush'); }
+      catch(e) { console.warn('[signOut] flush failed/timed-out:', e.message); }
     }
   }
   // Audit BEFORE we lose _supaUser
-  logActivity('logout', { email: _supaUser?.email });
-  // Then sign out from Supabase
-  if (_supabase) await _supabase.auth.signOut();
+  try { logActivity('logout', { email: _supaUser?.email }); } catch(e) {}
+
+  // Sign out from Supabase — BUT never let it block the local cleanup.
+  // Default scope is 'global' which makes a network call to revoke all
+  // sessions; if the refresh token is stale or the network hiccups that
+  // call can hang forever, leaving the user 'stuck signed in'. We use
+  // scope 'local' (clears just this device, no round-trip) wrapped in a
+  // timeout, and proceed with local teardown regardless of the result.
+  if (_supabase) {
+    try {
+      await _withTimeout(_supabase.auth.signOut({ scope: 'local' }), 4000, 'Supabase signOut');
+    } catch(e) {
+      console.warn('[signOut] Supabase signOut failed/timed-out — clearing locally anyway:', e.message);
+    }
+  }
   _supaUser = null;
   _isAdmin = false;
   // Clear local cache so next user on this device starts fresh
