@@ -268,24 +268,38 @@ async function checkMfaRequired() {
   return false;
 }
 
-// Show the MFA field on the gate, hide the password sign-in button.
+// Switch the gate into the clean 2FA step: hide the whole credential
+// block (email + password + tab toggle + forgot link) and show ONLY the
+// authenticator-code field + Verify button. No more all-three-at-once.
+function _setDisplay(id, val) { const el = document.getElementById(id); if (el) el.style.display = val; }
+
 function _showGateMfaStep() {
-  document.getElementById('gateMfaField').style.display = 'block';
-  document.getElementById('gateMfaBtn').style.display = 'block';
-  document.getElementById('gateSubmitBtn').style.display = 'none';
-  document.getElementById('gateForgotBtn')?.parentElement && (document.getElementById('gateForgotBtn').parentElement.style.display = 'none');
-  // Disable the email/password fields visually
-  ['gateEmail','gatePassword'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
-  setTimeout(() => document.getElementById('gateMfaCode')?.focus(), 100);
+  _setDisplay('gateCredFields', 'none');   // email + password
+  _setDisplay('gateTabToggle', 'none');    // Sign In / Create Account tabs
+  _setDisplay('gateMfaField', 'block');    // the code field
+  _setDisplay('gateMfaBtn', 'block');      // Verify button
+  _setDisplay('gateSubmitBtn', 'none');    // hide Sign In button
+  const forgot = document.getElementById('gateForgotBtn');
+  if (forgot?.parentElement) forgot.parentElement.style.display = 'none';
+  // Show which account is being verified
+  const emailHint = document.getElementById('gateMfaEmail');
+  const email = document.getElementById('gateEmail')?.value?.trim();
+  if (emailHint) emailHint.textContent = email ? `Signing in as ${email}` : '';
+  // Clear any leftover code + focus
+  const codeEl = document.getElementById('gateMfaCode');
+  if (codeEl) { codeEl.value = ''; }
+  setTimeout(() => codeEl?.focus(), 100);
 }
 
 function _resetGateMfaStep() {
-  document.getElementById('gateMfaField').style.display = 'none';
-  document.getElementById('gateMfaBtn').style.display = 'none';
-  document.getElementById('gateSubmitBtn').style.display = 'block';
+  _setDisplay('gateCredFields', '');
+  _setDisplay('gateTabToggle', 'flex');
+  _setDisplay('gateMfaField', 'none');
+  _setDisplay('gateMfaBtn', 'none');
+  _setDisplay('gateSubmitBtn', 'block');
   const forgot = document.getElementById('gateForgotBtn');
   if (forgot?.parentElement) forgot.parentElement.style.display = 'block';
-  ['gateEmail','gatePassword'].forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+  const errEl = document.getElementById('gateError'); if (errEl) errEl.style.display = 'none';
   _pendingMfaFactorId = null;
 }
 

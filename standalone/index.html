@@ -1166,32 +1166,42 @@
     </div>
 
     <!-- Tab toggle -->
-    <div class="flex mb-5" style="background:#0a1120;border-radius:8px;padding:4px;border:1px solid #1e2d4a;">
+    <div id="gateTabToggle" class="flex mb-5" style="background:#0a1120;border-radius:8px;padding:4px;border:1px solid #1e2d4a;">
       <button id="gateTabSignIn" onclick="switchGateTab('signin')" class="flex-1 text-sm py-2 rounded-md font-medium" style="background:#6366f1;color:white;">Sign In</button>
       <button id="gateTabSignUp" onclick="switchGateTab('signup')" class="flex-1 text-sm py-2 rounded-md font-medium" style="color:#4a6080;background:none;border:none;cursor:pointer;">Create Account</button>
     </div>
 
     <div class="space-y-4">
-      <div>
-        <label>Email</label>
-        <input type="email" id="gateEmail" class="input" placeholder="you@email.com" onkeydown="if(event.key==='Enter')submitGateAuth()">
-      </div>
-      <div>
-        <div class="flex items-center justify-between">
-          <label>Password</label>
-          <button type="button" onclick="_toggleGatePassword()" id="gatePwToggle" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;"><i class="fas fa-eye"></i> Show</button>
+      <!-- Credential fields — hidden during the 2FA step -->
+      <div id="gateCredFields" class="space-y-4">
+        <div>
+          <label>Email</label>
+          <input type="email" id="gateEmail" class="input" placeholder="you@email.com" onkeydown="if(event.key==='Enter')submitGateAuth()">
         </div>
-        <input type="password" id="gatePassword" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+        <div>
+          <div class="flex items-center justify-between">
+            <label>Password</label>
+            <button type="button" onclick="_toggleGatePassword()" id="gatePwToggle" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;"><i class="fas fa-eye"></i> Show</button>
+          </div>
+          <input type="password" id="gatePassword" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+        </div>
+        <div id="gateSignUpFields" style="display:none;">
+          <label>Confirm Password</label>
+          <input type="password" id="gatePassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+        </div>
       </div>
-      <div id="gateSignUpFields" style="display:none;">
-        <label>Confirm Password</label>
-        <input type="password" id="gatePassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
-      </div>
-      <!-- 2FA challenge — shown only when the account has TOTP enabled -->
+      <!-- 2FA challenge — its own clean step. Hidden until the password
+           step succeeds for an account with TOTP enabled. -->
       <div id="gateMfaField" style="display:none;">
+        <div class="flex items-center gap-2 mb-2">
+          <i class="fas fa-shield-halved" style="color:var(--accent);"></i>
+          <span class="text-sm font-semibold" style="color:var(--text-primary);">Two-factor verification</span>
+        </div>
+        <div class="text-xs neutral mb-3" id="gateMfaEmail"></div>
         <label>Authentication Code</label>
-        <input type="text" id="gateMfaCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code from your authenticator" onkeydown="if(event.key==='Enter')submitGateMfa()">
+        <input type="text" id="gateMfaCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" onkeydown="if(event.key==='Enter')submitGateMfa()">
         <div class="text-xs neutral mt-1">Open your authenticator app (Google Authenticator, Authy, 1Password) and enter the current code.</div>
+        <button type="button" onclick="_resetGateMfaStep()" class="text-xs mt-3" style="background:none;border:none;color:var(--text-muted);cursor:pointer;"><i class="fas fa-arrow-left mr-1"></i>Back to sign in</button>
       </div>
     </div>
 
