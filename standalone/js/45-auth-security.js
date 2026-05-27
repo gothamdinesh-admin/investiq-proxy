@@ -228,15 +228,43 @@ let _pendingMfaFactorId = null;
 async function checkMfaRequired() {
   if (!_supabase) return false;
   try {
-    const { data, error } = await _supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (error) return false;
-    // nextLevel aal2 + currentLevel aal1 = user has 2FA and must verify
-    if (data.currentLevel === 'aal1' && data.nextLevel === 'aal2') {
-      const { data: factors } = await _supabase.auth.mfa.listFactors();
-      const totp = (factors?.totp || []).filter(f => f.status === 'verified');
-      if (totp.length) { _pendingMfaFactorId = totp[0].id; return true; }
+    // Confirm a real session token exists BEFORE touching any mfa endpoint.
+    // Calling mfa methods without a settled session is what produced
+    // 'This endpoint requires a valid Bearer token' on login.
+    const { data: sess } = await _supabase.auth.getSession();
+    if (!sess?.session?.access_token) return false;
+
+    // Probe enrolled factors. If the project has MFA disabled, or the call
+    // errors for ANY reason, treat it as 'no MFA' and let login proceed —
+    // never block sign-in over a 2FA probe.
+    let factorsResp;
+    try {
+      factorsResp = await _supabase.auth.mfa.listFactors();
+    } catch(e) {
+      console.warn('[mfa] listFactors threw — skipping MFA:', e.message);
+      return false;
     }
-  } catch(e) { console.warn('[mfa] aal check failed:', e); }
+    if (factorsResp?.error) { console.warn('[mfa] listFactors error — skipping MFA:', factorsResp.error.message); return false; }
+    const totp = (factorsResp?.data?.totp || []).filter(f => f.status === 'verified');
+    if (!totp.length) return false; // no verified 2FA → normal login
+
+    // Only NOW consult AAL — we know the account has a verified factor.
+    let aal;
+    try {
+      const r = await _supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      aal = r?.data;
+      if (r?.error) return false;
+    } catch(e) {
+      console.warn('[mfa] AAL check threw — skipping MFA:', e.message);
+      return false;
+    }
+    if (aal && aal.currentLevel === 'aal1' && aal.nextLevel === 'aal2') {
+      _pendingMfaFactorId = totp[0].id;
+      return true;
+    }
+  } catch(e) {
+    console.warn('[mfa] checkMfaRequired failed — proceeding without MFA:', e.message);
+  }
   return false;
 }
 
