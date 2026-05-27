@@ -2851,6 +2851,9 @@
           <button onclick="adminCleanBadSnapshots()" class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.3);" title="Delete snapshots with $0 value (poisons Performance KPIs)">
             <i class="fas fa-broom mr-1"></i>Clean $0 Snapshots
           </button>
+          <button onclick="adminRestoreFromSnapshot()" class="btn btn-sm" style="background:rgba(52,211,153,0.12);color:var(--color-green);border:1px solid rgba(52,211,153,0.4);" title="Rebuild a wiped portfolio from the latest daily snapshot">
+            <i class="fas fa-rotate-left mr-1"></i>Restore from Snapshot
+          </button>
           <button onclick="adminTestDynamicsSync()" class="btn btn-sm" style="background:rgba(96,165,250,0.12);color:var(--color-blue);border:1px solid rgba(96,165,250,0.35);" title="Build canonical Contact / Lead / PortfolioSnapshot payloads and POST to the proxy's Dynamics 365 endpoint">
             <i class="fas fa-link mr-1"></i>Test Dynamics 365 Sync
           </button>
@@ -11944,6 +11947,72 @@ create policy "Admins read all activity"  on public.investiq_activity_log for se
 // created when recordDailySnapshot fires before prices have loaded, and
 // they poison the Performance KPIs (-100% all-time return because the
 // "last" snapshot is $0).
+// RECOVERY — rebuild a wiped portfolio from the most recent daily
+// snapshot that still has per-holding detail. Snapshots live in a
+// separate table (investiq_snapshots) untouched by a portfolio wipe.
+// NZD cost basis is reconstructed exactly: the snapshot stored
+// avgBuyPrice in base currency, we divide by the current fx to get a
+// native lot price, and getMetrics multiplies by the same fx back —
+// the round trip cancels, preserving exact NZD figures.
+async function adminRestoreFromSnapshot() {
+  _adminClearOutput();
+  _adminLog('🔍 Searching snapshots for the most recent one with holdings detail…');
+  if (!_supabase || !_supaUser) { _adminLog('✗ Not signed in.'); return; }
+  try {
+    const { data, error } = await _supabase
+      .from('investiq_snapshots')
+      .select('snapshot_date, total_value, holdings_count, breakdown, currency')
+      .eq('user_id', _supaUser.id)
+      .order('snapshot_date', { ascending: false })
+      .limit(30);
+    if (error) { _adminLog('✗ Query failed: ' + error.message); return; }
+    const good = (data || []).find(s => (s.breakdown?.holdings || []).length > 0);
+    if (!good) {
+      _adminLog('✗ No snapshot has per-holding detail. Options:');
+      _adminLog('  • Restore the investiq_portfolios row from a Supabase daily backup');
+      _adminLog('  • Use a local Backup (JSON) file if you saved one');
+      return;
+    }
+    const holdings = good.breakdown.holdings;
+    _adminLog(`✓ Found snapshot ${good.snapshot_date} with ${holdings.length} holdings (NZ$${Number(good.total_value).toLocaleString('en-NZ',{maximumFractionDigits:0})}).`);
+    const ok = await showConfirm({
+      title: `Restore ${holdings.length} holdings?`,
+      message: `Rebuild your portfolio from the ${good.snapshot_date} snapshot. NZD cost basis is preserved exactly; live prices refresh after. Current (empty) portfolio will be replaced. Continue?`,
+      confirmLabel: 'Restore', cancelLabel: 'Cancel', variant: 'warning'
+    });
+    if (!ok) { _adminLog('Cancelled.'); return; }
+
+    const base = state.settings.currency || 'NZD';
+    const rebuilt = holdings.map(sh => {
+      const cur = sh.currency || 'USD';
+      const penceAdj = (typeof isPenceQuoted === 'function' && isPenceQuoted(sh.symbol)) ? 0.01 : 1;
+      const effFx = (getFxRate(cur, base) || 1) * penceAdj;
+      const nativePrice = effFx ? (Number(sh.avgBuyPrice) / effFx) : Number(sh.avgBuyPrice);
+      return {
+        id: (typeof uuid === 'function') ? uuid() : ('r_' + Math.random().toString(36).slice(2)),
+        symbol: sh.symbol, name: sh.name || sh.symbol, type: sh.type || 'stock',
+        platform: sh.platform || '', currency: cur,
+        sector: sh.sector || '', country: sh.country || '',
+        currentPrice: null, dayChange: null, dayChangePct: null,
+        lots: [{ quantity: Number(sh.quantity) || 0, price: nativePrice, date: good.snapshot_date, note: 'restored from snapshot' }]
+      };
+    });
+    state.portfolio = rebuilt;
+    state.agentResults = state.agentResults || null;
+    saveState();
+    _adminLog(`Rebuilt ${rebuilt.length} holdings locally. Writing to cloud…`);
+    await saveToSupabase();      // non-empty → guard allows the write
+    renderAll();
+    _adminLog('✓ Saved to cloud. Refreshing live prices…');
+    try { await refreshPortfolioPrices(); renderAll(); } catch(e) { _adminLog('  (price refresh will retry on next cycle)'); }
+    _adminLog(`✓ RESTORE COMPLETE — ${rebuilt.length} holdings back. Verify a few cost-basis figures look right.`);
+    toast.success(`Restored ${rebuilt.length} holdings from ${good.snapshot_date}`);
+  } catch(e) {
+    _adminLog('✗ Restore failed: ' + e.message);
+    console.error('[restore]', e);
+  }
+}
+
 async function adminCleanBadSnapshots() {
   _adminClearOutput();
   _adminLog('🔍 Scanning investiq_snapshots for $0 / null entries…');
