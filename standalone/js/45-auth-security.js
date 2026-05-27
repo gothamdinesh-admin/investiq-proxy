@@ -225,7 +225,16 @@ async function disableTwoFactor(factorId) {
 // If so, show the code field on the gate and pause until verified.
 let _pendingMfaFactorId = null;
 
+// v0.18.8 — The login-time 2FA challenge is DISABLED. It was pushing the
+// app into a half-authenticated (AAL1) state with a flaky verify step
+// that could lock users out. Login is now password-only and always
+// completes. 2FA enrolment/management in Settings still exists, but it
+// does NOT gate sign-in. Re-enable by flipping ENABLE_LOGIN_MFA to true
+// once the challengeAndVerify path is proven on the live Supabase project.
+const ENABLE_LOGIN_MFA = false;
+
 async function checkMfaRequired() {
+  if (!ENABLE_LOGIN_MFA) return false;
   if (!_supabase) return false;
   try {
     // Confirm a real session token exists BEFORE touching any mfa endpoint.
