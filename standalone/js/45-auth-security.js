@@ -291,22 +291,46 @@ function _resetGateMfaStep() {
 
 async function submitGateMfa() {
   const errEl = document.getElementById('gateError');
-  const code = document.getElementById('gateMfaCode')?.value?.trim();
+  const code = (document.getElementById('gateMfaCode')?.value || '').trim().replace(/\s/g, '');
   const btn = document.getElementById('gateMfaBtn');
   if (errEl) errEl.style.display = 'none';
   if (!code || !_pendingMfaFactorId) { if (errEl) { errEl.textContent = 'Enter the 6-digit code.'; errEl.style.display = 'block'; } return; }
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Verifying…'; }
   try {
-    const { data: ch, error: chErr } = await _supabase.auth.mfa.challenge({ factorId: _pendingMfaFactorId });
-    if (chErr) throw chErr;
-    const { error: vErr } = await _supabase.auth.mfa.verify({ factorId: _pendingMfaFactorId, challengeId: ch.id, code });
-    if (vErr) throw vErr;
+    // Confirm the AAL1 session is actually present before calling the MFA
+    // endpoints — without it the verify call goes out with no Bearer token
+    // and GoTrue rejects with 'requires a valid Bearer token'.
+    const { data: sd } = await _supabase.auth.getSession();
+    if (!sd?.session?.access_token) {
+      throw new Error('Your sign-in session expired. Close this and sign in again.');
+    }
+
+    // Use the single-call challengeAndVerify — fewer round-trips, and it's
+    // the path Supabase actively maintains. Falls back to challenge+verify
+    // if the SDK build doesn't expose it.
+    let verifyErr = null;
+    if (typeof _supabase.auth.mfa.challengeAndVerify === 'function') {
+      const { error } = await _supabase.auth.mfa.challengeAndVerify({ factorId: _pendingMfaFactorId, code });
+      verifyErr = error;
+    } else {
+      const { data: ch, error: chErr } = await _supabase.auth.mfa.challenge({ factorId: _pendingMfaFactorId });
+      if (chErr) throw chErr;
+      const { error: vErr } = await _supabase.auth.mfa.verify({ factorId: _pendingMfaFactorId, challengeId: ch.id, code });
+      verifyErr = vErr;
+    }
+    if (verifyErr) throw verifyErr;
+
     // Verified → AAL2 achieved. Finish the sign-in: load portfolio etc.
     _resetGateMfaStep();
     try { logActivity('login_2fa_verified', {}); } catch(e) {}
     if (typeof _finishSignInAfterMfa === 'function') await _finishSignInAfterMfa();
   } catch(e) {
-    if (errEl) { errEl.textContent = friendlyAuthError(e.message); errEl.style.display = 'block'; }
+    console.error('[mfa] verify failed:', e);
+    if (errEl) {
+      errEl.innerHTML = friendlyAuthError(e.message) +
+        `<br><span style="color:var(--text-muted);">Locked out? You can remove 2FA from your <a href="https://app.supabase.com" target="_blank" style="color:var(--accent);">Supabase dashboard</a> → Authentication → Users → your user → remove the factor.</span>`;
+      errEl.style.display = 'block';
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shield-halved mr-2"></i>Verify Code'; }
   }
