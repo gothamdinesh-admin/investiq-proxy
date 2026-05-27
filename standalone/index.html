@@ -1022,12 +1022,17 @@
     /* News headlines (ticker-grouped) */
     .news-headline:hover { border-color: var(--accent) !important; background: var(--accent-soft) !important; }
 
-    /* Reports — mobile overflow hint visible only on narrow screens */
+    /* Reports + Performance — phone tweaks */
     @media (max-width: 768px) {
       #reportMobileHint { display: block !important; }
       /* Force the report preview's KPI grid to 2 cols on phone (was 4) */
       #reportPreview div[style*="grid-template-columns:repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
       #reportPreview div[style*="grid-template-columns:repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+      /* Snapshot chart: 300px is too tall on phone, squishes neighbours */
+      #snapshotChartWrap { height: 240px !important; }
+      /* Contribution view: a little more breathing room between columns
+         when they stack, and tighter numerals so they don't wrap */
+      #contributionView { gap: 20px !important; }
     }
 
     /* Settings modal tabs — pill-style buttons mirroring news-tab */
@@ -9201,6 +9206,19 @@ async function loadSnapshotChart(days) {
   const ctx = document.getElementById('snapshotChart')?.getContext('2d');
   if (!ctx) return;
   if (charts.snapshot) charts.snapshot.destroy();
+  // Mobile-aware: fewer x-axis ticks + shorter date labels so the axis
+  // doesn't crowd on a narrow phone. Full ISO date labels overlap badly
+  // below ~500px wide.
+  const isPhone = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+  const maxTicks = isPhone ? 4 : 8;
+  const shortDate = (iso) => {
+    // 2026-04-18 → "18 Apr"
+    if (!iso || typeof iso !== 'string') return iso;
+    const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+  };
+
   charts.snapshot = new Chart(ctx, {
     type: 'line',
     data: { labels, datasets },
@@ -9208,9 +9226,11 @@ async function loadSnapshotChart(days) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#94a3b8', font: { size: 11 }, usePointStyle: true, padding: 12 } },
+        legend: { labels: { color: '#94a3b8', font: { size: isPhone ? 10 : 11 }, usePointStyle: true, padding: isPhone ? 8 : 12, boxWidth: 8 } },
         tooltip: {
           callbacks: {
+            // Tooltip title shows the full date even though the axis is short
+            title: (items) => items.length ? labels[items[0].dataIndex] : '',
             label: (c) => _snapshotMode === 'value'
               ? `${c.dataset.label}: ${sym}${Number(c.parsed.y).toLocaleString()}`
               : `${c.dataset.label}: ${c.parsed.y >= 0 ? '+' : ''}${c.parsed.y.toFixed(2)}%`
@@ -9218,10 +9238,22 @@ async function loadSnapshotChart(days) {
         }
       },
       scales: {
-        x: { ticks: { color: '#4a6080', maxTicksLimit: 8 }, grid: { color: '#1a2540' } },
+        x: {
+          ticks: {
+            color: '#4a6080',
+            maxTicksLimit: maxTicks,
+            maxRotation: 0,
+            autoSkip: true,
+            font: { size: isPhone ? 9 : 11 },
+            callback: function(value) { return shortDate(this.getLabelForValue(value)); }
+          },
+          grid: { color: '#1a2540' }
+        },
         y: {
           ticks: {
             color: '#4a6080',
+            font: { size: isPhone ? 9 : 11 },
+            maxTicksLimit: isPhone ? 5 : 8,
             callback: v => _snapshotMode === 'value'
               ? sym + Number(v).toLocaleString()
               : (v >= 0 ? '+' : '') + Number(v).toFixed(0) + '%'
