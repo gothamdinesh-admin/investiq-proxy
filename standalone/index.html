@@ -672,6 +672,42 @@
         margin: 0 !important;
       }
 
+      /* Time Travel snapshot table — convert to stacked cards on mobile,
+         same pattern as Holdings. The min-width track + horizontal scroll
+         is the desktop-narrow fallback; on phones we go full card. */
+      #snapshotHoldingsView { overflow-x: visible !important; }
+      #snapshotHoldingsView .snapshot-table { min-width: 0 !important; }
+      #snapshotHoldingsView .table-header { display: none !important; }
+      #snapshotHoldingsView .snapshot-row {
+        display: block !important;
+        grid-template-columns: none !important;
+        padding: 14px !important;
+        margin-bottom: 10px;
+        border-radius: 12px !important;
+        background: var(--bg-panel) !important;
+        border: 1px solid var(--border) !important;
+      }
+      /* Symbol block stays full-width at the top */
+      #snapshotHoldingsView .snapshot-row > div:first-child { margin-bottom: 10px; }
+      /* Numeric cells become a 2-col labelled grid */
+      #snapshotHoldingsView .snapshot-row > div[data-label] {
+        display: inline-block !important;
+        width: 48%;
+        text-align: left !important;
+        padding: 5px 0;
+        font-size: 13px;
+        vertical-align: top;
+      }
+      #snapshotHoldingsView .snapshot-row > div[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 10px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+      }
+
       /* NZ Tax (FIF) table — same card pattern. */
       #section-tax #fifHoldingsTable .table-header { display: none !important; }
       #section-tax #fifHoldingsTable .table-row {
@@ -4673,17 +4709,17 @@ async function viewSnapshotByDate() {
       const gainCls = h.gain >= 0 ? 'pos' : 'neg';
       const gainSig = h.gain >= 0 ? '+' : '';
       return `
-        <div class="table-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;cursor:default;">
+        <div class="table-row snapshot-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;cursor:default;">
           <div style="min-width:0;overflow:hidden;">
             <div class="font-semibold text-sm">${h.symbol}</div>
             <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.name || h.platform} · ${h.type}</div>
           </div>
-          <div class="text-right mono text-sm">${Number(h.quantity).toFixed(4)}</div>
-          <div class="text-right mono text-sm">${sym}${Number(h.avgBuyPrice).toFixed(2)}</div>
-          <div class="text-right mono text-sm" style="color:#94a3b8;">${sym}${Number(h.costBasis).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
-          <div class="text-right mono text-sm">${h.currentPrice != null ? sym + Number(h.currentPrice).toFixed(2) : '–'}</div>
-          <div class="text-right mono text-sm font-semibold">${sym}${Number(h.currentValue).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
-          <div class="text-right"><span class="badge-${h.gain>=0?'pos':'neg'}">${gainSig}${Number(h.gainPct).toFixed(2)}%</span></div>
+          <div class="text-right mono text-sm" data-label="Units">${Number(h.quantity).toFixed(4)}</div>
+          <div class="text-right mono text-sm" data-label="Avg Cost">${sym}${Number(h.avgBuyPrice).toFixed(2)}</div>
+          <div class="text-right mono text-sm" data-label="Invested" style="color:var(--text-secondary);">${sym}${Number(h.costBasis).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-right mono text-sm" data-label="Price">${h.currentPrice != null ? sym + Number(h.currentPrice).toFixed(2) : '–'}</div>
+          <div class="text-right mono text-sm font-semibold" data-label="Mkt Value">${sym}${Number(h.currentValue).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-right" data-label="P&L"><span class="badge-${h.gain>=0?'pos':'neg'}">${gainSig}${Number(h.gainPct).toFixed(2)}%</span></div>
         </div>`;
     }).join('');
 
