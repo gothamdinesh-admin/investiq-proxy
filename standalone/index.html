@@ -2317,6 +2317,37 @@
         </div>
       </div>
 
+      <!-- v0.18 — FIF Method Optimiser: FDR vs CV side by side -->
+      <div id="fifOptimiserCard" class="card p-5 mb-4" style="display:none;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--color-green));"></div>
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div class="section-title" style="margin:0;"><i class="fas fa-scale-balanced" style="color:var(--accent);"></i> Method Optimiser <span class="iq-badge ml-2">IQ</span></div>
+          <div class="text-xs neutral">You may use whichever method gives the lower income — applied consistently across all FIF holdings.</div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div id="fifFdrMethodCard" class="card2 p-4" style="border:2px solid var(--border);">
+            <div class="flex items-center justify-between mb-1">
+              <div class="font-semibold text-sm">FDR — Fair Dividend Rate</div>
+              <span id="fifFdrPick" class="text-xs" style="display:none;padding:2px 8px;border-radius:9999px;background:var(--color-green-soft);color:var(--color-green);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;font-size:9px;">Lower</span>
+            </div>
+            <div class="text-2xl font-bold mono" id="fifFdrIncome" style="color:var(--accent);line-height:1.1;">NZ$0</div>
+            <div class="text-xs neutral mt-1">5% of market value, flat. Always positive while you hold.</div>
+          </div>
+          <div id="fifCvMethodCard" class="card2 p-4" style="border:2px solid var(--border);">
+            <div class="flex items-center justify-between mb-1">
+              <div class="font-semibold text-sm">CV — Comparative Value</div>
+              <span id="fifCvPick" class="text-xs" style="display:none;padding:2px 8px;border-radius:9999px;background:var(--color-green-soft);color:var(--color-green);font-weight:700;text-transform:uppercase;letter-spacing:0.4px;font-size:9px;">Lower</span>
+            </div>
+            <div class="text-2xl font-bold mono" id="fifCvIncome" style="color:var(--color-amber);line-height:1.1;">NZ$0</div>
+            <div class="text-xs neutral mt-1">Actual gain over the year (can be NZ$0 in a down year).</div>
+          </div>
+        </div>
+        <div id="fifOptimiserVerdict" class="text-sm" style="padding:12px 14px;border-radius:10px;background:var(--bg-panel-2);color:var(--text-body);line-height:1.6;"></div>
+        <div class="text-xs neutral mt-3" style="line-height:1.6;">
+          <b>Note:</b> CV here approximates the year's gain as <i>market value − cost basis</i>. The exact IRD CV formula uses opening market value + purchases during the year. For a buy-and-hold portfolio these are close, but confirm with your accountant before filing — especially if you bought or sold mid-year.
+        </div>
+      </div>
+
       <div class="card p-5 mb-4">
         <div class="section-title mb-4"><i class="fas fa-globe" style="color:var(--accent);"></i> Overseas Holdings Contributing to FIF</div>
         <div id="fifHoldingsTable"></div>
@@ -9956,6 +9987,45 @@ function refreshFIF() {
 
   const inFIFZone = totalCost > FIF_THRESHOLD_NZD;
   const fdrEstimate = inFIFZone ? totalMarket * 0.05 : 0;
+  // CV (Comparative Value) — approximated as the year's gain (market − cost),
+  // floored at 0 (FIF income can't be negative). When the portfolio is down
+  // or flat, CV = 0, which can beat FDR's flat 5%.
+  const cvEstimate = inFIFZone ? Math.max(0, totalMarket - totalCost) : 0;
+
+  // ── Method Optimiser card ──────────────────────────────────────────────
+  const optCard = document.getElementById('fifOptimiserCard');
+  if (optCard) {
+    if (inFIFZone) {
+      optCard.style.display = '';
+      const fdrEl = document.getElementById('fifFdrIncome');
+      const cvEl  = document.getElementById('fifCvIncome');
+      if (fdrEl) fdrEl.textContent = 'NZ$' + fdrEstimate.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
+      if (cvEl)  cvEl.textContent  = 'NZ$' + cvEstimate.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
+      const fdrLower = fdrEstimate <= cvEstimate;
+      const fdrPick = document.getElementById('fifFdrPick');
+      const cvPick  = document.getElementById('fifCvPick');
+      const fdrCardEl = document.getElementById('fifFdrMethodCard');
+      const cvCardEl  = document.getElementById('fifCvMethodCard');
+      if (fdrPick) fdrPick.style.display = fdrLower ? '' : 'none';
+      if (cvPick)  cvPick.style.display  = fdrLower ? 'none' : '';
+      if (fdrCardEl) fdrCardEl.style.border = fdrLower ? '2px solid var(--color-green)' : '2px solid var(--border)';
+      if (cvCardEl)  cvCardEl.style.border  = fdrLower ? '2px solid var(--border)' : '2px solid var(--color-green)';
+      const saving = Math.abs(fdrEstimate - cvEstimate);
+      // Marginal-rate ballpark: use 33% as the common NZ top-ish rate for illustration
+      const taxSaving = saving * 0.33;
+      const verdict = document.getElementById('fifOptimiserVerdict');
+      if (verdict) {
+        if (saving < 1) {
+          verdict.innerHTML = `Both methods give essentially the same FIF income (~NZ$${fdrEstimate.toLocaleString('en-NZ',{maximumFractionDigits:0})}). No meaningful difference this year.`;
+        } else {
+          const lowerName = fdrLower ? 'FDR (5% flat)' : 'Comparative Value';
+          verdict.innerHTML = `<b style="color:var(--color-green);">${lowerName}</b> gives the lower FIF income — NZ$${Math.min(fdrEstimate, cvEstimate).toLocaleString('en-NZ',{maximumFractionDigits:0})} vs NZ$${Math.max(fdrEstimate, cvEstimate).toLocaleString('en-NZ',{maximumFractionDigits:0})}. That's <b>NZ$${saving.toLocaleString('en-NZ',{maximumFractionDigits:0})}</b> less taxable income — roughly <b>NZ$${taxSaving.toLocaleString('en-NZ',{maximumFractionDigits:0})}</b> saved at a 33% marginal rate.`;
+        }
+      }
+    } else {
+      optCard.style.display = 'none';
+    }
+  }
 
   document.getElementById('fifCostBasis').textContent = 'NZ$' + totalCost.toLocaleString('en-NZ', { maximumFractionDigits: 0 });
   document.getElementById('fifThresholdHint').innerHTML = inFIFZone
