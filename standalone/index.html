@@ -4638,22 +4638,23 @@ async function viewSnapshotByDate() {
     const gainClass = data.total_gain >= 0 ? 'pos' : 'neg';
     const gainSign  = data.total_gain >= 0 ? '+' : '';
     const summary = `
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-        <div class="metric-card">
-          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">As of</div>
-          <div class="text-xl font-bold mono mt-1">${date}</div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="card2 p-3" style="border-left:3px solid var(--color-teal);">
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">As of</div>
+          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${date}</div>
         </div>
-        <div class="metric-card">
-          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Portfolio Value</div>
-          <div class="text-xl font-bold mono mt-1">${sym}${Number(data.total_value).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+        <div class="card2 p-3" style="border-left:3px solid var(--accent);">
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Portfolio Value</div>
+          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(data.total_value).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
         </div>
-        <div class="metric-card">
-          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Cost Basis</div>
-          <div class="text-xl font-bold mono mt-1">${sym}${Number(data.total_cost).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+        <div class="card2 p-3" style="border-left:3px solid var(--color-amber);">
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Cost Basis</div>
+          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(data.total_cost).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
         </div>
-        <div class="metric-card">
-          <div class="text-xs neutral uppercase" style="letter-spacing:0.5px;">Gain / Loss</div>
-          <div class="text-xl font-bold mono mt-1 ${gainClass}">${gainSign}${sym}${Number(Math.abs(data.total_gain)).toLocaleString('en-NZ',{maximumFractionDigits:2})} (${gainSign}${Number(data.total_gain_pct).toFixed(2)}%)</div>
+        <div class="card2 p-3" style="border-left:3px solid ${data.total_gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Gain / Loss</div>
+          <div class="text-lg font-bold mono mt-1 ${gainClass}" style="line-height:1.1;">${gainSign}${sym}${Number(Math.abs(data.total_gain)).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-xs ${gainClass} mt-1">${gainSign}${Number(data.total_gain_pct).toFixed(2)}%</div>
         </div>
       </div>`;
 
@@ -4686,17 +4687,22 @@ async function viewSnapshotByDate() {
         </div>`;
     }).join('');
 
+    // Wrap header + rows in a min-width track so the 7-col grid scrolls
+    // horizontally on phones instead of squishing columns on top of each
+    // other. The outer #snapshotHoldingsView already has overflow-x:auto.
     view.innerHTML = summary + `
-      <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;">
-        <span>Asset</span>
-        <span class="text-right">Units</span>
-        <span class="text-right">Avg Cost</span>
-        <span class="text-right">Invested</span>
-        <span class="text-right">Price</span>
-        <span class="text-right">Mkt Value</span>
-        <span class="text-right">P&L</span>
+      <div class="snapshot-table" style="min-width:640px;">
+        <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;">
+          <span>Asset</span>
+          <span class="text-right">Units</span>
+          <span class="text-right">Avg Cost</span>
+          <span class="text-right">Invested</span>
+          <span class="text-right">Price</span>
+          <span class="text-right">Mkt Value</span>
+          <span class="text-right">P&L</span>
+        </div>
+        <div>${rows}</div>
       </div>
-      <div>${rows}</div>
       <div class="text-xs neutral mt-3 text-right">${holdings.length} holdings · source: ${data.breakdown?.source || 'auto'}</div>`;
   } catch(e) {
     view.innerHTML = `<div class="text-center py-6" style="color:#f87171;">Error loading snapshot: ${e.message}</div>`;
