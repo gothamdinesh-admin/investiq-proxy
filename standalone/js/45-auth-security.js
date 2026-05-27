@@ -209,15 +209,69 @@ async function disableTwoFactor(factorId) {
     confirmLabel: 'Turn off 2FA', cancelLabel: 'Keep it on', variant: 'danger'
   });
   if (!ok) return;
+
+  // Attempt 1: direct unenroll (works if the session is already AAL2).
   try {
     const { error } = await _supabase.auth.mfa.unenroll({ factorId });
-    if (error) throw error;
-    try { logActivity('2fa_disabled', {}); } catch(e) {}
-    toast.success('Two-factor authentication turned off.');
-    renderTwoFactorStatus();
+    if (!error) {
+      try { logActivity('2fa_disabled', {}); } catch(e) {}
+      toast.success('Two-factor authentication turned off.');
+      renderTwoFactorStatus();
+      return;
+    }
+    console.warn('[2fa] direct unenroll failed:', error.message);
   } catch(e) {
-    toast.error(friendlyAuthError(e.message));
+    console.warn('[2fa] direct unenroll threw:', e.message);
   }
+
+  // Attempt 2: elevate to AAL2 by verifying a code, THEN unenroll. This is
+  // the in-app path when the session is AAL1 (unenrolling a verified factor
+  // requires AAL2 on most Supabase configs).
+  const codeRes = await showFormModal({
+    title: 'Confirm with your authenticator',
+    icon: 'fa-shield-halved', iconColor: 'var(--accent)',
+    description: 'To turn 2FA off we need to confirm it\'s you. Enter the current 6-digit code from your authenticator app.',
+    fields: [{ name: 'code', type: 'text', label: '6-digit code', required: true, placeholder: '123456' }],
+    submitLabel: 'Confirm & turn off', submitVariant: 'danger'
+  });
+  if (codeRes && codeRes.code) {
+    try {
+      if (typeof _supabase.auth.mfa.challengeAndVerify === 'function') {
+        const { error: vErr } = await _supabase.auth.mfa.challengeAndVerify({ factorId, code: codeRes.code.trim().replace(/\s/g,'') });
+        if (vErr) throw vErr;
+      } else {
+        const { data: ch } = await _supabase.auth.mfa.challenge({ factorId });
+        const { error: vErr } = await _supabase.auth.mfa.verify({ factorId, challengeId: ch.id, code: codeRes.code.trim().replace(/\s/g,'') });
+        if (vErr) throw vErr;
+      }
+      // Now at AAL2 → unenroll should succeed
+      const { error: uErr } = await _supabase.auth.mfa.unenroll({ factorId });
+      if (uErr) throw uErr;
+      try { logActivity('2fa_disabled', {}); } catch(e) {}
+      toast.success('Two-factor authentication turned off.');
+      renderTwoFactorStatus();
+      return;
+    } catch(e) {
+      console.warn('[2fa] elevate+unenroll failed:', e.message);
+    }
+  }
+
+  // Attempt 3: both in-app paths failed — give the guaranteed manual route.
+  const email = _supaUser?.email || 'your-email@example.com';
+  await showInfo({
+    title: 'Remove 2FA from Supabase',
+    icon: 'fa-database', iconColor: 'var(--color-amber)',
+    description: 'The in-app removal needs a higher auth level we can\'t reach right now. Remove the factor directly — it takes 20 seconds:',
+    body: `<div style="font-size:12px;color:var(--text-body);line-height:1.7;">
+      <b>Supabase Dashboard → SQL Editor</b>, run:
+      <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:8px;font-size:11px;white-space:pre-wrap;user-select:all;">delete from auth.mfa_factors
+where user_id = (
+  select id from auth.users where email = '${_escape(email)}'
+);</pre>
+      Then refresh this page — 2FA will show as off.
+    </div>`,
+    actions: [{ key: 'ok', label: 'Got it', variant: 'primary', flex: true }]
+  });
 }
 
 // ── 2FA challenge at login ──────────────────────────────────────────────
