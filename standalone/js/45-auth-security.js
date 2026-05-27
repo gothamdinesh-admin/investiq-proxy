@@ -121,29 +121,34 @@ async function renderTwoFactorStatus() {
     const { data, error } = await _supabase.auth.mfa.listFactors();
     if (error) throw error;
     const totp = (data?.totp || []).filter(f => f.status === 'verified');
+    const email = _supaUser?.email || 'your-email@example.com';
     if (totp.length) {
+      // A factor is enrolled but login MFA is disabled (ENABLE_LOGIN_MFA=false).
+      // The factor does nothing useful + can cause the AAL2 unenroll catch-22,
+      // so we show the definitive SQL removal rather than a flaky 'Turn off'.
       wrap.innerHTML = `
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="flex items-center gap-2">
-            <i class="fas fa-shield-halved" style="color:var(--color-green);"></i>
-            <span class="text-sm" style="color:var(--text-primary);">Two-factor authentication is <b style="color:var(--color-green);">on</b></span>
-          </div>
-          <button onclick="disableTwoFactor('${totp[0].id}')" class="btn btn-sm btn-secondary" style="font-size:11px;color:var(--color-red);border-color:var(--color-red);">Turn off</button>
+        <div class="flex items-center gap-2">
+          <i class="fas fa-shield-halved" style="color:var(--color-amber);"></i>
+          <span class="text-sm" style="color:var(--text-primary);">A 2FA factor is enrolled, but <b>not enforced at login</b>.</span>
         </div>
-        <div class="text-xs neutral mt-2">You'll be asked for an authenticator code each time you sign in. ${totp.length > 1 ? `(${totp.length} factors enrolled)` : ''}</div>`;
+        <div class="text-xs neutral mt-2" style="line-height:1.6;">
+          2FA-at-login is currently disabled (it caused lockouts). To remove the leftover factor entirely, run this in
+          <b>Supabase → SQL Editor</b>, then refresh:
+          <pre style="background:var(--bg-deep);border:1px solid var(--border);border-radius:6px;padding:8px;margin-top:6px;font-size:10px;white-space:pre-wrap;user-select:all;color:var(--text-body);">delete from auth.mfa_factors
+where user_id = (
+  select id from auth.users where email = '${_escape(email)}'
+);</pre>
+        </div>`;
     } else {
       wrap.innerHTML = `
-        <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="flex items-center gap-2">
-            <i class="fas fa-shield-halved" style="color:var(--text-muted);"></i>
-            <span class="text-sm" style="color:var(--text-primary);">Two-factor authentication is <b>off</b></span>
-          </div>
-          <button onclick="enableTwoFactor()" class="btn btn-sm btn-primary" style="font-size:11px;">Turn on</button>
+        <div class="flex items-center gap-2">
+          <i class="fas fa-shield-halved" style="color:var(--text-muted);"></i>
+          <span class="text-sm" style="color:var(--text-primary);">Two-factor authentication: <b>off</b></span>
         </div>
-        <div class="text-xs neutral mt-2">Add a second layer — an authenticator app code on top of your password. Strongly recommended.</div>`;
+        <div class="text-xs neutral mt-2" style="line-height:1.6;">Account is protected by password. App-level 2FA is on hold pending a lockout-safe rebuild with recovery codes — see notes in the security register.</div>`;
     }
   } catch(e) {
-    wrap.innerHTML = `<div class="text-xs" style="color:var(--color-amber);">Couldn't load 2FA status: ${friendlyAuthError(e.message)}</div>`;
+    wrap.innerHTML = `<div class="text-xs neutral">Security status unavailable right now.</div>`;
   }
 }
 
