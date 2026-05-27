@@ -1172,12 +1172,21 @@
         <input type="email" id="gateEmail" class="input" placeholder="you@email.com" onkeydown="if(event.key==='Enter')submitGateAuth()">
       </div>
       <div>
-        <label>Password</label>
+        <div class="flex items-center justify-between">
+          <label>Password</label>
+          <button type="button" onclick="_toggleGatePassword()" id="gatePwToggle" class="text-xs" style="background:none;border:none;color:var(--accent);cursor:pointer;padding:0;"><i class="fas fa-eye"></i> Show</button>
+        </div>
         <input type="password" id="gatePassword" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
       </div>
       <div id="gateSignUpFields" style="display:none;">
         <label>Confirm Password</label>
-        <input type="password" id="gatePassword2" class="input" placeholder="••••••••">
+        <input type="password" id="gatePassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+      </div>
+      <!-- 2FA challenge — shown only when the account has TOTP enabled -->
+      <div id="gateMfaField" style="display:none;">
+        <label>Authentication Code</label>
+        <input type="text" id="gateMfaCode" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code from your authenticator" onkeydown="if(event.key==='Enter')submitGateMfa()">
+        <div class="text-xs neutral mt-1">Open your authenticator app (Google Authenticator, Authy, 1Password) and enter the current code.</div>
       </div>
     </div>
 
@@ -1187,6 +1196,15 @@
     <button onclick="submitGateAuth()" id="gateSubmitBtn" class="btn btn-primary w-full mt-5" style="padding:12px;">
       <i class="fas fa-sign-in-alt mr-2"></i><span id="gateSubmitLabel">Sign In</span>
     </button>
+
+    <!-- 2FA verify button — replaces the sign-in button during MFA step -->
+    <button onclick="submitGateMfa()" id="gateMfaBtn" class="btn btn-primary w-full mt-5" style="padding:12px;display:none;">
+      <i class="fas fa-shield-halved mr-2"></i>Verify Code
+    </button>
+
+    <div class="text-center mt-3">
+      <button type="button" id="gateForgotBtn" onclick="gateForgotPassword()" class="text-xs" style="background:none;border:none;color:var(--text-muted);cursor:pointer;text-decoration:underline;">Forgot password?</button>
+    </div>
 
     <div class="text-xs neutral mt-6 text-center" style="line-height:1.6;">
       Your data is encrypted in your own Supabase project.<br>
@@ -3490,6 +3508,17 @@
               <div class="text-xs" style="color:#64748b;">Connected to <span style="color:#818cf8;">InvestIQ Cloud</span> &mdash; your portfolio syncs automatically</div>
             </div>
           </div>
+
+          <!-- v0.18.1 — Two-factor authentication -->
+          <div style="background:var(--bg-deep);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:10px;">
+            <div class="flex items-center gap-2 mb-2">
+              <i class="fas fa-lock" style="color:var(--accent);font-size:12px;"></i>
+              <span class="text-xs font-semibold" style="color:var(--text-secondary);letter-spacing:0.5px;text-transform:uppercase;">Security</span>
+            </div>
+            <div id="twoFactorStatus">
+              <div class="text-xs neutral"><i class="fas fa-spinner fa-spin mr-1"></i>Checking 2FA status…</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3881,6 +3910,7 @@
 <script src="js/20-state.js"></script>
 <script src="js/30-cloud.js"></script>
 <script src="js/40-auth.js"></script>
+<script src="js/45-auth-security.js"></script>
 <script src="js/60-import.js"></script>
 <script src="js/50-portfolio.js"></script>
 <script src="js/70-ai.js"></script>
@@ -4811,28 +4841,51 @@ async function signIn(email, password) {
       _supabase.auth.signInWithPassword({ email, password }),
       15000, 'Supabase auth'
     );
-    if (error) return { error: error.message };
-
-    // SECURITY: clear ANY stale data from a previous session on this device
-    // (e.g. shared computer, browser profile reused). The cloud is the source
-    // of truth — local state will be repopulated from loadFromSupabase below.
-    clearLocalUserData({ keepSettings: true });
+    if (error) {
+      // Map to a friendly message if the security module is loaded
+      return { error: (typeof friendlyAuthError === 'function') ? friendlyAuthError(error.message) : error.message };
+    }
 
     _supaUser = data.user;
-    // Admin check has a known historical RLS-recursion failure mode. Cap it
-    // at 8s and continue without admin info rather than hang the sign-in.
+
+    // v0.18.1 — If the account has verified 2FA, pause here. The user must
+    // enter their authenticator code before we load any portfolio data.
+    // _finishSignInAfterMfa() (below) completes the load once verified.
+    if (typeof checkMfaRequired === 'function') {
+      try {
+        const needsMfa = await _withTimeout(checkMfaRequired(), 8000, 'MFA check');
+        if (needsMfa) {
+          if (typeof _showGateMfaStep === 'function') _showGateMfaStep();
+          return { mfaRequired: true };
+        }
+      } catch(e) { console.warn('[signIn] MFA check failed — continuing:', e.message); }
+    }
+
+    return await _finishSignInAfterMfa();
+  } catch(e) {
+    console.error('[signIn] hard failure:', e);
+    const msg = (typeof friendlyAuthError === 'function') ? friendlyAuthError(e.message) : (e.message || 'Sign-in failed (network or Supabase outage)');
+    return { error: msg };
+  }
+}
+
+// Completes sign-in after password (and 2FA, if any). Loads the portfolio,
+// admin status, etc. Split out so the 2FA challenge can call it once the
+// authenticator code is verified.
+async function _finishSignInAfterMfa() {
+  try {
+    // SECURITY: clear ANY stale data from a previous session on this device.
+    clearLocalUserData({ keepSettings: true });
+
     try {
       await _withTimeout(checkAdminStatus(), 8000, 'Admin status check');
     } catch(e) {
       console.warn('[signIn] checkAdminStatus failed/timed-out — continuing without admin info:', e.message);
     }
-    logActivity('login', { email: _supaUser.email, isAdmin: _isAdmin });
-    // Touch last_seen (fire-and-forget — not awaited)
+    logActivity('login', { email: _supaUser?.email, isAdmin: _isAdmin });
     _supabase.from('profiles').upsert({ id: _supaUser.id, email: _supaUser.email, last_seen: new Date().toISOString() }, { onConflict: 'id' }).then(() => {});
     updateAuthUI();
 
-    // Force a hard sync from cloud — bypass the local-newer guard since we
-    // just wiped local data above. Cloud is authoritative on fresh login.
     delete state.settings.updatedAt;
     localStorage.removeItem('investiq_updated_at');
     try {
@@ -4850,11 +4903,11 @@ async function signIn(email, password) {
     updateSyncIndicator();
     return { ok: true };
   } catch(e) {
-    // Top-level catch — covers auth timeout / network failure.
-    console.error('[signIn] hard failure:', e);
-    return { error: e.message || 'Sign-in failed (network or Supabase outage)' };
+    console.error('[finishSignIn] failure:', e);
+    return { error: (typeof friendlyAuthError === 'function') ? friendlyAuthError(e.message) : e.message };
   }
 }
+window._finishSignInAfterMfa = _finishSignInAfterMfa;
 
 async function signUp(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
@@ -6855,6 +6908,10 @@ function populateSettingsForm() {
   if (proxyDot) {
     const navDot = document.getElementById('proxyStatusDot');
     proxyDot.style.background = navDot ? navDot.style.background : '#34d399';
+  }
+  // v0.18.1 — refresh the 2FA status block when settings opens
+  if (_supaUser && typeof renderTwoFactorStatus === 'function') {
+    try { renderTwoFactorStatus(); } catch(e) {}
   }
 
   // Admin-only platform config — hidden for regular users
