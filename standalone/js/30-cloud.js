@@ -107,9 +107,39 @@ async function loadFromSupabase() {
   } catch(e) { console.warn('Supabase load error:', e); return false; }
 }
 
+// Set true ONLY by the explicit "Clear All Data" flow so an intentional
+// wipe can still write an empty portfolio. Every other path is blocked
+// from clobbering a populated cloud with an empty local state.
+let _allowEmptyCloudSave = false;
+
 async function saveToSupabase() {
   if (!_supabase || !_supaUser) return;
   try {
+    // ── DATA-LOSS GUARD ──────────────────────────────────────────────────
+    // Never overwrite a NON-EMPTY cloud portfolio with an EMPTY local one
+    // unless the user explicitly asked (Clear All Data). This stops a
+    // failed cloud LOAD (which leaves local empty) from cascading into a
+    // cloud WIPE on the next debounced save.
+    if (!_allowEmptyCloudSave && (!state.portfolio || state.portfolio.length === 0)) {
+      try {
+        const { data: existing } = await _supabase
+          .from('investiq_portfolios')
+          .select('portfolio')
+          .eq('user_id', _supaUser.id)
+          .maybeSingle();
+        const cloudCount = (existing?.portfolio || []).length;
+        if (cloudCount > 0) {
+          console.error(`[saveToSupabase] BLOCKED: local portfolio is empty but cloud has ${cloudCount} holdings. Refusing to overwrite — this is almost certainly a failed load, not an intentional wipe. Use Admin → Force Reload from Cloud to recover.`);
+          if (window.toast) toast.warning(`Save blocked — your ${cloudCount} cloud holdings are safe. Local view is empty (failed load). Use Admin → Force Reload from Cloud.`);
+          return;
+        }
+      } catch(e) {
+        // If we can't even check the cloud, err on the side of NOT saving.
+        console.warn('[saveToSupabase] empty-guard cloud check failed — skipping save to be safe:', e.message);
+        return;
+      }
+    }
+
     // Strip ALL local-only credentials before writing to cloud
     const settingsToSave = { ...state.settings };
     LOCAL_ONLY_SETTINGS.forEach(k => delete settingsToSave[k]);
