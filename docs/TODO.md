@@ -1,12 +1,36 @@
 # InvestIQ — Prioritised Action Plan
 
-_Last revisited: 2026-05-17 · v0.12-perf-pulse shipped_
+_Last revisited: 2026-05-28 · **v0.20-auth-data-safety** shipped (see `docs/CHECKPOINT_v0.20.md`)_
 
 This is the single source of truth for what's next. Priority order is intentional — do P0 first, then P1 top-down.
 
 ---
 
-## ✅ Recently completed (v0.8 → v0.12)
+## ✅ Recently completed (v0.13 → v0.20)
+
+| Tag | What |
+|---|---|
+| `v0.13-trader-iq` | TraderIQ section: trades + trade_setups tables, RLS, holdings-style ledger UI |
+| `v0.14-invest-updates` | Holdings KPI strip, performance polish, daily-snapshot $0-entry guard |
+| `v0.15-feature-pack` | Goals & Targets, Tax (FIF) polish, Holdings KPI strip, TraderIQ enhancements |
+| `v0.16-integrations` | Integration improvements + reliability fixes |
+| `v0.17-calendar-reports` | Calendar + Reports + PWA install prompt + mobile tour fixes (v0.17.1-v0.17.8) |
+| `v0.18-fif-optimiser` | FIF Method Optimiser (FDR vs CV) — NZ-unique tax feature |
+| _v0.18.1 → v0.19.2_ | **Incident recovery**: 2FA-lockout + cloud-wipe → empty-save guard (v0.18.9), one-click snapshot restore (v0.19), 2FA UI removed (v0.19.2). MFA disabled at login pending recovery-codes redesign. |
+| **`v0.20-auth-data-safety`** | **Architect-level redesign.** `docs/AUTH_DATA_SAFETY.md` (threat model + 3-layer defense + lockout-proof 2FA spec + operator playbook). Rolling local auto-backup (`investiq_autobackup`, last 3 non-empty). Admin tools: Restore from Local Backup + Verify Backup Integrity. Save-health marker (`investiq_last_good_save`). |
+
+---
+
+## 🆕 v0.20 PENDING VERIFICATIONS (do before new feature work)
+
+- [ ] **Confirm 2FA factor cleanup** — run the documented SQL if `auth.mfa_factors` still has a row for the user account.
+- [ ] **Click-test login loop** — sign out → sign in → portfolio loads → holdings count matches cloud.
+- [ ] **Click-test Admin → Verify Backup Integrity** — should show no drift.
+- [ ] **Confirm `investiq_autobackup` populates** in localStorage after a state change.
+
+---
+
+## ✅ Earlier history (v0.8 → v0.12)
 
 | Tag | What |
 |---|---|
