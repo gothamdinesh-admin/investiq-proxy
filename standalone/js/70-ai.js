@@ -202,7 +202,27 @@ function renderInsightsSection(results) {
     </details>`;
   };
 
-  document.getElementById('insightsContent').innerHTML = kpiStrip + heroHtml + actionItemHtml + `
+  // ── Portfolio context banner ──────────────────────────────────────────
+  // Insights are generated for ONE portfolio. With multiple portfolios, show
+  // which one — and if you've since switched, warn that they're stale.
+  const _multiPf  = (typeof listPortfolios === 'function') && listPortfolios().length > 1;
+  const _activeId = (typeof state !== 'undefined') ? state.activePortfolioId : null;
+  const _activeNm = (typeof getActivePortfolio === 'function') ? getActivePortfolio().name : null;
+  const _stale    = results.portfolioId && _activeId && results.portfolioId !== _activeId;
+  let portfolioBanner = '';
+  if (_stale) {
+    portfolioBanner = `<div class="card mb-4 p-4" style="border:1px solid var(--color-amber);background:rgba(251,191,36,0.08);display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <i class="fas fa-triangle-exclamation" style="color:var(--color-amber);font-size:16px;"></i>
+        <div style="flex:1;min-width:200px;font-size:13px;color:var(--text-body);line-height:1.5;">
+          These insights were generated for <b>${_escape(results.portfolioName || 'another portfolio')}</b>, but you're now viewing <b>${_escape(_activeNm || 'this portfolio')}</b>. Re-run for accurate analysis.
+        </div>
+        <button onclick="runAgents()" class="btn btn-sm" style="background:rgba(251,191,36,0.2);color:var(--color-amber);border:1px solid var(--color-amber);font-size:12px;padding:6px 12px;"><i class="fas fa-rotate mr-1"></i>Re-run for ${_escape(_activeNm || 'this portfolio')}</button>
+      </div>`;
+  } else if (_multiPf && results.portfolioName) {
+    portfolioBanner = `<div class="mb-3" style="font-size:12px;color:var(--text-secondary);"><i class="fas fa-layer-group" style="color:var(--accent);margin-right:6px;"></i>AI analysis for <b>${_escape(results.portfolioName)}</b></div>`;
+  }
+
+  document.getElementById('insightsContent').innerHTML = portfolioBanner + kpiStrip + heroHtml + actionItemHtml + `
     <div class="flex items-center justify-between mb-3 mt-4 flex-wrap gap-2">
       <div class="text-xs uppercase neutral font-semibold flex items-center gap-2" style="letter-spacing:0.6px;">
         <i class="fas fa-folder-open" style="color:var(--text-muted);"></i> Detailed agent reports
@@ -580,6 +600,10 @@ async function runAgents() {
     // robust, no rate-limit hits, no timeouts. Each agent's result is
     // saved as it lands so a partial failure still leaves usable data.
     state.agentResults = state.agentResults || {};
+    // Tag which portfolio this analysis is for — so switching portfolios
+    // shows a "stale, re-run" banner instead of the wrong portfolio's insights.
+    state.agentResults.portfolioId   = state.activePortfolioId;
+    state.agentResults.portfolioName = (typeof getActivePortfolio === 'function') ? getActivePortfolio().name : null;
 
     setAgentState('portfolio', 'running');
     const healthAnalysis = await callClaude('portfolio', baseMsg);
@@ -683,6 +707,8 @@ async function runSingleAgent(agentKey) {
   const baseMsg = `Portfolio:\n${JSON.stringify(portfolioSummary, null, 2)}\n\nMarket Context:\n${JSON.stringify(marketSummary, null, 2)}`;
 
   state.agentResults = state.agentResults || {};
+  state.agentResults.portfolioId   = state.activePortfolioId;
+  state.agentResults.portfolioName = (typeof getActivePortfolio === 'function') ? getActivePortfolio().name : null;
   try {
     setAgentState(agentKey, 'running');
     if (agentKey === 'advisor') {

@@ -10250,28 +10250,41 @@ function refreshFIF() {
   let totalMarket = 0;
   const rows = [];
   let skippedNoCountry = 0;
-  state.portfolio.forEach(h => {
-    // NZ-domiciled funds and KiwiSaver are PIE-taxed, not FIF-taxed.
-    // Exclude regardless of country tagging.
-    if (h.type === 'fund' || h.type === 'kiwisaver') return;
-    const country = (h.country || '').toUpperCase().trim();
-    if (NZ_EXEMPT_COUNTRIES.has(country)) return; // NZ-resident investments exempt
-    if (!country) { skippedNoCountry++; return; }
-    const basis = getHoldingBasis(h);
-    // LSE-listed tickers (.L / .IL) are quoted by Yahoo in PENCE, not pounds.
-    // getMetrics() divides by 100 before FX; refreshFIF must do the same or
-    // every London holding inflates by 100× (e.g. SHEL.L → NZ$86k instead of
-    // NZ$860). This is the source of the wildly-inflated FIF cost basis.
-    const penceAdj = isPenceQuoted(h.symbol) ? 0.01 : 1;
-    const fx = getFxRate(h.currency || 'USD', base) * penceAdj;
-    const costNZD   = basis.quantity * basis.avgBuyPrice * fx;
-    const marketNZD = basis.quantity * (h.currentPrice ?? basis.avgBuyPrice) * fx;
-    if (costNZD <= 0) return;
-    totalCost += costNZD;
-    totalMarket += marketNZD;
-    rows.push({
-      symbol: h.symbol, name: h.name, country, currency: h.currency,
-      quantity: basis.quantity, avgCost: basis.avgBuyPrice, costNZD, marketNZD
+  // ── PER-PERSON across ALL portfolios ──────────────────────────────────
+  // The NZ$50,000 FIF de-minimis is assessed PER PERSON, not per portfolio.
+  // Someone splitting overseas holdings across "Personal" + "Retirement"
+  // could read as exempt in each yet be over the threshold in total. So FIF
+  // ALWAYS sums every portfolio's overseas cost basis. Each row is tagged
+  // with its portfolio so the breakdown stays clear.
+  const allPortfolios = (typeof listPortfolios === 'function' && listPortfolios().length)
+    ? listPortfolios()
+    : [{ name: 'Personal', holdings: state.portfolio }];
+  const multiPortfolio = allPortfolios.length > 1;
+  allPortfolios.forEach(pf => {
+    (pf.holdings || []).forEach(h => {
+      // NZ-domiciled funds and KiwiSaver are PIE-taxed, not FIF-taxed.
+      // Exclude regardless of country tagging.
+      if (h.type === 'fund' || h.type === 'kiwisaver') return;
+      const country = (h.country || '').toUpperCase().trim();
+      if (NZ_EXEMPT_COUNTRIES.has(country)) return; // NZ-resident investments exempt
+      if (!country) { skippedNoCountry++; return; }
+      const basis = getHoldingBasis(h);
+      // LSE-listed tickers (.L / .IL) are quoted by Yahoo in PENCE, not pounds.
+      // getMetrics() divides by 100 before FX; refreshFIF must do the same or
+      // every London holding inflates by 100× (e.g. SHEL.L → NZ$86k instead of
+      // NZ$860). This is the source of the wildly-inflated FIF cost basis.
+      const penceAdj = isPenceQuoted(h.symbol) ? 0.01 : 1;
+      const fx = getFxRate(h.currency || 'USD', base) * penceAdj;
+      const costNZD   = basis.quantity * basis.avgBuyPrice * fx;
+      const marketNZD = basis.quantity * (h.currentPrice ?? basis.avgBuyPrice) * fx;
+      if (costNZD <= 0) return;
+      totalCost += costNZD;
+      totalMarket += marketNZD;
+      rows.push({
+        portfolioName: pf.name,
+        symbol: h.symbol, name: h.name, country, currency: h.currency,
+        quantity: basis.quantity, avgCost: basis.avgBuyPrice, costNZD, marketNZD
+      });
     });
   });
   // Visible feedback so the Recalculate button actually shows it ran, and so
@@ -10281,7 +10294,7 @@ function refreshFIF() {
     if (skippedNoCountry > 0) {
       toast.warning(`FIF recalculated. ${skippedNoCountry} holding${skippedNoCountry===1?'':'s'} skipped (no country set — edit them to include in FIF).`);
     } else {
-      toast.success(`FIF recalculated · ${rows.length} overseas holding${rows.length===1?'':'s'}`);
+      toast.success(`FIF recalculated · ${rows.length} overseas holding${rows.length===1?'':'s'}${multiPortfolio ? ` across ${allPortfolios.length} portfolios` : ''}`);
     }
   }
 
@@ -10355,10 +10368,20 @@ function refreshFIF() {
   //  • 2.4fr asset column with min-width:0 + ellipsis (prevents long names overflowing)
   //  • Country left-aligned (it's prose, not numbers)
   //  • Borders + zebra hover for readability
-  const cols = '2.4fr 1.2fr 1.2fr 1.2fr 1fr';
-  tableEl.innerHTML = `
+  //  • Portfolio column only appears when the user has >1 portfolio.
+  const cols = multiPortfolio ? '2.2fr 1.1fr 1.1fr 1.1fr 1.1fr 1fr' : '2.4fr 1.2fr 1.2fr 1.2fr 1fr';
+  // Per-person explainer — only shown with multiple portfolios, where the
+  // combined-threshold rule is non-obvious and easy to get wrong.
+  const perPersonNote = multiPortfolio
+    ? `<div style="margin-bottom:10px;padding:10px 12px;border-radius:8px;background:rgba(99,102,241,0.08);border:1px solid var(--accent-soft-2,rgba(99,102,241,0.25));font-size:12px;color:var(--text-secondary);line-height:1.55;">
+         <i class="fas fa-circle-info" style="color:var(--accent);margin-right:6px;"></i>
+         FIF is assessed <b>per person</b>, so this combines the overseas holdings from <b>all ${allPortfolios.length} of your portfolios</b> — the NZ$50,000 threshold applies to your total, not each portfolio separately.
+       </div>`
+    : '';
+  tableEl.innerHTML = perPersonNote + `
     <div class="table-header" style="display:grid;grid-template-columns:${cols};">
       <span>Asset</span>
+      ${multiPortfolio ? '<span>Portfolio</span>' : ''}
       <span>Country</span>
       <span class="text-right">Cost (NZD)</span>
       <span class="text-right">Market (NZD)</span>
@@ -10370,6 +10393,7 @@ function refreshFIF() {
           <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.symbol}</div>
           <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${(r.name || '').replace(/"/g,'&quot;')}">${r.name || ''}</div>
         </div>
+        ${multiPortfolio ? `<div class="text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${(r.portfolioName || '').replace(/"/g,'&quot;')}">${_escape(r.portfolioName || '')}</div>` : ''}
         <div class="text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${(r.country || '').replace(/"/g,'&quot;')}">${r.country}</div>
         <div class="text-right mono text-sm">NZ$${r.costNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>
         <div class="text-right mono text-sm">NZ$${r.marketNZD.toLocaleString('en-NZ',{maximumFractionDigits:0})}</div>

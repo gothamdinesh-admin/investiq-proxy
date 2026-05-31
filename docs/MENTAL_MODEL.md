@@ -148,7 +148,13 @@ state.activePortfolioId = '<id>'                     ← which is active
 state.portfolio   ← ACCESSOR (getter/setter) → active portfolio's holdings
 ```
 
-Every existing `state.portfolio` reference transparently reads/writes the **active** portfolio. Switching is a pure-state flip + repaint (`renderAll()` + re-open current section) — no network. The header switcher (`renderPortfolioSwitcher`) does switch / create / rename / delete. Cloud stores the whole envelope in `investiq_portfolios.portfolios` (migration 016), and keeps the legacy `portfolio` column = active holdings so the 4 Edge Functions + snapshots keep working. **v0.21a limitation:** daily snapshots reflect whichever portfolio was active at snapshot time (per-portfolio history lands in v0.21b).
+Every existing `state.portfolio` reference transparently reads/writes the **active** portfolio. Switching is a pure-state flip + repaint (`renderAll()` + re-open current section) — no network. The header switcher (`renderPortfolioSwitcher`) does switch / create / rename / delete. Cloud stores the whole envelope in `investiq_portfolios.portfolios` (migration 016), and keeps the legacy `portfolio` column = active holdings so the 4 Edge Functions + snapshots keep working.
+
+**Two deliberate exceptions to "active-portfolio scoping" (v0.21b):**
+- **FIF tax computes across ALL portfolios**, not the active one — the NZ$50k de-minimis is a *per-person* threshold, so summing every portfolio's overseas cost basis is the only correct behaviour. Rows are tagged by portfolio.
+- **AI insights are stamped with `portfolioId`** at run time; switching portfolios shows a "stale — re-run" banner rather than the wrong portfolio's analysis.
+
+**Still active-time limitation:** daily snapshots reflect whichever portfolio was active at snapshot time (per-portfolio snapshot history lands in v0.21c).
 
 ---
 

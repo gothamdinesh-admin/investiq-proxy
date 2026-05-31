@@ -94,7 +94,10 @@ This is the single source of truth for what's next. Priority order is intentiona
 
 ## ⚡ P2 — Polish & data quality
 
-- [~] **Multi-portfolio support** — _v0.21a SHIPPED (data model + switcher + create/rename/delete)._ "Personal / Retirement / Test" switcher in the header. Real data lives in `state.portfolios[]`; `state.portfolio` is now an accessor mirroring the active one (zero section-code churn). Cloud envelope + migration 016. **Activation: run `supabase/migrations/016_multi_portfolio.sql`.** Remaining: v0.21b (CSV import target picker, per-portfolio snapshots, family aggregate sums member portfolios) + v0.21c ("All portfolios" combined view + per-portfolio performance compare).
+- [~] **Multi-portfolio support** — _v0.21a + v0.21b SHIPPED._
+  - **v0.21a** — data model + header switcher + create/rename/delete. Real data lives in `state.portfolios[]`; `state.portfolio` is an accessor mirroring the active one (zero section-code churn). Cloud envelope + migration 016. **Activation: run `supabase/migrations/016_multi_portfolio.sql`.**
+  - **v0.21b** — per-portfolio AI + tax scoping. AI insights stamped with `portfolioId` → a "stale, re-run" banner shows if you switch portfolios. **FIF tax now computes PER-PERSON across ALL portfolios** (the NZ$50k de-minimis is a per-person threshold — summing avoids the trap where each portfolio reads "exempt" while the person is over). Rows tagged by portfolio + per-person explainer. Dividends are already per-person (separate per-user table) so they correctly span portfolios. _Harbour talking point: correct per-person FIF assessment across portfolios._
+  - **Remaining:** v0.21c — per-portfolio snapshots (Performance/Time Travel scoped), "All portfolios" combined super-view, CSV import target picker, family aggregate summing a member's portfolios.
 - [ ] **Transaction history / audit log** — every add/edit/delete logged with timestamp + user + old/new values. Needed for tax prep and debugging. Est: half day.
 - [ ] **Bulk edit holdings** — select multiple rows, apply same change (currency, sector, platform, delete). Est: 2 hours.
 - [ ] **Manual price override per holding** — lets user set price when Yahoo returns garbage (e.g. delisted or tiny-cap tickers). Est: 1 hour.
