@@ -144,11 +144,9 @@ function normaliseSymbol(sym, type) {
 let _importInProgress = false;
 
 async function importCSV(event) {
-  // Combined "All portfolios" view is read-only — don't import into a merge.
-  if (typeof _blockIfCombinedView === 'function' && _blockIfCombinedView()) {
-    if (event?.target) event.target.value = '';
-    return;
-  }
+  // NOTE: combined "All portfolios" view is NOT blocked here. Import is fine
+  // from combined view because the destination picker below forces choosing a
+  // real portfolio, which exits combined view before any write happens.
   // Hard guard: if another import is in flight, ignore this event
   if (_importInProgress) {
     console.warn('[csv-import] Ignored duplicate import event while already importing');
@@ -184,7 +182,10 @@ async function _importCSVImpl(event) {
       submitLabel: 'Continue'
     });
     if (!choice) return; // cancelled — abort import
-    if (choice.pid && choice.pid !== state.activePortfolioId) {
+    // Always switch to the chosen portfolio. setActivePortfolio also EXITS
+    // combined view — important, otherwise the read-only accessor would
+    // swallow the import as a no-op. Safe to call even if pid is unchanged.
+    if (choice.pid) {
       setActivePortfolio(choice.pid);
       if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
     }
