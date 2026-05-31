@@ -154,7 +154,9 @@ Every existing `state.portfolio` reference transparently reads/writes the **acti
 - **FIF tax computes across ALL portfolios**, not the active one — the NZ$50k de-minimis is a *per-person* threshold, so summing every portfolio's overseas cost basis is the only correct behaviour. Rows are tagged by portfolio.
 - **AI insights are stamped with `portfolioId`** at run time; switching portfolios shows a "stale — re-run" banner rather than the wrong portfolio's analysis.
 
-**Still active-time limitation:** daily snapshots reflect whichever portfolio was active at snapshot time (per-portfolio snapshot history lands in v0.21c).
+**"All portfolios (combined)" view (v0.21c):** a transient switcher mode (`state._viewAllPortfolios`, never persisted) where the `state.portfolio` getter returns a merged read-only view across all portfolios and the **setter is a no-op** — so the combined net-worth view physically cannot mutate the underlying portfolios. Edit entry points (saveHolding / deleteHolding / editHolding / populateAddForm / importCSV) are guarded with `_blockIfCombinedView()`. CSV import asks which portfolio to import into when >1 exists.
+
+**Still active-time limitation:** daily snapshots reflect whichever portfolio was active at snapshot time (per-portfolio snapshot history lands in v0.21d).
 
 ---
 

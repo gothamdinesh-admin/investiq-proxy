@@ -144,6 +144,11 @@ function normaliseSymbol(sym, type) {
 let _importInProgress = false;
 
 async function importCSV(event) {
+  // Combined "All portfolios" view is read-only — don't import into a merge.
+  if (typeof _blockIfCombinedView === 'function' && _blockIfCombinedView()) {
+    if (event?.target) event.target.value = '';
+    return;
+  }
   // Hard guard: if another import is in flight, ignore this event
   if (_importInProgress) {
     console.warn('[csv-import] Ignored duplicate import event while already importing');
@@ -162,6 +167,28 @@ async function _importCSVImpl(event) {
   const file = event.target.files[0];
   if (!file) return;
   event.target.value = ''; // reset so same file can be re-imported
+
+  // Multi-portfolio: ask which portfolio to import INTO (defaults to active).
+  // The rest of the import writes to state.portfolio (the active one), so we
+  // just switch active to the chosen target first.
+  if (typeof listPortfolios === 'function' && listPortfolios().length > 1) {
+    const choice = await showFormModal({
+      title: 'Import into which portfolio?',
+      icon: 'fa-file-import',
+      description: 'This CSV will be merged into the portfolio you choose.',
+      fields: [{
+        name: 'pid', label: 'Portfolio', type: 'select',
+        value: state.activePortfolioId,
+        options: listPortfolios().map(p => ({ value: p.id, label: `${p.name} (${(p.holdings||[]).length})` }))
+      }],
+      submitLabel: 'Continue'
+    });
+    if (!choice) return; // cancelled — abort import
+    if (choice.pid && choice.pid !== state.activePortfolioId) {
+      setActivePortfolio(choice.pid);
+      if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
+    }
+  }
 
   // Security: cap CSV at 5MB. A real portfolio CSV is < 100KB; anything
   // bigger is either junk or hostile. Prevents DoS via huge file.

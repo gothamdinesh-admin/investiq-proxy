@@ -17,6 +17,11 @@
 let state = {
   portfolios: [{ id: 'default', name: 'Personal', holdings: [] }],
   activePortfolioId: 'default',
+  // Transient "All portfolios (combined)" view flag. NEVER persisted — a
+  // reload always returns to a real, editable portfolio. When true, the
+  // state.portfolio accessor returns a READ-ONLY flattened view across all
+  // portfolios and BLOCKS writes, so combined view can't mutate data.
+  _viewAllPortfolios: false,
   settings: {
     name: 'My Portfolio', currency: 'NZD',
     claudeApiKey: '',
@@ -38,11 +43,22 @@ let state = {
 // spread/serialise behaviour is preserved.
 Object.defineProperty(state, 'portfolio', {
   get() {
+    // Combined view: READ-ONLY flattened holdings across all portfolios,
+    // each tagged with _portfolioName (shallow copies — never the originals).
+    if (this._viewAllPortfolios) {
+      const out = [];
+      (this.portfolios || []).forEach(p =>
+        (p.holdings || []).forEach(h => out.push({ ...h, _portfolioName: p.name })));
+      return out;
+    }
     const p = this.portfolios.find(x => x.id === this.activePortfolioId)
             || this.portfolios[0];
     return p ? p.holdings : [];
   },
   set(v) {
+    // Combined view is read-only — silently ignore writes so nothing can
+    // corrupt the underlying portfolios while viewing the merged total.
+    if (this._viewAllPortfolios) return;
     let p = this.portfolios.find(x => x.id === this.activePortfolioId)
           || this.portfolios[0];
     if (!p) { p = { id: 'default', name: 'Personal', holdings: [] }; this.portfolios = [p]; this.activePortfolioId = p.id; }
@@ -69,19 +85,31 @@ function listPortfolios() {
   return Array.isArray(state.portfolios) ? state.portfolios : [];
 }
 
-// Switch the active portfolio. Returns true if it changed.
+// Switch the active portfolio. Also exits combined view. Returns true if
+// anything changed (active id changed OR we left combined view) so the
+// caller knows to repaint.
 function setActivePortfolio(id) {
   if (!state.portfolios.some(x => x.id === id)) return false;
-  if (state.activePortfolioId === id) return false;
+  const wasViewingAll = state._viewAllPortfolios;
+  state._viewAllPortfolios = false;
+  if (state.activePortfolioId === id && !wasViewingAll) return false;
   state.activePortfolioId = id;
   saveState();
   return true;
 }
 
-// Create a new (empty) portfolio and make it active. Returns its id.
+// Enter / leave the read-only "All portfolios (combined)" view.
+function setViewAllPortfolios(on) {
+  state._viewAllPortfolios = !!on && listPortfolios().length > 1;
+  // Not persisted — purely a view toggle. No saveState() needed.
+}
+function isViewingAll() { return !!state._viewAllPortfolios; }
+
+// Create a new (empty) portfolio and make it active. Exits combined view.
 function createPortfolio(name) {
   const clean = (name || '').trim() || `Portfolio ${state.portfolios.length + 1}`;
   const id = uuid();
+  state._viewAllPortfolios = false;
   state.portfolios.push({ id, name: clean, holdings: [] });
   state.activePortfolioId = id;
   saveState();

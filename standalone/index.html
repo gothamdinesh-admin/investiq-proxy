@@ -5242,9 +5242,20 @@ function renderPortfolioSwitcher() {
   if (!menu) return;
   const ports = listPortfolios();
   const active = getActivePortfolio();
-  if (label) label.textContent = active?.name || 'Personal';
+  const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+  if (label) label.textContent = viewingAll ? 'All portfolios' : (active?.name || 'Personal');
+  // "All portfolios (combined)" — only offered when there's more than one.
+  const allRow = ports.length > 1
+    ? `<div role="menuitem" onclick="_switchToAllPortfoliosUI()" style="display:flex;align-items:center;gap:8px;width:100%;background:${viewingAll ? 'rgba(99,102,241,0.12)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;">
+         <i class="fas fa-check" style="font-size:10px;width:12px;color:var(--accent,#818cf8);visibility:${viewingAll ? 'visible' : 'hidden'};"></i>
+         <i class="fas fa-layer-group" style="font-size:11px;color:var(--accent,#818cf8);"></i>
+         <span style="flex:1;">All portfolios</span>
+         <span class="neutral" style="font-size:11px;" title="combined net worth">${totalHoldingsCount()}</span>
+       </div>
+       <div style="border-top:1px solid var(--border);"></div>`
+    : '';
   const rows = ports.map(p => {
-    const isActive = p.id === active.id;
+    const isActive = !viewingAll && p.id === active.id;
     const count = (p.holdings || []).length;
     return `<div role="menuitem" onclick="_switchPortfolioUI('${p.id}')" style="display:flex;align-items:center;gap:8px;width:100%;background:${isActive ? 'rgba(99,102,241,0.12)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;">
       <i class="fas fa-check" style="font-size:10px;width:12px;color:var(--accent,#818cf8);visibility:${isActive ? 'visible' : 'hidden'};"></i>
@@ -5254,11 +5265,46 @@ function renderPortfolioSwitcher() {
       ${ports.length > 1 ? `<i class="fas fa-trash" onclick="event.stopPropagation();_deletePortfolioUI('${p.id}')" title="Delete" style="font-size:10px;color:var(--color-red,#f87171);padding:2px 4px;"></i>` : ''}
     </div>`;
   }).join('');
-  menu.innerHTML = rows +
+  menu.innerHTML = allRow + rows +
     `<div style="border-top:1px solid var(--border);"></div>
      <div role="menuitem" onclick="_newPortfolioUI()" style="display:flex;align-items:center;gap:8px;width:100%;color:var(--accent,#818cf8);padding:10px 12px;cursor:pointer;font-size:13px;font-weight:600;">
        <i class="fas fa-plus" style="font-size:11px;width:12px;"></i>New portfolio
      </div>`;
+  // Read-only banner shown only while in combined view.
+  _renderCombinedViewBanner(viewingAll);
+}
+
+// Read-only notice + edit-lock while viewing the combined "All portfolios".
+function _renderCombinedViewBanner(viewingAll) {
+  let banner = document.getElementById('combinedViewBanner');
+  if (!viewingAll) { if (banner) banner.style.display = 'none'; return; }
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'combinedViewBanner';
+    banner.style.cssText = 'background:rgba(99,102,241,0.1);border-bottom:1px solid var(--accent-soft-2,rgba(99,102,241,0.3));color:var(--text-secondary);padding:7px 20px;font-size:12px;text-align:center;';
+    const pulse = document.getElementById('portfolioPulse');
+    if (pulse && pulse.parentNode) pulse.parentNode.insertBefore(banner, pulse.nextSibling);
+    else document.body.insertBefore(banner, document.body.firstChild);
+  }
+  banner.style.display = '';
+  banner.innerHTML = `<i class="fas fa-layer-group" style="color:var(--accent);margin-right:6px;"></i><b>Combined view</b> — read-only total across all ${listPortfolios().length} portfolios. Switch to a portfolio to edit.`;
+}
+
+// Block a data-mutating action while in combined view; returns true if blocked.
+function _blockIfCombinedView() {
+  if (typeof isViewingAll === 'function' && isViewingAll()) {
+    if (window.toast) toast.warning('Combined view is read-only — switch to a specific portfolio to make changes.');
+    return true;
+  }
+  return false;
+}
+
+// Enter the combined "All portfolios" view.
+function _switchToAllPortfoliosUI() {
+  closePortfolioMenu();
+  setViewAllPortfolios(true);
+  _repaintForActivePortfolio();
+  if (window.toast) toast.success('Showing all portfolios combined (read-only)');
 }
 
 let _portfolioMenuOpen = false;
@@ -6321,6 +6367,7 @@ function _humanMonth(ym) {
 
 // ===== CRUD =====
 function populateAddForm() {
+  if (_blockIfCombinedView()) { closeModal('addModal'); return; }
   editingId = null;
   document.getElementById('holdingForm').reset();
   document.getElementById('holdingId').value = '';
@@ -6338,6 +6385,7 @@ function populateAddForm() {
 }
 
 function editHolding(id) {
+  if (_blockIfCombinedView()) return;
   const h = state.portfolio.find(x => x.id === id);
   if (!h) return;
   editingId = id;
@@ -6404,6 +6452,7 @@ function deleteLot(holdingId, lotIdx) {
 
 function saveHolding(e) {
   e.preventDefault();
+  if (_blockIfCombinedView()) { closeModal('addModal'); return; }
   const id = document.getElementById('holdingId').value || uuid();
   const newQty   = parseFloat(document.getElementById('hQty').value) || 0;
   const newPrice = parseFloat(document.getElementById('hBuyPrice').value) || 0;
@@ -6556,6 +6605,7 @@ function onFundProviderChange() {
 }
 
 async function deleteHolding(id) {
+  if (_blockIfCombinedView()) return;
   const h = state.portfolio.find(x => x.id === id);
   if (!h) return;
   const ok = await showConfirm({
