@@ -31,16 +31,29 @@ function initSupabase() {
 async function loadFromSupabase() {
   if (!_supabase || !_supaUser) return false;
   try {
+    // select('*') so this keeps working whether or not the multi-portfolio
+    // columns (portfolios, active_portfolio_id) exist yet (migration 016).
     const { data, error } = await _supabase
       .from('investiq_portfolios')
-      .select('portfolio, settings, agent_results, updated_at')
+      .select('*')
       .eq('user_id', _supaUser.id)
       .single();
     if (error && error.code !== 'PGRST116') { console.warn('Supabase load:', error.message); return false; }
     if (!data) return false;
 
-    // DIAGNOSTIC: log cloud portfolio structure so we can spot duplication at source
-    const cloudPortfolio = data.portfolio || [];
+    // ─── Resolve the cloud ENVELOPE (multi-portfolio aware) ───────────────
+    // New shape: data.portfolios[]. Legacy shape: data.portfolio (single
+    // array) → wrap into "Personal". The legacy `portfolio` column is also
+    // kept populated with the active holdings for Edge-Function compat.
+    const cloudPortfolios = (Array.isArray(data.portfolios) && data.portfolios.length)
+      ? data.portfolios
+      : [{ id: 'default', name: 'Personal', holdings: data.portfolio || [] }];
+    const cloudActiveId = (data.active_portfolio_id
+      && cloudPortfolios.some(p => p.id === data.active_portfolio_id))
+      ? data.active_portfolio_id : cloudPortfolios[0].id;
+
+    // DIAGNOSTIC: scan the ACTIVE/legacy holdings to spot duplication at source
+    const cloudPortfolio = (cloudPortfolios.find(p => p.id === cloudActiveId) || cloudPortfolios[0]).holdings || [];
     const keyCounts = {};
     cloudPortfolio.forEach(h => {
       const k = `${(h.symbol||'').toUpperCase()}::${(h.platform||'').toLowerCase()}`;
@@ -75,8 +88,9 @@ async function loadFromSupabase() {
     // Prevents "just-imported CSV reverted by stale cloud data" bug.
     const localUpdatedAt  = state.settings?.updatedAt || localStorage.getItem('investiq_updated_at') || null;
     const remoteUpdatedAt = data.updated_at || null;
-    const localPortfolioLen  = state.portfolio?.length || 0;
-    const remotePortfolioLen = (data.portfolio || []).length;
+    // Compare TOTAL holdings across ALL portfolios (multi-portfolio aware).
+    const localPortfolioLen  = totalHoldingsCount();
+    const remotePortfolioLen = cloudPortfolios.reduce((s, p) => s + (p.holdings?.length || 0), 0);
 
     if (localUpdatedAt && remoteUpdatedAt && new Date(localUpdatedAt) > new Date(remoteUpdatedAt)) {
       console.log(`[supabase-load] SKIPPED — local state (${localUpdatedAt}, ${localPortfolioLen} holdings) is newer than cloud (${remoteUpdatedAt}, ${remotePortfolioLen}). Pushing local to cloud instead.`);
@@ -98,11 +112,27 @@ async function loadFromSupabase() {
     state.settings = { ...state.settings, ...remoteSettings, ...localOnly };
     if (remoteUpdatedAt) state.settings.updatedAt = remoteUpdatedAt;
 
-    state.portfolio = consolidatePortfolio(data.portfolio || []);
+    // Adopt the cloud envelope: consolidate each portfolio's holdings.
+    state.portfolios = cloudPortfolios.map(p => ({
+      id: p.id || uuid(),
+      name: (p.name || 'Portfolio').trim() || 'Portfolio',
+      holdings: consolidatePortfolio(p.holdings || [])
+    }));
+    state.activePortfolioId = state.portfolios.some(p => p.id === cloudActiveId)
+      ? cloudActiveId : state.portfolios[0].id;
     if (data.agent_results) state.agentResults = data.agent_results;
-    localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: state.portfolio, settings: state.settings, agentResults: state.agentResults }));
+
+    const activeHoldings = (state.portfolios.find(p => p.id === state.activePortfolioId)
+      || state.portfolios[0]).holdings;
+    localStorage.setItem('investiq_v2', JSON.stringify({
+      portfolios: state.portfolios,
+      activePortfolioId: state.activePortfolioId,
+      portfolio: activeHoldings, // legacy mirror for any older reader
+      settings: state.settings,
+      agentResults: state.agentResults
+    }));
     if (remoteUpdatedAt) localStorage.setItem('investiq_updated_at', remoteUpdatedAt);
-    console.log(`✓ Loaded from Supabase (${remotePortfolioLen} holdings, updated ${remoteUpdatedAt})`);
+    console.log(`✓ Loaded from Supabase (${state.portfolios.length} portfolios, ${remotePortfolioLen} holdings total, updated ${remoteUpdatedAt})`);
     return true;
   } catch(e) { console.warn('Supabase load error:', e); return false; }
 }
@@ -120,14 +150,16 @@ async function saveToSupabase() {
     // unless the user explicitly asked (Clear All Data). This stops a
     // failed cloud LOAD (which leaves local empty) from cascading into a
     // cloud WIPE on the next debounced save.
-    if (!_allowEmptyCloudSave && (!state.portfolio || state.portfolio.length === 0)) {
+    if (!_allowEmptyCloudSave && totalHoldingsCount() === 0) {
       try {
         const { data: existing } = await _supabase
           .from('investiq_portfolios')
-          .select('portfolio')
+          .select('*')
           .eq('user_id', _supaUser.id)
           .maybeSingle();
-        const cloudCount = (existing?.portfolio || []).length;
+        const cloudCount = (Array.isArray(existing?.portfolios) && existing.portfolios.length)
+          ? existing.portfolios.reduce((s, p) => s + (p.holdings?.length || 0), 0)
+          : (existing?.portfolio || []).length;
         if (cloudCount > 0) {
           console.error(`[saveToSupabase] BLOCKED: local portfolio is empty but cloud has ${cloudCount} holdings. Refusing to overwrite — this is almost certainly a failed load, not an intentional wipe. Use Admin → Force Reload from Cloud to recover.`);
           if (window.toast) toast.warning(`Save blocked — your ${cloudCount} cloud holdings are safe. Local view is empty (failed load). Use Admin → Force Reload from Cloud.`);
@@ -144,39 +176,64 @@ async function saveToSupabase() {
     const settingsToSave = { ...state.settings };
     LOCAL_ONLY_SETTINGS.forEach(k => delete settingsToSave[k]);
 
-    // DEFENSIVE DEDUPE — never write duplicate keys to cloud.
-    // This kills the "doubled on next load" bug at its source, even if some
-    // other code path accidentally produced duplicates in state.portfolio.
-    const seen = new Map();
-    state.portfolio.forEach(h => {
-      const key = `${(h.symbol||'').toUpperCase().trim()}::${(h.platform||'').toLowerCase().trim()}`;
-      if (!seen.has(key)) {
-        seen.set(key, h);
-      } else {
-        const prev = seen.get(key);
-        // Keep the one with the newer date on any lot, or just the first
-        const prevMaxDate = (prev.lots||[]).reduce((m,l) => l.date > m ? l.date : m, '');
-        const curMaxDate  = (h.lots||[]).reduce((m,l) => l.date > m ? l.date : m, '');
-        if (curMaxDate > prevMaxDate) seen.set(key, h);
-        console.warn(`[saveToSupabase] duplicate key "${key}" in state.portfolio — keeping one, discarding other`);
-      }
-    });
-    const dedupedPortfolio = [...seen.values()];
-    if (dedupedPortfolio.length !== state.portfolio.length) {
-      console.error(`[saveToSupabase] ⚠ state.portfolio had ${state.portfolio.length} entries but ${dedupedPortfolio.length} unique keys — dedup applied before cloud write`);
-      state.portfolio = dedupedPortfolio; // fix local state too
-    }
+    // DEFENSIVE DEDUPE — never write duplicate keys to cloud. Applied to
+    // EACH portfolio independently. Kills the "doubled on next load" bug at
+    // its source even if some other path produced duplicates.
+    const _dedupe = (holdings, label) => {
+      const seen = new Map();
+      (holdings || []).forEach(h => {
+        const key = `${(h.symbol||'').toUpperCase().trim()}::${(h.platform||'').toLowerCase().trim()}`;
+        if (!seen.has(key)) {
+          seen.set(key, h);
+        } else {
+          const prev = seen.get(key);
+          const prevMaxDate = (prev.lots||[]).reduce((m,l) => l.date > m ? l.date : m, '');
+          const curMaxDate  = (h.lots||[]).reduce((m,l) => l.date > m ? l.date : m, '');
+          if (curMaxDate > prevMaxDate) seen.set(key, h);
+          console.warn(`[saveToSupabase] duplicate key "${key}" in portfolio "${label}" — keeping one`);
+        }
+      });
+      return [...seen.values()];
+    };
+
+    const dedupedPortfolios = listPortfolios().map(p => ({
+      id: p.id,
+      name: p.name,
+      holdings: _dedupe(p.holdings, p.name)
+    }));
+    if (dedupedPortfolios.length === 0) dedupedPortfolios.push({ id: 'default', name: 'Personal', holdings: [] });
+    // Push the deduped copy back into local state too.
+    state.portfolios = dedupedPortfolios;
+    const activeId = dedupedPortfolios.some(p => p.id === state.activePortfolioId)
+      ? state.activePortfolioId : dedupedPortfolios[0].id;
+    state.activePortfolioId = activeId;
+    const activeHoldings = (dedupedPortfolios.find(p => p.id === activeId) || dedupedPortfolios[0]).holdings;
+    const totalCount = dedupedPortfolios.reduce((s, p) => s + p.holdings.length, 0);
 
     const nowIso = new Date().toISOString();
-    const { error } = await _supabase
+    // Full payload includes the multi-portfolio columns (migration 016). The
+    // legacy `portfolio` column is kept = active holdings for Edge-Function
+    // compat. If those columns don't exist yet, retry with a legacy-only
+    // payload so saving never breaks before the migration is run.
+    const basePayload = {
+      user_id: _supaUser.id,
+      portfolio: activeHoldings,
+      settings: settingsToSave,
+      agent_results: state.agentResults,
+      updated_at: nowIso
+    };
+    const fullPayload = { ...basePayload, portfolios: dedupedPortfolios, active_portfolio_id: activeId };
+
+    let { error } = await _supabase
       .from('investiq_portfolios')
-      .upsert({
-        user_id: _supaUser.id,
-        portfolio: dedupedPortfolio,
-        settings: settingsToSave,
-        agent_results: state.agentResults,
-        updated_at: nowIso
-      }, { onConflict: 'user_id' });
+      .upsert(fullPayload, { onConflict: 'user_id' });
+    if (error && /portfolios|active_portfolio_id|column|schema/i.test(error.message || '')) {
+      console.warn('[saveToSupabase] multi-portfolio columns missing — run migration 016. Falling back to legacy save (active portfolio only).');
+      if (window.toast) toast.warning('Multi-portfolio cloud sync needs migration 016. Saved the active portfolio for now.');
+      ({ error } = await _supabase
+        .from('investiq_portfolios')
+        .upsert(basePayload, { onConflict: 'user_id' }));
+    }
     if (error) {
       console.warn('Supabase save:', error.message);
     } else {
@@ -187,10 +244,10 @@ async function saveToSupabase() {
       // 'is my data safely backed up?' definitively.
       try {
         localStorage.setItem('investiq_last_good_save', JSON.stringify({
-          at: nowIso, count: dedupedPortfolio.length
+          at: nowIso, count: totalCount
         }));
       } catch(e) {}
-      console.log(`✓ Saved to Supabase (${dedupedPortfolio.length} unique holdings, ${nowIso})`);
+      console.log(`✓ Saved to Supabase (${dedupedPortfolios.length} portfolios, ${totalCount} holdings, ${nowIso})`);
       updateSyncIndicator();
     }
   } catch(e) { console.warn('Supabase save error:', e); }

@@ -1539,6 +1539,15 @@
       </span>
     </a>
     <span id="navTagline" class="text-xs neutral px-2 py-1 rounded" style="background:var(--bg-panel-2);">Intelligent Investing Dashboard</span>
+    <!-- Portfolio switcher (multi-portfolio v0.21) -->
+    <div id="portfolioSwitcher" style="position:relative;">
+      <button id="portfolioSwitcherBtn" onclick="togglePortfolioMenu(event)" class="text-xs" title="Switch portfolio" style="display:flex;align-items:center;gap:7px;background:var(--bg-panel-2);border:1px solid var(--border);color:var(--text-primary);padding:5px 10px;border-radius:8px;cursor:pointer;font-weight:600;max-width:210px;">
+        <i class="fas fa-layer-group" style="font-size:11px;opacity:0.7;"></i>
+        <span id="portfolioSwitcherLabel" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Personal</span>
+        <i class="fas fa-chevron-down" style="font-size:9px;opacity:0.6;"></i>
+      </button>
+      <div id="portfolioSwitcherMenu" role="menu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:248px;max-width:300px;background:var(--bg-panel);border:1px solid var(--border-strong);border-radius:10px;box-shadow:0 10px 34px rgba(0,0,0,0.4);z-index:60;overflow:hidden;"></div>
+    </div>
   </div>
   <div class="flex items-center" style="gap:8px;">
     <span id="lastUpdated" class="text-xs neutral" style="white-space:nowrap;">Not yet updated</span>
@@ -5219,6 +5228,126 @@ function renderAll() {
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
+  try { renderPortfolioSwitcher(); } catch(e) {}
+}
+
+// ─── Portfolio switcher (multi-portfolio v0.21) ──────────────────────────
+// Header dropdown to switch / create / rename / delete portfolios. The
+// real data lives in state.portfolios[]; switching just flips
+// state.activePortfolioId and repaints. See 20-state.js for the model.
+
+function renderPortfolioSwitcher() {
+  const label = document.getElementById('portfolioSwitcherLabel');
+  const menu  = document.getElementById('portfolioSwitcherMenu');
+  if (!menu) return;
+  const ports = listPortfolios();
+  const active = getActivePortfolio();
+  if (label) label.textContent = active?.name || 'Personal';
+  const rows = ports.map(p => {
+    const isActive = p.id === active.id;
+    const count = (p.holdings || []).length;
+    return `<div role="menuitem" onclick="_switchPortfolioUI('${p.id}')" style="display:flex;align-items:center;gap:8px;width:100%;background:${isActive ? 'rgba(99,102,241,0.12)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;">
+      <i class="fas fa-check" style="font-size:10px;width:12px;color:var(--accent,#818cf8);visibility:${isActive ? 'visible' : 'hidden'};"></i>
+      <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(p.name)}</span>
+      <span class="neutral" style="font-size:11px;" title="${count} holding${count===1?'':'s'}">${count}</span>
+      <i class="fas fa-pen" onclick="event.stopPropagation();_renamePortfolioUI('${p.id}')" title="Rename" style="font-size:10px;color:var(--text-muted);padding:2px 4px;"></i>
+      ${ports.length > 1 ? `<i class="fas fa-trash" onclick="event.stopPropagation();_deletePortfolioUI('${p.id}')" title="Delete" style="font-size:10px;color:var(--color-red,#f87171);padding:2px 4px;"></i>` : ''}
+    </div>`;
+  }).join('');
+  menu.innerHTML = rows +
+    `<div style="border-top:1px solid var(--border);"></div>
+     <div role="menuitem" onclick="_newPortfolioUI()" style="display:flex;align-items:center;gap:8px;width:100%;color:var(--accent,#818cf8);padding:10px 12px;cursor:pointer;font-size:13px;font-weight:600;">
+       <i class="fas fa-plus" style="font-size:11px;width:12px;"></i>New portfolio
+     </div>`;
+}
+
+let _portfolioMenuOpen = false;
+function togglePortfolioMenu(event) {
+  if (event) event.stopPropagation();
+  const menu = document.getElementById('portfolioSwitcherMenu');
+  if (!menu) return;
+  _portfolioMenuOpen = !_portfolioMenuOpen;
+  if (_portfolioMenuOpen) { renderPortfolioSwitcher(); menu.style.display = 'block'; }
+  else menu.style.display = 'none';
+}
+function closePortfolioMenu() {
+  const menu = document.getElementById('portfolioSwitcherMenu');
+  if (menu) menu.style.display = 'none';
+  _portfolioMenuOpen = false;
+}
+// Close the menu on any outside click.
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('portfolioSwitcher');
+  if (_portfolioMenuOpen && wrap && !wrap.contains(e.target)) closePortfolioMenu();
+});
+
+// Repaint the whole app for the (possibly new) active portfolio.
+function _repaintForActivePortfolio() {
+  try { renderAll(); } catch(e) { console.warn('[switcher] renderAll', e); }
+  try { showSection(currentSection); } catch(e) { console.warn('[switcher] section', e); }
+  try { updateSyncIndicator(); } catch(e) {}
+}
+
+function _switchPortfolioUI(id) {
+  closePortfolioMenu();
+  if (setActivePortfolio(id)) {
+    const p = getActivePortfolio();
+    _repaintForActivePortfolio();
+    if (window.toast) toast.success(`Switched to "${p.name}"`);
+  }
+}
+
+async function _newPortfolioUI() {
+  closePortfolioMenu();
+  const res = await showFormModal({
+    title: 'New portfolio',
+    icon: 'fa-layer-group',
+    description: 'Create a separate portfolio (e.g. Retirement, Kids, Test). It starts empty — add or import holdings into it.',
+    fields: [{ name: 'name', label: 'Portfolio name', type: 'text', placeholder: 'Retirement', required: true }],
+    submitLabel: 'Create'
+  });
+  if (!res || !res.name || !res.name.trim()) return;
+  createPortfolio(res.name.trim());
+  _repaintForActivePortfolio();
+  if (window.toast) toast.success(`Created "${res.name.trim()}" — now active`);
+}
+
+async function _renamePortfolioUI(id) {
+  closePortfolioMenu();
+  const p = listPortfolios().find(x => x.id === id);
+  if (!p) return;
+  const res = await showFormModal({
+    title: 'Rename portfolio',
+    icon: 'fa-pen',
+    fields: [{ name: 'name', label: 'Portfolio name', type: 'text', value: p.name, required: true }],
+    submitLabel: 'Save'
+  });
+  if (!res || !res.name || !res.name.trim()) return;
+  renamePortfolio(id, res.name.trim());
+  _repaintForActivePortfolio();
+  if (window.toast) toast.success('Renamed');
+}
+
+async function _deletePortfolioUI(id) {
+  closePortfolioMenu();
+  const p = listPortfolios().find(x => x.id === id);
+  if (!p) return;
+  if (listPortfolios().length <= 1) {
+    if (window.toast) toast.warning("Can't delete your only portfolio.");
+    return;
+  }
+  const count = (p.holdings || []).length;
+  const ok = await showConfirm({
+    title: `Delete "${p.name}"?`,
+    description: count > 0
+      ? `This portfolio has <b>${count} holding${count===1?'':'s'}</b>. Deleting removes them from this app (your other portfolios are untouched). Restore from a backup if you need them back.`
+      : `This empty portfolio will be removed.`,
+    danger: true
+  });
+  if (!ok) return;
+  deletePortfolio(id);
+  _repaintForActivePortfolio();
+  if (window.toast) toast.success(`Deleted "${p.name}"`);
 }
 
 // Personalised greeting on Overview — time-aware + portfolio headline.
@@ -6863,10 +6992,14 @@ Total under 220 words. Be specific. No generic advice. No disclaimers.`;
 // ===== BACKUP / RESTORE (cross-browser data portability) =====
 function exportBackup() {
   const backup = {
-    version: 2,
+    version: 3, // v3 = multi-portfolio envelope
     exportedAt: new Date().toISOString(),
     portfolioName: state.settings.name,
     settings: { ...state.settings, claudeApiKey: '', supabaseKey: '' }, // never export secrets
+    // v3: full envelope (all portfolios). `portfolio` kept = active holdings
+    // so an older (v2) build can still import this file.
+    portfolios: listPortfolios(),
+    activePortfolioId: state.activePortfolioId,
     portfolio: state.portfolio,
     agentResults: state.agentResults
   };
@@ -6890,19 +7023,31 @@ async function importBackup(event) {
       title: 'Restore backup?',
       icon: 'fa-upload',
       iconColor: '#fbbf24',
-      description: `<b>Backup date:</b> ${backup.exportedAt?.split('T')[0] || 'unknown'}<br>This will <b>replace</b> your current <b>${state.portfolio.length}</b> holdings with <b>${backup.portfolio.length}</b> from the backup. Your Claude API key + Supabase credentials stay on this device.`,
+      description: `<b>Backup date:</b> ${backup.exportedAt?.split('T')[0] || 'unknown'}<br>This will <b>replace</b> your current portfolios with the backup's contents. Your Claude API key + Supabase credentials stay on this device.`,
       confirmLabel: 'Restore now',
       confirmVariant: 'danger',
       danger: true
     });
     if (!ok) return;
     const apiKey = state.settings.claudeApiKey;
-    state.portfolio = backup.portfolio || [];
+    // v3 backup = full envelope; v2 backup = single `portfolio` array.
+    if (Array.isArray(backup.portfolios) && backup.portfolios.length) {
+      state.portfolios = backup.portfolios.map(p => ({
+        id: p.id || uuid(),
+        name: (p.name || 'Portfolio').trim() || 'Portfolio',
+        holdings: consolidatePortfolio(p.holdings || [])
+      }));
+      state.activePortfolioId = state.portfolios.some(p => p.id === backup.activePortfolioId)
+        ? backup.activePortfolioId : state.portfolios[0].id;
+    } else {
+      state.portfolios = [{ id: 'default', name: 'Personal', holdings: consolidatePortfolio(backup.portfolio || []) }];
+      state.activePortfolioId = 'default';
+    }
     state.settings = { ...state.settings, ...(backup.settings||{}), claudeApiKey: apiKey };
     state.agentResults = backup.agentResults || null;
     saveState();
     renderAll();
-    toast.success(`Restored ${state.portfolio.length} holdings from backup.`);
+    toast.success(`Restored ${totalHoldingsCount()} holdings across ${state.portfolios.length} portfolio(s).`);
     refreshMarketData().then(() => refreshPortfolioPrices()).then(() => renderAll());
   } catch(e) {
     toast.error('Failed to read backup: ' + e.message);
@@ -8996,11 +9141,15 @@ async function clearAllData() {
   if (!ok) return;
 
   const errors = [];
-  state.portfolio = [];
+  // Reset the WHOLE multi-portfolio envelope — "delete everything" means all
+  // portfolios, not just the active one.
+  state.portfolios = [{ id: 'default', name: 'Personal', holdings: [] }];
+  state.activePortfolioId = 'default';
   state.agentResults = null;
 
   try {
     localStorage.setItem('investiq_v2', JSON.stringify({
+      portfolios: state.portfolios, activePortfolioId: 'default',
       portfolio: [], settings: state.settings, agentResults: null
     }));
   } catch(e) { errors.push('localStorage: ' + e.message); }

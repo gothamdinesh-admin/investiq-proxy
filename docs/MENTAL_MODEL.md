@@ -138,11 +138,25 @@ Sign in  ─▶  40-auth.js  ─▶  loadFromSupabase()
 
 ---
 
+## 4b. Multi-portfolio model (v0.21)
+
+A user can have several named portfolios (Personal / Retirement / Test). The trick that kept this from touching 111 files:
+
+```
+state.portfolios = [{ id, name, holdings:[...] }]   ← real data
+state.activePortfolioId = '<id>'                     ← which is active
+state.portfolio   ← ACCESSOR (getter/setter) → active portfolio's holdings
+```
+
+Every existing `state.portfolio` reference transparently reads/writes the **active** portfolio. Switching is a pure-state flip + repaint (`renderAll()` + re-open current section) — no network. The header switcher (`renderPortfolioSwitcher`) does switch / create / rename / delete. Cloud stores the whole envelope in `investiq_portfolios.portfolios` (migration 016), and keeps the legacy `portfolio` column = active holdings so the 4 Edge Functions + snapshots keep working. **v0.21a limitation:** daily snapshots reflect whichever portfolio was active at snapshot time (per-portfolio history lands in v0.21b).
+
+---
+
 ## 5. Where state actually lives
 
 | Layer | Key | Lifetime |
 |---|---|---|
-| In-memory | `state` object (in `20-state.js`) | While tab is open |
+| In-memory | `state` object (in `20-state.js`) — now `portfolios[]` + active accessor | While tab is open |
 | Local | `localStorage.investiq_v2` | Until cache cleared |
 | Local backup | `localStorage.investiq_autobackup` | Last 3 non-empty (survives sign-out) |
 | Cloud live | `investiq_portfolios` table | Forever, source of truth |

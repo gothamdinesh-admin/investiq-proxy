@@ -21,6 +21,12 @@ This is the single source of truth for what's next. Priority order is intentiona
 
 ---
 
+## 🆕 v0.21a ACTIVATION
+
+- [ ] **Run migration 016** — paste `supabase/migrations/016_multi_portfolio.sql` into the Supabase SQL Editor. Adds `portfolios` + `active_portfolio_id` columns (additive, idempotent) and backfills existing data into a "Personal" portfolio. Until this runs, multi-portfolio works locally but the app falls back to legacy active-only cloud sync (with a toast prompting you to run 016).
+
+---
+
 ## 🆕 v0.20 PENDING VERIFICATIONS (do before new feature work)
 
 - [ ] **Confirm 2FA factor cleanup** — run the documented SQL if `auth.mfa_factors` still has a row for the user account.
@@ -88,7 +94,7 @@ This is the single source of truth for what's next. Priority order is intentiona
 
 ## ⚡ P2 — Polish & data quality
 
-- [ ] **Multi-portfolio support** — "Personal / Retirement / Test" switcher. Mandatory for SaaS, blocker for several other features. Est: half day.
+- [~] **Multi-portfolio support** — _v0.21a SHIPPED (data model + switcher + create/rename/delete)._ "Personal / Retirement / Test" switcher in the header. Real data lives in `state.portfolios[]`; `state.portfolio` is now an accessor mirroring the active one (zero section-code churn). Cloud envelope + migration 016. **Activation: run `supabase/migrations/016_multi_portfolio.sql`.** Remaining: v0.21b (CSV import target picker, per-portfolio snapshots, family aggregate sums member portfolios) + v0.21c ("All portfolios" combined view + per-portfolio performance compare).
 - [ ] **Transaction history / audit log** — every add/edit/delete logged with timestamp + user + old/new values. Needed for tax prep and debugging. Est: half day.
 - [ ] **Bulk edit holdings** — select multiple rows, apply same change (currency, sector, platform, delete). Est: 2 hours.
 - [ ] **Manual price override per holding** — lets user set price when Yahoo returns garbage (e.g. delisted or tiny-cap tickers). Est: 1 hour.
