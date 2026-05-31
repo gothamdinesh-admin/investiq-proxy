@@ -4645,14 +4645,15 @@ async function recordDailySnapshot(opts = {}) {
   // opts.force    — if true, overwrite existing snapshot for that date
   // opts.source   — optional label stored in breakdown (e.g. 'csv-import')
   if (!_supabase || !_supaUser) return;
-  if (!state.portfolio.length) return;
+  if (totalHoldingsCount() === 0) return;
   // v0.14.2 — guard against $0 snapshots. If portfolio loaded but prices
   // haven't refreshed yet (e.g. proxy cold-start), totalValue can be 0.
   // That snapshot then poisons every Performance KPI (-100% all-time
   // return, contribution view empty, etc). Bail before writing.
-  const _peek = (typeof getMetrics === 'function') ? getMetrics() : null;
-  if (!_peek || !_peek.totalValue || _peek.totalValue <= 0) {
-    console.log('[snapshot] skipping — portfolio total is $0 (prices not loaded yet)');
+  // v0.21d — check the ACCOUNT-WIDE total (sum of all portfolios).
+  const _acctPeek = listPortfolios().reduce((s, p) => s + getMetrics(p.holdings).totalValue, 0);
+  if (!_acctPeek || _acctPeek <= 0) {
+    console.log('[snapshot] skipping — account total is $0 (prices not loaded yet)');
     return;
   }
 
@@ -4668,47 +4669,67 @@ async function recordDailySnapshot(opts = {}) {
       if (existing) { console.log(`[snapshot] ${date} already exists, skipping`); return; }
     }
 
-    const metrics = getMetrics();
+    // ── Per-portfolio + account-wide snapshot (v0.21d) ───────────────────
+    // Top-level total_* = ACCOUNT total (sum of every portfolio) so the
+    // dropdown, weekly digest, and DR tools see true net worth. Per-portfolio
+    // totals + portfolio-tagged holdings ride inside `breakdown` so
+    // Performance / Time Travel can scope to the active portfolio. NO schema
+    // change — everything extra lives in the existing breakdown JSONB.
     const byType = {};
     const byPlatform = {};
-    metrics.holdings.forEach(h => {
-      byType[h.type]         = (byType[h.type]         || 0) + h.currentValue;
-      byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
+    const holdingsPayload = [];
+    const portfolioTotals = [];
+    let acctValue = 0, acctCost = 0, acctGain = 0, acctHoldings = 0;
+    listPortfolios().forEach(pf => {
+      const m = getMetrics(pf.holdings);
+      acctValue += m.totalValue; acctCost += m.totalCost; acctGain += m.totalGain;
+      acctHoldings += m.holdings.length;
+      portfolioTotals.push({
+        id: pf.id, name: pf.name,
+        total_value: +m.totalValue.toFixed(2),
+        total_cost:  +m.totalCost.toFixed(2),
+        total_gain:  +m.totalGain.toFixed(2),
+        total_gain_pct: +m.totalGainPct.toFixed(4),
+        holdings_count: m.holdings.length
+      });
+      m.holdings.forEach(h => {
+        byType[h.type]         = (byType[h.type]         || 0) + h.currentValue;
+        byPlatform[h.platform] = (byPlatform[h.platform] || 0) + h.currentValue;
+        holdingsPayload.push({
+          portfolioId: pf.id, portfolioName: pf.name,
+          symbol: h.symbol,
+          name:   h.name || '',
+          type:   h.type || '',
+          platform: h.platform || '',
+          currency: h.currency || 'USD',
+          sector: h.sector || '',
+          country: h.country || '',
+          quantity: +h.quantity.toFixed(8),
+          avgBuyPrice: +h.avgBuyPrice.toFixed(6),   // in base currency
+          currentPrice: h.currentPrice != null ? +h.currentPrice.toFixed(6) : null,
+          currentValue: +h.currentValue.toFixed(2),
+          costBasis: +h.costBasis.toFixed(2),
+          gain: +h.gain.toFixed(2),
+          gainPct: +h.gainPct.toFixed(4),
+          weight: +h.weight.toFixed(4)
+        });
+      });
     });
-
-    // Store a compact per-holding payload so we can display the exact
-    // portfolio state as of that date later.
-    const holdingsPayload = metrics.holdings.map(h => ({
-      symbol: h.symbol,
-      name:   h.name || '',
-      type:   h.type || '',
-      platform: h.platform || '',
-      currency: h.currency || 'USD',
-      sector: h.sector || '',
-      country: h.country || '',
-      quantity: +h.quantity.toFixed(8),
-      avgBuyPrice: +h.avgBuyPrice.toFixed(6),   // in base currency
-      currentPrice: h.currentPrice != null ? +h.currentPrice.toFixed(6) : null,
-      currentValue: +h.currentValue.toFixed(2),
-      costBasis: +h.costBasis.toFixed(2),
-      gain: +h.gain.toFixed(2),
-      gainPct: +h.gainPct.toFixed(4),
-      weight: +h.weight.toFixed(4)
-    }));
+    const acctGainPct = acctCost > 0 ? (acctGain / acctCost) * 100 : 0;
 
     const { error } = await _supabase.from('investiq_snapshots').upsert({
       user_id:        _supaUser.id,
       snapshot_date:  date,
-      total_value:    Number(metrics.totalValue.toFixed(2)),
-      total_cost:     Number(metrics.totalCost.toFixed(2)),
-      total_gain:     Number(metrics.totalGain.toFixed(2)),
-      total_gain_pct: Number(metrics.totalGainPct.toFixed(4)),
-      holdings_count: metrics.holdings.length,
+      total_value:    Number(acctValue.toFixed(2)),
+      total_cost:     Number(acctCost.toFixed(2)),
+      total_gain:     Number(acctGain.toFixed(2)),
+      total_gain_pct: Number(acctGainPct.toFixed(4)),
+      holdings_count: acctHoldings,
       currency:       state.settings.currency || 'NZD',
-      breakdown:      { byType, byPlatform, source: opts.source || 'auto', holdings: holdingsPayload }
+      breakdown:      { byType, byPlatform, source: opts.source || 'auto', holdings: holdingsPayload, portfolios: portfolioTotals }
     }, { onConflict: 'user_id,snapshot_date' });
     if (error) { console.warn('[snapshot] error:', error.message); return; }
-    console.log(`✓ Snapshot recorded (${date}, source=${opts.source||'auto'}, ${metrics.holdings.length} holdings, $${metrics.totalValue.toFixed(2)})`);
+    console.log(`✓ Snapshot recorded (${date}, source=${opts.source||'auto'}, ${listPortfolios().length} portfolios, ${acctHoldings} holdings, $${acctValue.toFixed(2)})`);
   } catch(e) {
     console.warn('[snapshot] exception:', e.message);
   }
@@ -4722,7 +4743,7 @@ async function refreshSnapshotDropdown() {
   try {
     const { data } = await _supabase
       .from('investiq_snapshots')
-      .select('snapshot_date, total_value, holdings_count, currency')
+      .select('snapshot_date, total_value, holdings_count, currency, portfolios:breakdown->portfolios')
       .eq('user_id', _supaUser.id)
       .order('snapshot_date', { ascending: false });
     if (!data || !data.length) {
@@ -4730,8 +4751,28 @@ async function refreshSnapshotDropdown() {
       return;
     }
     const sym = (c) => CURRENCY_SYMBOLS[c || 'NZD'] || 'NZ$';
-    sel.innerHTML = '<option value="">— Select a snapshot date —</option>' +
-      data.map(s => `<option value="${s.snapshot_date}">${s.snapshot_date} · ${s.holdings_count} holdings · ${sym(s.currency)}${Number(s.total_value).toLocaleString()}</option>`).join('');
+    // Scope labels to the active portfolio (v0.21d): show that portfolio's
+    // value/count, and drop dates where it had no data.
+    const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+    const activeId = state.activePortfolioId;
+    const opts = [];
+    data.forEach(s => {
+      let val = +s.total_value, cnt = s.holdings_count;
+      if (!viewingAll) {
+        const pfs = Array.isArray(s.portfolios) ? s.portfolios : null;
+        if (pfs) {
+          const e = pfs.find(p => p.id === activeId);
+          if (!e) return;            // portfolio didn't exist that date — skip
+          val = +e.total_value; cnt = e.holdings_count;
+        } else if (activeId !== 'default') {
+          return;                    // legacy snapshot, non-original portfolio — skip
+        }
+      }
+      opts.push(`<option value="${s.snapshot_date}">${s.snapshot_date} · ${cnt} holdings · ${sym(s.currency)}${Number(val).toLocaleString()}</option>`);
+    });
+    sel.innerHTML = opts.length
+      ? '<option value="">— Select a snapshot date —</option>' + opts.join('')
+      : '<option value="">— No snapshots for this portfolio yet —</option>';
   } catch(e) {
     console.warn('[snapshot-dropdown] error:', e.message);
     sel.innerHTML = '<option value="">— Error loading snapshots —</option>';
@@ -4762,11 +4803,29 @@ async function viewSnapshotByDate() {
     }
     const cur = data.currency || 'NZD';
     const sym = CURRENCY_SYMBOLS[cur] || 'NZ$';
-    const holdings = (data.breakdown && data.breakdown.holdings) || [];
+    const allHoldings = (data.breakdown && data.breakdown.holdings) || [];
+
+    // ── Scope to the active portfolio (v0.21d) ───────────────────────────
+    const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+    const activeId = state.activePortfolioId;
+    const pfs = (data.breakdown && Array.isArray(data.breakdown.portfolios)) ? data.breakdown.portfolios : null;
+    let hdr = { total_value:+data.total_value, total_cost:+data.total_cost, total_gain:+data.total_gain, total_gain_pct:+data.total_gain_pct };
+    let holdings = allHoldings;
+    let scopeName = '';
+    if (!viewingAll && pfs) {
+      const e = pfs.find(p => p.id === activeId);
+      if (e) { hdr = { total_value:+e.total_value, total_cost:+e.total_cost, total_gain:+e.total_gain, total_gain_pct:+e.total_gain_pct }; scopeName = e.name; }
+      holdings = allHoldings.filter(h => h.portfolioId === activeId);
+    } else if (!viewingAll && !pfs && activeId !== 'default') {
+      // legacy snapshot (pre-multi-portfolio) — no data for a non-original portfolio
+      holdings = [];
+    } else if (viewingAll) {
+      scopeName = 'All portfolios';
+    }
 
     // Summary header
-    const gainClass = data.total_gain >= 0 ? 'pos' : 'neg';
-    const gainSign  = data.total_gain >= 0 ? '+' : '';
+    const gainClass = hdr.total_gain >= 0 ? 'pos' : 'neg';
+    const gainSign  = hdr.total_gain >= 0 ? '+' : '';
     const summary = `
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <div class="card2 p-3" style="border-left:3px solid var(--color-teal);">
@@ -4774,26 +4833,25 @@ async function viewSnapshotByDate() {
           <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${date}</div>
         </div>
         <div class="card2 p-3" style="border-left:3px solid var(--accent);">
-          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Portfolio Value</div>
-          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(data.total_value).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">${scopeName ? _escape(scopeName) + ' Value' : 'Portfolio Value'}</div>
+          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(hdr.total_value).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
         </div>
         <div class="card2 p-3" style="border-left:3px solid var(--color-amber);">
           <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Cost Basis</div>
-          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(data.total_cost).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-lg font-bold mono mt-1" style="line-height:1.1;">${sym}${Number(hdr.total_cost).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
         </div>
-        <div class="card2 p-3" style="border-left:3px solid ${data.total_gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">
+        <div class="card2 p-3" style="border-left:3px solid ${hdr.total_gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">
           <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:0.4px;">Gain / Loss</div>
-          <div class="text-lg font-bold mono mt-1 ${gainClass}" style="line-height:1.1;">${gainSign}${sym}${Number(Math.abs(data.total_gain)).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
-          <div class="text-xs ${gainClass} mt-1">${gainSign}${Number(data.total_gain_pct).toFixed(2)}%</div>
+          <div class="text-lg font-bold mono mt-1 ${gainClass}" style="line-height:1.1;">${gainSign}${sym}${Number(Math.abs(hdr.total_gain)).toLocaleString('en-NZ',{maximumFractionDigits:2})}</div>
+          <div class="text-xs ${gainClass} mt-1">${gainSign}${Number(hdr.total_gain_pct).toFixed(2)}%</div>
         </div>
       </div>`;
 
     if (!holdings.length) {
-      view.innerHTML = summary + `
-        <div class="text-center py-6 neutral text-sm">
-          This snapshot was saved before per-holding detail was supported.<br>
-          Only totals are available for this date — future snapshots will include full holdings breakdown.
-        </div>`;
+      const emptyMsg = (!viewingAll && scopeName)
+        ? `No holdings in <b>${_escape(scopeName)}</b> as of ${date}.<br>This portfolio may not have existed yet, or had no positions then.`
+        : `This snapshot was saved before per-holding detail was supported.<br>Only totals are available for this date — future snapshots will include full holdings breakdown.`;
+      view.innerHTML = summary + `<div class="text-center py-6 neutral text-sm">${emptyMsg}</div>`;
       return;
     }
 
@@ -4805,7 +4863,7 @@ async function viewSnapshotByDate() {
       return `
         <div class="table-row snapshot-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 100px;cursor:default;">
           <div style="min-width:0;overflow:hidden;">
-            <div class="font-semibold text-sm">${h.symbol}</div>
+            <div class="font-semibold text-sm">${h.symbol}${(viewingAll && h.portfolioName) ? ` <span class="neutral" style="font-weight:400;font-size:10px;">· ${_escape(h.portfolioName)}</span>` : ''}</div>
             <div class="text-xs neutral" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.name || h.platform} · ${h.type}</div>
           </div>
           <div class="text-right mono text-sm" data-label="Units">${Number(h.quantity).toFixed(4)}</div>
@@ -4840,17 +4898,55 @@ async function viewSnapshotByDate() {
   }
 }
 
+// Resolve a snapshot row's totals to the CURRENT view (active portfolio or
+// combined). New snapshots carry breakdown.portfolios; legacy ones don't.
+//   • combined view → account/legacy total (row totals).
+//   • specific portfolio + per-portfolio data present → that portfolio's totals
+//     (snapshots where the portfolio didn't exist are dropped).
+//   • specific portfolio + LEGACY snapshot (no per-portfolio data) → attribute
+//     to the original 'default' portfolio only; other portfolios skip it.
+// `portfoliosArr` is breakdown.portfolios (from the jsonb projection or full row).
+function _scopeSnapshotRows(rows) {
+  const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+  const activeId = state.activePortfolioId;
+  const out = [];
+  (rows || []).forEach(r => {
+    const rowTotals = {
+      snapshot_date: r.snapshot_date,
+      total_value: +r.total_value, total_cost: +r.total_cost,
+      total_gain: +r.total_gain, total_gain_pct: +r.total_gain_pct
+    };
+    if (viewingAll) { out.push(rowTotals); return; }
+    const pfs = Array.isArray(r.portfolios) ? r.portfolios
+              : (r.breakdown && Array.isArray(r.breakdown.portfolios)) ? r.breakdown.portfolios : null;
+    if (pfs) {
+      const e = pfs.find(p => p.id === activeId);
+      if (e) out.push({
+        snapshot_date: r.snapshot_date,
+        total_value: +e.total_value, total_cost: +e.total_cost,
+        total_gain: +e.total_gain, total_gain_pct: +e.total_gain_pct
+      });
+      return; // per-portfolio data present but portfolio absent then → skip
+    }
+    // legacy snapshot (no per-portfolio data) → only the original portfolio
+    if (activeId === 'default') out.push(rowTotals);
+  });
+  return out;
+}
+
 async function loadSnapshotHistory(days = 90) {
   if (!_supabase || !_supaUser) return [];
   const since = new Date(Date.now() - days*24*60*60*1000).toISOString().slice(0,10);
   try {
+    // breakdown->portfolios is a tiny array (one entry per portfolio) — keeps
+    // the payload small even over a 10-year KPI query, unlike the full breakdown.
     const { data } = await _supabase
       .from('investiq_snapshots')
-      .select('snapshot_date, total_value, total_cost, total_gain, total_gain_pct')
+      .select('snapshot_date, total_value, total_cost, total_gain, total_gain_pct, portfolios:breakdown->portfolios')
       .eq('user_id', _supaUser.id)
       .gte('snapshot_date', since)
       .order('snapshot_date', { ascending: true });
-    return data || [];
+    return _scopeSnapshotRows(data || []);
   } catch(e) { console.warn('Snapshot history error:', e.message); return []; }
 }
 
@@ -12218,6 +12314,7 @@ async function adminRestoreFromSnapshot() {
       const effFx = (getFxRate(cur, base) || 1) * penceAdj;
       const nativePrice = effFx ? (Number(sh.avgBuyPrice) / effFx) : Number(sh.avgBuyPrice);
       return {
+        _pid: sh.portfolioId || null, _pname: sh.portfolioName || null,
         id: (typeof uuid === 'function') ? uuid() : ('r_' + Math.random().toString(36).slice(2)),
         symbol: sh.symbol, name: sh.name || sh.symbol, type: sh.type || 'stock',
         platform: sh.platform || '', currency: cur,
@@ -12226,10 +12323,28 @@ async function adminRestoreFromSnapshot() {
         lots: [{ quantity: Number(sh.quantity) || 0, price: nativePrice, date: good.snapshot_date, note: 'restored from snapshot' }]
       };
     });
-    state.portfolio = rebuilt;
+    // v0.21d — if the snapshot holdings are portfolio-tagged, rebuild the FULL
+    // multi-portfolio structure (not a single merged blob). Legacy snapshots
+    // (untagged) restore into one portfolio as before.
+    const tagged = rebuilt.some(h => h._pid);
+    if (tagged) {
+      const groups = new Map();
+      rebuilt.forEach(h => {
+        const pid = h._pid || 'default';
+        if (!groups.has(pid)) groups.set(pid, { id: pid, name: h._pname || 'Portfolio', holdings: [] });
+        const { _pid, _pname, ...clean } = h;
+        groups.get(pid).holdings.push(clean);
+      });
+      state.portfolios = [...groups.values()];
+      state.activePortfolioId = state.portfolios[0].id;
+      state._viewAllPortfolios = false;
+      _adminLog(`Rebuilt ${rebuilt.length} holdings across ${state.portfolios.length} portfolio(s) locally. Writing to cloud…`);
+    } else {
+      state.portfolio = rebuilt.map(({ _pid, _pname, ...h }) => h);
+      _adminLog(`Rebuilt ${rebuilt.length} holdings locally. Writing to cloud…`);
+    }
     state.agentResults = state.agentResults || null;
     saveState();
-    _adminLog(`Rebuilt ${rebuilt.length} holdings locally. Writing to cloud…`);
     await saveToSupabase();      // non-empty → guard allows the write
     renderAll();
     _adminLog('✓ Saved to cloud. Refreshing live prices…');

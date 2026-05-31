@@ -226,9 +226,14 @@ function isPenceQuoted(symbol) {
   return upper.endsWith('.L') || upper.endsWith('.IL');
 }
 
-function getMetrics() {
+// getMetrics(holdingsOverride?) — compute portfolio metrics. Without an
+// override it uses state.portfolio (the active/combined view). Pass a specific
+// portfolio's holdings array to compute that portfolio's totals in isolation
+// (used by per-portfolio snapshots).
+function getMetrics(holdingsOverride) {
   const base = state.settings.currency || 'NZD';
-  const holdings = state.portfolio.map(h => {
+  const source = Array.isArray(holdingsOverride) ? holdingsOverride : state.portfolio;
+  const holdings = source.map(h => {
     const basis = getHoldingBasis(h);
     // LSE stocks quoted in pence — divide by 100 to get pounds before FX
     const penceAdj = isPenceQuoted(h.symbol) ? 0.01 : 1;
