@@ -42,15 +42,26 @@ async function loadFromSupabase() {
     if (!data) return false;
 
     // ─── Resolve the cloud ENVELOPE (multi-portfolio aware) ───────────────
-    // New shape: data.portfolios[]. Legacy shape: data.portfolio (single
-    // array) → wrap into "Personal". The legacy `portfolio` column is also
-    // kept populated with the active holdings for Edge-Function compat.
-    const cloudPortfolios = (Array.isArray(data.portfolios) && data.portfolios.length)
-      ? data.portfolios
-      : [{ id: 'default', name: 'Personal', holdings: data.portfolio || [] }];
-    const cloudActiveId = (data.active_portfolio_id
-      && cloudPortfolios.some(p => p.id === data.active_portfolio_id))
-      ? data.active_portfolio_id : cloudPortfolios[0].id;
+    // Priority order:
+    //   1. settings._portfolios — the ALWAYS-AVAILABLE transport. The settings
+    //      column always exists and is never blocked by a stale PostgREST
+    //      schema cache, unlike the dedicated `portfolios` column from
+    //      migration 016. This is what makes the envelope survive even when
+    //      the column write is rejected. (Fix for the v0.21 vanished-rename bug.)
+    //   2. data.portfolios column (migration 016, once the cache is fresh).
+    //   3. legacy single `portfolio` array → wrap into "Personal".
+    const stashPortfolios = (data.settings && Array.isArray(data.settings._portfolios) && data.settings._portfolios.length)
+      ? data.settings._portfolios : null;
+    const stashActiveId = data.settings ? data.settings._activePortfolioId : null;
+    const cloudPortfolios = stashPortfolios
+      ? stashPortfolios
+      : (Array.isArray(data.portfolios) && data.portfolios.length)
+        ? data.portfolios
+        : [{ id: 'default', name: 'Personal', holdings: data.portfolio || [] }];
+    const cloudActiveId = (() => {
+      const wanted = data.active_portfolio_id || stashActiveId;
+      return (wanted && cloudPortfolios.some(p => p.id === wanted)) ? wanted : cloudPortfolios[0].id;
+    })();
 
     // DIAGNOSTIC: scan the ACTIVE/legacy holdings to spot duplication at source
     const cloudPortfolio = (cloudPortfolios.find(p => p.id === cloudActiveId) || cloudPortfolios[0]).holdings || [];
@@ -103,12 +114,29 @@ async function loadFromSupabase() {
       saveToSupabase();
       return false;
     }
+    // ── STRUCTURE GUARD ───────────────────────────────────────────────────
+    // Never collapse a MULTI-portfolio local into a SINGLE-portfolio cloud.
+    // If cloud only carries one portfolio (e.g. the dedicated column write was
+    // rejected by a stale schema cache and only the legacy single-portfolio
+    // fallback landed) but we have several locally, keep local and re-push.
+    // Mirrors the empty-save guard — protects STRUCTURE, not just holdings
+    // count. This is the fix for the v0.21 "renamed / extra portfolio vanished
+    // after reload" data loss.
+    if (listPortfolios().length > 1 && cloudPortfolios.length <= 1) {
+      console.warn(`[supabase-load] STRUCTURE GUARD — local has ${listPortfolios().length} portfolios but cloud only ${cloudPortfolios.length}. Keeping local + re-pushing (cloud is missing the envelope).`);
+      saveToSupabase();
+      return false;
+    }
 
     // Snapshot LOCAL credentials first, then merge remote, then restore locals on top
     const localOnly = {};
     LOCAL_ONLY_SETTINGS.forEach(k => { if (state.settings[k]) localOnly[k] = state.settings[k]; });
 
-    const remoteSettings = data.settings || {};
+    // Strip the envelope-stash keys so they never pollute state.settings —
+    // the portfolios live in state.portfolios, not state.settings.
+    const remoteSettings = { ...(data.settings || {}) };
+    delete remoteSettings._portfolios;
+    delete remoteSettings._activePortfolioId;
     state.settings = { ...state.settings, ...remoteSettings, ...localOnly };
     if (remoteUpdatedAt) state.settings.updatedAt = remoteUpdatedAt;
 
@@ -157,8 +185,12 @@ async function saveToSupabase() {
           .select('*')
           .eq('user_id', _supaUser.id)
           .maybeSingle();
-        const cloudCount = (Array.isArray(existing?.portfolios) && existing.portfolios.length)
-          ? existing.portfolios.reduce((s, p) => s + (p.holdings?.length || 0), 0)
+        const _cloudEnvelope = (Array.isArray(existing?.settings?._portfolios) && existing.settings._portfolios.length)
+          ? existing.settings._portfolios
+          : (Array.isArray(existing?.portfolios) && existing.portfolios.length)
+            ? existing.portfolios : null;
+        const cloudCount = _cloudEnvelope
+          ? _cloudEnvelope.reduce((s, p) => s + (p.holdings?.length || 0), 0)
           : (existing?.portfolio || []).length;
         if (cloudCount > 0) {
           console.error(`[saveToSupabase] BLOCKED: local portfolio is empty but cloud has ${cloudCount} holdings. Refusing to overwrite — this is almost certainly a failed load, not an intentional wipe. Use Admin → Force Reload from Cloud to recover.`);
@@ -210,6 +242,13 @@ async function saveToSupabase() {
     const activeHoldings = (dedupedPortfolios.find(p => p.id === activeId) || dedupedPortfolios[0]).holdings;
     const totalCount = dedupedPortfolios.reduce((s, p) => s + p.holdings.length, 0);
 
+    // STASH the envelope inside settings — the settings column ALWAYS exists
+    // and is never blocked by a stale schema cache. This means even the
+    // legacy-fallback save (below) carries the full multi-portfolio structure,
+    // so a failed `portfolios`-column write can no longer drop the envelope.
+    settingsToSave._portfolios = dedupedPortfolios;
+    settingsToSave._activePortfolioId = activeId;
+
     const nowIso = new Date().toISOString();
     // Full payload includes the multi-portfolio columns (migration 016). The
     // legacy `portfolio` column is kept = active holdings for Edge-Function
@@ -228,8 +267,11 @@ async function saveToSupabase() {
       .from('investiq_portfolios')
       .upsert(fullPayload, { onConflict: 'user_id' });
     if (error && /portfolios|active_portfolio_id|column|schema/i.test(error.message || '')) {
-      console.warn('[saveToSupabase] multi-portfolio columns missing — run migration 016. Falling back to legacy save (active portfolio only).');
-      if (window.toast) toast.warning('Multi-portfolio cloud sync needs migration 016. Saved the active portfolio for now.');
+      // The dedicated columns aren't writable yet (migration not run, or
+      // PostgREST schema cache still stale after running it). NOT data loss:
+      // the full envelope is still saved via settings._portfolios (basePayload
+      // includes settingsToSave with the stash). Retry without the columns.
+      console.warn('[saveToSupabase] `portfolios` column not writable (schema cache?) — envelope preserved in settings stash; retrying legacy-shape save.');
       ({ error } = await _supabase
         .from('investiq_portfolios')
         .upsert(basePayload, { onConflict: 'user_id' }));

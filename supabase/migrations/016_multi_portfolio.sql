@@ -35,6 +35,16 @@ SET
   active_portfolio_id = 'default'
 WHERE portfolios IS NULL;
 
+-- ── CRITICAL: reload the PostgREST schema cache ─────────────────────────
+-- After ADD COLUMN, Supabase's API layer (PostgREST) keeps a CACHED view of
+-- the table schema. Until it reloads, writes to the new `portfolios` /
+-- `active_portfolio_id` columns are REJECTED with
+--   "Could not find the 'portfolios' column ... in the schema cache" (PGRST204)
+-- which silently degrades multi-portfolio cloud sync. This NOTIFY forces an
+-- immediate reload. (The app also has a settings-based fallback so the
+-- envelope round-trips regardless, but run this so the columns work directly.)
+NOTIFY pgrst, 'reload schema';
+
 -- Sanity check (run manually after): every row should now have a portfolios array.
 -- SELECT user_id, jsonb_array_length(portfolios) AS n_portfolios, active_portfolio_id
 -- FROM public.investiq_portfolios;

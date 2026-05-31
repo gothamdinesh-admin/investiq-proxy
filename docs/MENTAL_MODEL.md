@@ -148,7 +148,7 @@ state.activePortfolioId = '<id>'                     ← which is active
 state.portfolio   ← ACCESSOR (getter/setter) → active portfolio's holdings
 ```
 
-Every existing `state.portfolio` reference transparently reads/writes the **active** portfolio. Switching is a pure-state flip + repaint (`renderAll()` + re-open current section) — no network. The header switcher (`renderPortfolioSwitcher`) does switch / create / rename / delete. Cloud stores the whole envelope in `investiq_portfolios.portfolios` (migration 016), and keeps the legacy `portfolio` column = active holdings so the 4 Edge Functions + snapshots keep working.
+Every existing `state.portfolio` reference transparently reads/writes the **active** portfolio. Switching is a pure-state flip + repaint (`renderAll()` + re-open current section) — no network. The header switcher (`renderPortfolioSwitcher`) does switch / create / rename / delete. Cloud stores the whole envelope **two ways for resilience**: the dedicated `investiq_portfolios.portfolios` column (migration 016) **and** a `settings._portfolios` stash (always writable, immune to a stale PostgREST schema cache — this is what makes the envelope survive). The legacy `portfolio` column is kept = active holdings so the 4 Edge Functions + snapshots keep working. On load, a **structure guard** refuses to collapse a multi-portfolio local into a single-portfolio cloud (v0.21.1 fix).
 
 **Two deliberate exceptions to "active-portfolio scoping" (v0.21b):**
 - **FIF tax computes across ALL portfolios**, not the active one — the NZ$50k de-minimis is a *per-person* threshold, so summing every portfolio's overseas cost basis is the only correct behaviour. Rows are tagged by portfolio.
