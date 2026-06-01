@@ -8101,6 +8101,13 @@ async function loadFamilyAggregateView() {
       const gainPct    = totalCost > 0 ? (gain / totalCost) * 100 : 0;
       const holdings   = (snap?.breakdown?.holdings || []);
       const topHolding = [...holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0))[0];
+      // Per-portfolio split (v0.21e) — member's snapshot now carries an
+      // account-wide total + a breakdown.portfolios array (one entry per
+      // portfolio). Surface it so the household view shows not just per-member
+      // but per-portfolio-per-member.
+      const memberPortfolios = (snap?.breakdown?.portfolios || [])
+        .filter(p => (p.total_value || 0) > 0)
+        .sort((a,b) => (b.total_value||0) - (a.total_value||0));
       return {
         userId: m.user_id,
         role:   m.role,
@@ -8112,6 +8119,7 @@ async function loadFamilyAggregateView() {
         totalValue, totalCost, gain, gainPct,
         holdingsCount: holdings.length,
         topHolding,
+        portfolios: memberPortfolios,
         hasData: !!snap
       };
     });
@@ -8135,7 +8143,7 @@ async function loadFamilyAggregateView() {
         <div class="metric-card">
           <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Household value</div>
           <div class="text-2xl font-bold mt-1" style="color:#22d3ee;">${sym}${fmt(householdValue)}</div>
-          <div class="text-xs neutral mt-1">Across ${visibleWithData.length} member${visibleWithData.length === 1 ? '' : 's'}</div>
+          <div class="text-xs neutral mt-1">Across ${visibleWithData.length} member${visibleWithData.length === 1 ? '' : 's'} · all portfolios</div>
         </div>
         <div class="metric-card">
           <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Household return</div>
@@ -8205,12 +8213,19 @@ async function loadFamilyAggregateView() {
                     <div class="text-xs ${m.gain >= 0 ? 'pos' : 'neg'} mt-0.5">${m.gain >= 0 ? '+' : ''}${sym}${fmt(Math.abs(m.gain))}</div>
                   </div>
                 </div>
+                ${m.portfolios && m.portfolios.length > 1 ? `
+                  <div class="mt-3 pt-2" style="border-top:1px solid rgba(30,45,74,0.5);">
+                    <div class="text-xs neutral" style="font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">Portfolios (${m.portfolios.length})</div>
+                    <div class="flex flex-wrap gap-1.5 mt-1">
+                      ${m.portfolios.map(p => `<span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:var(--bg-panel-2);border:1px solid var(--border);color:var(--text-secondary);" title="${_escape(p.name)}">${_escape(p.name)} · ${sym}${fmt(p.total_value)}</span>`).join('')}
+                    </div>
+                  </div>` : ''}
                 ${m.topHolding ? `
                   <div class="mt-3 pt-2" style="border-top:1px solid rgba(30,45,74,0.5);">
                     <div class="text-xs neutral" style="font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">Top holding</div>
                     <div class="text-sm mt-0.5" style="color:#c8d6ef;">${_escape(m.topHolding.symbol)} <span class="text-xs neutral">· ${sym}${fmt(m.topHolding.currentValue)}</span></div>
                   </div>` : ''}
-                <div class="text-xs neutral mt-2" style="font-size:10px;">${m.holdingsCount} holding${m.holdingsCount === 1 ? '' : 's'} · last snapshot ${m.snapDate || '–'}</div>
+                <div class="text-xs neutral mt-2" style="font-size:10px;">${m.holdingsCount} holding${m.holdingsCount === 1 ? '' : 's'}${m.portfolios && m.portfolios.length > 1 ? ` · ${m.portfolios.length} portfolios` : ''} · last snapshot ${m.snapDate || '–'}</div>
               ` : `
                 <div class="text-xs neutral mt-2" style="font-style:italic;">${m.isSelf ? 'No snapshot recorded yet — refresh prices to generate one.' : 'No data visible (privacy / no snapshots yet)'}</div>
               `}

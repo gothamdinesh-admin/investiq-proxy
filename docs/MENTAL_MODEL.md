@@ -156,6 +156,8 @@ Every existing `state.portfolio` reference transparently reads/writes the **acti
 
 **"All portfolios (combined)" view (v0.21c):** a transient switcher mode (`state._viewAllPortfolios`, never persisted) where the `state.portfolio` getter returns a merged read-only view across all portfolios and the **setter is a no-op** — so the combined net-worth view physically cannot mutate the underlying portfolios. Edit entry points (saveHolding / deleteHolding / editHolding / populateAddForm / importCSV) are guarded with `_blockIfCombinedView()`. CSV import asks which portfolio to import into when >1 exists.
 
+**Family aggregate (v0.21e):** the household value already sums each member's account-wide snapshot total (so it spans all their portfolios). Each member card also shows a per-portfolio split (chips from `breakdown.portfolios`). FIF stays per-person.
+
 **Per-portfolio snapshots (v0.21d):** each daily snapshot stores the **account-wide** total at the top level (`total_*`) — so Edge Functions, the weekly digest, and the Time Travel dropdown see true net worth — plus a per-portfolio breakdown and portfolio-tagged holdings inside the existing `breakdown` JSONB. **No schema change** (the key stays `(user_id, snapshot_date)`, Edge Functions untouched). Performance chart, KPI strip, and Time Travel scope to the active portfolio via `loadSnapshotHistory` → `_scopeSnapshotRows`; combined view shows the account total; legacy snapshots attribute only to the original `default` portfolio. Snapshot-restore rebuilds the full multi-portfolio structure from the tagged holdings.
 
 ---
