@@ -2,7 +2,7 @@
 
 _Strategic + product narrative. Source material for slides, leave-behinds, and conversations. Not a deck itself — written so individual sections can be lifted into whatever format the audience needs._
 
-Last updated: 2026-05-16
+Last updated: 2026-06-01
 
 ---
 
@@ -15,12 +15,13 @@ Every existing tool treats NZ as an afterthought — Sharesight is Sydney-based 
 It already does what's hard:
 
 - Consolidates eToro, Sharesies, Harbour Asset Management, Indus, ANZ NZ, BNZ, and any KiwiSaver scheme into one view
+- **Multiple named portfolios** (Personal / Retirement / Kids / Test) with a combined "all portfolios" net-worth view — and AI, tax, and history all scope correctly per portfolio
 - Live prices, FX-corrected to NZD with LSE pence normalisation baked in
-- NZ tax-aware: FIF threshold detection, PIE treatment of NZ funds, audit-ready snapshots
+- NZ tax-aware: **FIF threshold assessed per-person across all portfolios** (the legally-correct treatment — not per-portfolio), PIE treatment of NZ funds, audit-ready snapshots
 - Multi-agent Claude AI (Haiku + Opus) producing daily briefings, per-holding deep-dives, and synthesised action plans
-- Family platform: hierarchical visibility, 5 roles, aggregate household views, kid + spouse + accountant access
+- Family platform: hierarchical visibility, 5 roles, aggregate household views with per-member portfolio splits, kid + spouse + accountant access
 
-It's built lean: ~11,000 lines of code, ~$51/mo USD all-in infrastructure, ships a tagged release every 1-2 days, fully documented, scales to ~500 users on current infra without any architectural change.
+It's built lean: ~15,000 lines of code, ~$51/mo USD all-in infrastructure, ships a tagged release every 1-2 days, fully documented, scales to ~500 users on current infra without any architectural change.
 
 **The pitch:** with the foundation already in place, the next 6-12 months unlock genuine moats — proprietary AI instructions, NZ-native managed-fund coverage, Stripe-based family pricing, bank/KiwiSaver direct-sync via Akahu, white-label opportunity for Harbour and similar firms.
 
@@ -31,7 +32,8 @@ It's built lean: ~11,000 lines of code, ~$51/mo USD all-in infrastructure, ships
 | Area | Feature | Status |
 |---|---|---|
 | **Portfolio** | Multi-platform consolidation, weighted-avg cost basis, multi-currency FX, LSE-pence normalisation | ✅ Live |
-| **NZ tax** | FIF threshold check with FDR 5% method, PIE exclusion for NZ funds, snapshot audit trail | ✅ Live |
+| **Multi-portfolio** | Named portfolios (Personal/Retirement/Kids), header switcher, read-only "All portfolios" combined net-worth view, per-portfolio snapshots + history | ✅ Live |
+| **NZ tax** | FIF threshold assessed **per-person across all portfolios** (FDR + Comparative Value methods, optimiser flags the cheaper one), PIE exclusion for NZ funds, snapshot audit trail | ✅ Live |
 | **Live data** | Yahoo Finance via Python proxy on Render, 5-min auto-refresh, CORS fallback chain | ✅ Live |
 | **Multi-source news** | 8 RSS feeds (RNZ, Stuff, NZ Herald, BBC, MarketWatch, CNBC, Investing, Guardian) | ✅ Live |
 | **AI agents** | 4-agent pipeline — Haiku Portfolio Health + Market Impact + Opportunity Scout, Opus Advisor synthesises | ✅ Live |
@@ -46,9 +48,10 @@ It's built lean: ~11,000 lines of code, ~$51/mo USD all-in infrastructure, ships
 | **Daily DB backups** | Edge Function dumps all 8 tables to Supabase Storage nightly, 30-day retention, full restore playbook | ✅ Live |
 | **Error monitoring** | Sentry frontend SDK with privacy scrubbing (no user IDs/emails leak to Sentry) | ✅ Live |
 | **Auth + multi-tenant** | Supabase Auth + RLS on every table + admin approval gate + 30-min idle timeout | ✅ Live |
+| **Data-safety architecture** | Defense-in-depth: rolling local auto-backup + guarded cloud (empty-save + structure guards) + daily snapshots + DR backups. Documented in `AUTH_DATA_SAFETY.md` | ✅ Live |
 | **Mobile UX** | Sticky portfolio summary, card-flow tables, 40px tap targets, native modal patterns | ✅ Live |
 
-8 tagged releases shipped, all documented in `docs/TODO.md` "Recently completed" sections.
+30+ tagged releases shipped (v0.4 → v0.21e), all documented in `docs/TODO.md` "Recently completed" sections.
 
 ---
 
@@ -60,6 +63,7 @@ It's built lean: ~11,000 lines of code, ~$51/mo USD all-in infrastructure, ships
 |---|---|---|
 | Origin | NZ-native | AU-built, NZ as add-on region |
 | FIF tax handling | Built-in, free | Add-on tier |
+| Multi-portfolio + FIF | **FIF assessed per-person across all portfolios** (the correct NZ treatment — a per-portfolio view would wrongly read "exempt" in each while the person is over NZ$50k) | Multiple portfolios, but each typically assessed in isolation |
 | NZ Managed Funds | All 18 providers, ready for auto-fetch | Limited list, US-fund focus |
 | KiwiSaver | First-class holding type | Tracked as generic fund |
 | Family / household view | Built-in, hierarchical | Per-portfolio only, separate logins |
@@ -113,6 +117,12 @@ Scheduled jobs:
 
 **Security posture:** 5 Critical items audited; service-role keys never leave Supabase; idempotent migrations; tagged releases for rollback; daily DB backups; SECURITY.md tracks 5 Critical + 10 High + 10 Medium risks with mitigation paths.
 
+**Data-safety architecture (the risk-team story):** A real 2FA-lockout + cloud-wipe incident drove a documented defense-in-depth redesign (`AUTH_DATA_SAFETY.md`), now battle-tested across the multi-portfolio build:
+- **4 layers, no single point of loss** — live local copy → rolling local auto-backup (last 3 non-empty, survives sign-out) → guarded cloud (the source of truth) → daily snapshots + 7-day DR backups.
+- **Guards, not conventions** — an empty local state can never overwrite a populated cloud; a multi-portfolio local can never be collapsed by a single-portfolio cloud; the "combined" view is read-only *at the data layer* (its setter is a no-op), so it physically cannot mutate holdings.
+- **Schema-change discipline** — per-portfolio history was added with *zero* schema change (data rides in existing JSONB), and a cloud envelope survives even a stale PostgREST schema cache via a settings-based fallback. Every cloud write degrades safely; none degrades destructively.
+- **Every lockout has a documented escape hatch**; recovery is a checklist (`AUTH_DATA_SAFETY.md` §8), not a guess.
+
 **Operating discipline:** 1 sole developer + AI guide. Working agreement in `CLAUDE.md` (portable to other projects). Pre-commit checklist. Two-strikes-and-out rule. End-to-end testing before "done". Tagged releases (v0.4 through v0.7d in 30 days).
 
 ---
@@ -124,11 +134,12 @@ Scheduled jobs:
 | Quarter | Feature | Strategic value |
 |---|---|---|
 | Now | NZ Fund auto-fetch via Sorted.org.nz | Removes the only friction in NZ-fund tracking — instantly differentiates from manual-only competitors |
-| Now | NZ Dividend tracking | Full RWT + foreign withholding + imputation credit tracking. IR3-ready export. Currently no NZ tool handles this cleanly |
+| Now | Pro PDF reports (per-platform + per-portfolio breakdowns) | Accountant/adviser-ready statements: per-platform subtotals, allocation, FIF position. The leave-behind artefact for B2B + advisor workflows |
 | Now | Tax Loss Harvesting | Scans for FIF offset opportunities. NZ-specific, Sharesight charges for this |
-| Now | FIF Comparative Value method | Many investors save tax under CV vs FDR. Show both, flag better. |
-| Now | Sentry custom-domain email sender (Resend) | Required before non-friend signups |
+| Now | Custom-domain email sender (Resend) | Required before non-friend signups |
 | Now | Terms of Service + Privacy Policy | NZ Privacy Act 2020 compliance gate for public launch |
+
+_(Shipped since last revision: NZ dividend tracking with imputation credits, FIF Comparative-Value method + optimiser, full multi-portfolio suite, PWA install.)_
 
 ### Medium-term (90-180 days)
 
