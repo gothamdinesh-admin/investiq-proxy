@@ -210,6 +210,12 @@ function renderReportPreview() {
   const userName = state.settings.name || _userProfile?.display_name || _supaUser?.email || 'Investor';
   const generated = new Date().toLocaleString('en-NZ');
 
+  // Multi-portfolio context — every report states which portfolio it covers.
+  const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+  const multiPf = (typeof listPortfolios === 'function') && listPortfolios().length > 1;
+  const pfLabel = viewingAll ? 'All portfolios'
+    : (typeof getActivePortfolio === 'function' ? getActivePortfolio().name : (state.settings.name || 'Portfolio'));
+
   let holdings = metrics.holdings;
   if (scope === 'active') holdings = holdings.filter(h => !h.ignored);
   // scope 'byplatform' just affects sort order in this build
@@ -220,7 +226,7 @@ function renderReportPreview() {
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
         <div>
           <div style="font-size:22px;font-weight:800;color:#0B1220;">${_reportTypeTitle(type)}</div>
-          <div style="font-size:13px;color:#475569;margin-top:2px;">${_escape(userName)} · as of ${_escape(asOf)}</div>
+          <div style="font-size:13px;color:#475569;margin-top:2px;">${_escape(userName)} · as of ${_escape(asOf)}${(multiPf && type !== 'portfolio' && type !== 'tax') ? ` · <b>${_escape(pfLabel)}</b>` : ''}</div>
         </div>
         <div style="font-size:11px;color:#64748B;text-align:right;">
           <div>Generated ${_escape(generated)}</div>
@@ -253,8 +259,13 @@ function renderReportPreview() {
   let body = '';
   if (type === 'summary' || type === 'performance') {
     body = summaryKpis + _reportHoldingsTable(holdings, sym);
+  } else if (type === 'platform') {
+    body = summaryKpis + _reportPlatformBlock(holdings, sym);
+  } else if (type === 'portfolio') {
+    body = _reportByPortfolioBlock(sym);
   } else if (type === 'tax') {
-    body = summaryKpis + _reportTaxBlock(holdings, sym);
+    // FIF is per-person across ALL portfolios — the report matches the app.
+    body = _reportTaxBlock(_allPortfolioHoldings(), sym);
   } else if (type === 'dividends') {
     body = _reportDividendsBlock(sym);
   }
@@ -272,9 +283,120 @@ function _reportTypeTitle(t) {
   return {
     summary: 'Portfolio Summary',
     performance: 'Performance Report',
+    platform: 'Platform Breakdown',
+    portfolio: 'Portfolio Breakdown',
     tax: 'NZ Tax (FIF) Report',
     dividends: 'Dividend Income Report'
   }[t] || 'Portfolio Report';
+}
+
+// All holdings across EVERY portfolio, each computed via getMetrics and tagged
+// with its portfolio name. Used by the per-person FIF report + by-portfolio.
+function _allPortfolioHoldings() {
+  const ports = (typeof listPortfolios === 'function' && listPortfolios().length)
+    ? listPortfolios() : [{ name: 'Portfolio', holdings: state.portfolio }];
+  const out = [];
+  ports.forEach(pf => {
+    getMetrics(pf.holdings).holdings.forEach(h => out.push({ ...h, _portfolioName: pf.name }));
+  });
+  return out;
+}
+
+// A compact subtotal card row (value / cost / gain) for a labelled group.
+function _reportGroupSubtotal(label, hs, sym, pctOfTotal) {
+  const value = hs.reduce((s, h) => s + (h.currentValue || 0), 0);
+  const cost  = hs.reduce((s, h) => s + (h.costBasis || 0), 0);
+  const gain  = value - cost;
+  const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
+  const gc = gain >= 0 ? '#047857' : '#DC2626';
+  return `
+    <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin:22px 0 8px;padding-bottom:6px;border-bottom:2px solid #0B1220;">
+      <div style="font-size:15px;font-weight:800;color:#0B1220;">${_escape(label)}
+        <span style="font-size:11px;font-weight:600;color:#64748B;">· ${hs.length} holding${hs.length === 1 ? '' : 's'}${pctOfTotal != null ? ` · ${fmt(pctOfTotal)}% of total` : ''}</span>
+      </div>
+      <div style="font-size:12px;color:#475569;">
+        Value <b style="color:#0B1220;">${sym}${fmt(value)}</b> ·
+        Cost ${sym}${fmt(cost)} ·
+        <span style="color:${gc};font-weight:700;">${gain >= 0 ? '+' : '−'}${sym}${fmt(Math.abs(gain))} (${gainPct >= 0 ? '+' : ''}${fmt(gainPct)}%)</span>
+      </div>
+    </div>`;
+}
+
+// Platform Breakdown — group the (active-portfolio) holdings by platform with
+// a subtotal header + allocation %, then the holdings table under each.
+function _reportPlatformBlock(holdings, sym) {
+  if (!holdings.length) return '<div style="text-align:center;padding:40px;color:#64748B;">No holdings.</div>';
+  const grandValue = holdings.reduce((s, h) => s + (h.currentValue || 0), 0) || 1;
+  const byPlat = {};
+  holdings.forEach(h => { const k = h.platform || 'Unspecified'; (byPlat[k] = byPlat[k] || []).push(h); });
+  const platforms = Object.keys(byPlat).sort((a, b) =>
+    byPlat[b].reduce((s, h) => s + (h.currentValue || 0), 0) - byPlat[a].reduce((s, h) => s + (h.currentValue || 0), 0));
+  // Allocation summary strip
+  const alloc = platforms.map(p => {
+    const v = byPlat[p].reduce((s, h) => s + (h.currentValue || 0), 0);
+    return `<tr style="border-bottom:1px solid #E2E8F0;">
+      <td style="padding:6px 10px;font-weight:600;">${_escape(p)}</td>
+      <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;">${sym}${fmt(v)}</td>
+      <td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;">${fmt((v / grandValue) * 100)}%</td>
+    </tr>`;
+  }).join('');
+  const allocTable = `<h3 style="font-size:14px;color:#0B1220;margin:8px 0 8px;">Allocation by platform</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;color:#0B1220;margin-bottom:8px;">
+      <thead><tr style="background:#0B1220;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">
+        <th style="padding:8px 10px;text-align:left;">Platform</th>
+        <th style="padding:8px 10px;text-align:right;">Value</th>
+        <th style="padding:8px 10px;text-align:right;">% of total</th>
+      </tr></thead><tbody>${alloc}</tbody></table>`;
+  const sections = platforms.map(p => {
+    const hs = [...byPlat[p]].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
+    const v = hs.reduce((s, h) => s + (h.currentValue || 0), 0);
+    return _reportGroupSubtotal(p, hs, sym, (v / grandValue) * 100) + _reportHoldingsTable(hs, sym);
+  }).join('');
+  return allocTable + sections;
+}
+
+// By-Portfolio Breakdown — one section per portfolio with its own subtotal +
+// holdings, preceded by an account-wide total. Spans ALL portfolios.
+function _reportByPortfolioBlock(sym) {
+  const ports = (typeof listPortfolios === 'function') ? listPortfolios() : [];
+  if (ports.length === 0) return '<div style="text-align:center;padding:40px;color:#64748B;">No portfolios.</div>';
+  let acctValue = 0, acctCost = 0;
+  const perPf = ports.map(pf => {
+    const m = getMetrics(pf.holdings);
+    acctValue += m.totalValue; acctCost += m.totalCost;
+    return { name: pf.name, holdings: m.holdings, value: m.totalValue, cost: m.totalCost };
+  });
+  const acctGain = acctValue - acctCost;
+  const acctGainPct = acctCost > 0 ? (acctGain / acctCost) * 100 : 0;
+  const gc = acctGain >= 0 ? '#047857' : '#DC2626';
+  const acctHeader = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:8px;">
+      <div style="padding:12px;border-left:3px solid #1D4ED8;background:#F1F5F9;border-radius:4px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#64748B;font-weight:600;">Account value</div>
+        <div style="font-size:20px;font-weight:700;color:#0B1220;margin-top:4px;">${sym}${fmt(acctValue)}</div>
+      </div>
+      <div style="padding:12px;border-left:3px solid #10B981;background:#F1F5F9;border-radius:4px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#64748B;font-weight:600;">Account return</div>
+        <div style="font-size:20px;font-weight:700;color:${gc};margin-top:4px;">${acctGain >= 0 ? '+' : '−'}${sym}${fmt(Math.abs(acctGain))}</div>
+        <div style="font-size:11px;color:${gc};margin-top:2px;">${acctGainPct >= 0 ? '+' : ''}${fmt(acctGainPct)}%</div>
+      </div>
+      <div style="padding:12px;border-left:3px solid #F59E0B;background:#F1F5F9;border-radius:4px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#64748B;font-weight:600;">Cost basis</div>
+        <div style="font-size:20px;font-weight:700;color:#0B1220;margin-top:4px;">${sym}${fmt(acctCost)}</div>
+      </div>
+      <div style="padding:12px;border-left:3px solid #7C3AED;background:#F1F5F9;border-radius:4px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#64748B;font-weight:600;">Portfolios</div>
+        <div style="font-size:20px;font-weight:700;color:#0B1220;margin-top:4px;">${ports.length}</div>
+      </div>
+    </div>`;
+  const sections = perPf
+    .sort((a, b) => b.value - a.value)
+    .map(p => {
+      const hs = [...p.holdings].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
+      return _reportGroupSubtotal(p.name, hs, sym, acctValue > 0 ? (p.value / acctValue) * 100 : 0)
+        + (hs.length ? _reportHoldingsTable(hs, sym) : '<div style="padding:10px;color:#64748B;font-size:12px;">No holdings in this portfolio.</div>');
+    }).join('');
+  return acctHeader + sections;
 }
 
 function _reportHoldingsTable(holdings, sym) {
@@ -317,7 +439,12 @@ function _reportTaxBlock(holdings, sym) {
   const threshold = 50000;
   const overThreshold = overseasCost > threshold;
   const fdrEstimate = overThreshold ? overseasValue * 0.05 : 0;
-  return `
+  const _nPf = (typeof listPortfolios === 'function') ? listPortfolios().length : 1;
+  const perPersonNote = _nPf > 1
+    ? `<div style="margin-bottom:12px;padding:12px 14px;background:#EEF2FF;border-left:4px solid #6366F1;color:#3730A3;font-size:12px;line-height:1.6;">
+         <b>Assessed per person across all ${_nPf} portfolios.</b> The NZ$50,000 FIF de-minimis applies to your total overseas cost basis — not each portfolio separately — so this report combines them.
+       </div>` : '';
+  return perPersonNote + `
     <div style="margin-bottom:20px;padding:16px;background:#FEF3C7;border-left:4px solid #F59E0B;color:#78350F;font-size:12px;line-height:1.6;">
       <b>Analysis only — not tax advice.</b> Always consult a licensed NZ tax adviser before filing.
     </div>

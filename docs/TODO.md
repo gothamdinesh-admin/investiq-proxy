@@ -168,7 +168,7 @@ Now that you're paying for Supabase Pro, Render Starter, and Netlify Pro, these 
 
 ## 📤 P7 — Integrations & exports
 
-- [ ] **PDF export / monthly report** — polished statement for sharing with accountant/advisor. Uses `jsPDF`. Est: half day.
+- [x] **PDF export / monthly report** — DONE (v0.22). Reports section exports a polished statement via the browser print dialog (no jsPDF dependency). 6 report types: Portfolio Summary, Performance, **Platform Breakdown** (per-platform subtotals + allocation), **By Portfolio** (per-portfolio sections + account total), NZ Tax (FIF — **per-person across all portfolios**), Dividend Income. Every report states which portfolio it covers. _Future: jsPDF for pixel-perfect multi-page + charts in the PDF._
 - [ ] **Google Sheets export** — live-syncing tab via Google Sheets API. Est: half day.
 - [ ] **Sharesight-format CSV export** — for users migrating or dual-tracking. Est: 2 hours.
 - [ ] **Xero export** — NZ accountants love Xero. Est: half day.
