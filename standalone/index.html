@@ -8836,9 +8836,122 @@ async function renderAlertsSection() {
       </div>`;
     }).join('')}
   </div>
-  <div class="text-xs neutral mt-2" style="font-size:11px;line-height:1.5;">
-    <i class="fas fa-info-circle mr-1"></i>Alerts check every 30 min in the background. You'll get an email when a condition triggers (capped by cooldown).
+  <div class="flex items-center justify-between mt-2 gap-2 flex-wrap">
+    <div class="text-xs neutral" style="font-size:11px;line-height:1.5;flex:1;min-width:200px;">
+      <i class="fas fa-info-circle mr-1"></i>Alerts check every 30 min in the background. You'll get an email when a condition triggers (capped by cooldown).
+    </div>
+    <button onclick="diagnosePriceAlerts()" class="btn btn-sm btn-secondary" style="font-size:11px;padding:5px 12px;" title="Check each alert against live prices right now"><i class="fas fa-stethoscope mr-1"></i>Test alerts now</button>
   </div>`;
+}
+
+// Client-side alert diagnostic. Evaluates each alert against LIVE prices using
+// the exact same logic as the check-price-alerts Edge Function, so the user
+// can see whether an alert WOULD fire right now — isolating a config problem
+// (wrong condition/threshold) from a delivery problem (cron not running, or
+// RESEND/secret not set). No cron secret needed — pure client read.
+async function diagnosePriceAlerts() {
+  if (!_supabase || !_supaUser) { if (window.toast) toast.warning('Sign in first.'); return; }
+  if (window.toast) toast.info('Checking your alerts against live prices…');
+  const { data: alerts } = await _supabase.from('price_alerts')
+    .select('id, scope, symbol, condition, threshold, currency, active, last_fired_at, fire_count, cooldown_hours')
+    .order('created_at', { ascending: false });
+  if (!alerts || !alerts.length) {
+    if (typeof showInfo === 'function') showInfo({ title: 'No alerts', body: 'You have no alerts set up yet.' });
+    return;
+  }
+
+  // Live prices for ticker alerts (via the same proxy the app uses).
+  const tickers = [...new Set(alerts.filter(a => a.scope === 'ticker' && a.symbol).map(a => a.symbol))];
+  let prices = {};
+  if (tickers.length) {
+    try {
+      const base = (state.settings.proxyUrl || '').replace(/\/$/, '');
+      const res = await fetch(`${base}/api/market?symbols=${encodeURIComponent(tickers.join(','))}`, { headers: proxyHeaders(), signal: AbortSignal.timeout(12000) });
+      if (res.ok) prices = await res.json();
+    } catch (e) { console.warn('[alert-diag] price fetch failed', e); }
+  }
+  // Portfolio day-% from latest + prior snapshot.
+  let pfVal = null, pfDayPct = null;
+  if (alerts.some(a => a.scope === 'portfolio')) {
+    const { data: snaps } = await _supabase.from('investiq_snapshots')
+      .select('snapshot_date, total_value').eq('user_id', _supaUser.id)
+      .order('snapshot_date', { ascending: false }).limit(2);
+    if (snaps && snaps.length) {
+      pfVal = Number(snaps[0].total_value);
+      const prior = snaps[1] ? Number(snaps[1].total_value) : pfVal;
+      pfDayPct = prior > 0 ? ((pfVal - prior) / prior) * 100 : 0;
+    }
+  }
+
+  const evalCond = (cond, thr, price, pct) => {
+    if (cond === 'above') return price != null && price >= thr;
+    if (cond === 'below') return price != null && price <= thr;
+    if (cond === 'day_rise_pct') return pct != null && pct >= thr;
+    if (cond === 'day_drop_pct') return pct != null && pct <= -Math.abs(thr);
+    return false;
+  };
+  const cooldownActive = (a) => a.last_fired_at &&
+    (Date.now() - new Date(a.last_fired_at).getTime()) < (a.cooldown_hours || 24) * 3600 * 1000;
+
+  let anyStuck = false; // would fire, active, off-cooldown, but never delivered
+  const rows = alerts.map(a => {
+    const isTicker = a.scope === 'ticker';
+    let price = null, pct = null, note = '';
+    if (isTicker) {
+      const q = prices[a.symbol];
+      if (!q || q.price == null) { note = 'no live price (proxy cold / symbol invalid)'; }
+      else { price = q.price; pct = q.changePct; }
+    } else {
+      price = pfVal; pct = pfDayPct;
+      if (pfVal == null) note = 'no snapshots yet';
+    }
+    const would = note ? false : evalCond(a.condition, a.threshold, price, pct);
+    const onCooldown = cooldownActive(a);
+    if (would && a.active && !onCooldown && !a.last_fired_at) anyStuck = true;
+    const statusColor = !a.active ? '#64748b' : would ? '#34d399' : '#7a9cc0';
+    const statusText = !a.active ? 'PAUSED'
+      : note ? 'NO DATA'
+      : would ? (onCooldown ? 'MATCH (on cooldown)' : 'WOULD FIRE NOW')
+      : 'no match';
+    const liveStr = isTicker
+      ? (price != null ? `$${fmt(price)} · today ${pct >= 0 ? '+' : ''}${fmt(pct)}%` : '–')
+      : (pfVal != null ? `${fmt(pfVal)} · today ${pfDayPct >= 0 ? '+' : ''}${fmt(pfDayPct)}%` : '–');
+    return `<tr style="border-bottom:1px solid #1e2d4a;">
+      <td style="padding:6px 8px;color:#c8d6ef;">${a.scope === 'portfolio' ? 'Portfolio' : _escape(a.symbol)}</td>
+      <td style="padding:6px 8px;color:#94a3b8;font-size:11px;">${_escape(formatAlertSummary(a))}</td>
+      <td style="padding:6px 8px;color:#94a3b8;font-size:11px;white-space:nowrap;">${liveStr}</td>
+      <td style="padding:6px 8px;color:${statusColor};font-weight:600;font-size:11px;white-space:nowrap;">${statusText}</td>
+      <td style="padding:6px 8px;color:#7a9cc0;font-size:11px;white-space:nowrap;">${a.last_fired_at ? timeSince(new Date(a.last_fired_at)) : 'never'} · ${a.fire_count || 0}×</td>
+      ${note ? `<td style="padding:6px 8px;color:#fbbf24;font-size:10px;">${_escape(note)}</td>` : '<td></td>'}
+    </tr>`;
+  }).join('');
+
+  const hint = anyStuck
+    ? `<div style="margin-top:14px;padding:12px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;font-size:12px;color:#fbbf24;line-height:1.6;">
+         <b>⚠ At least one alert would fire now but has never fired.</b> The condition is fine — the background checker isn't delivering. Check in Supabase:
+         <ol style="margin:6px 0 0 18px;padding:0;color:#c8d6ef;">
+           <li>Edge Function <b>check-price-alerts</b> is deployed (Verify JWT OFF)</li>
+           <li>pg_cron job is scheduled (run <code>check-price-alerts/setup.sql</code>)</li>
+           <li>Secrets set: <b>CRON_SECRET, PROXY_URL, PROXY_SECRET, RESEND_API_KEY, RESEND_FROM_EMAIL</b></li>
+           <li>Check the function's <b>Logs</b> tab for errors (401 = CRON_SECRET mismatch; Resend error = email key)</li>
+         </ol>
+       </div>`
+    : `<div style="margin-top:14px;font-size:12px;color:#7a9cc0;line-height:1.5;">No alert matches its condition right now, so nothing would fire this moment. "WOULD FIRE NOW" appears when a live value crosses your threshold.</div>`;
+
+  if (typeof showInfo === 'function') showInfo({
+    title: 'Alert diagnostic',
+    icon: 'fa-stethoscope',
+    body: `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px;">
+        <thead><tr style="color:#7a9cc0;font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">
+          <th style="padding:6px 8px;text-align:left;">Target</th>
+          <th style="padding:6px 8px;text-align:left;">Condition</th>
+          <th style="padding:6px 8px;text-align:left;">Live now</th>
+          <th style="padding:6px 8px;text-align:left;">Status</th>
+          <th style="padding:6px 8px;text-align:left;">Last fired</th>
+          <th></th>
+        </tr></thead><tbody>${rows}</tbody></table></div>${hint}`,
+    actions: [{ key: 'ok', label: 'Close', variant: 'primary', flex: true }]
+  });
 }
 
 // Open the alert create/edit modal. `prefill` may contain { symbol, currency, currentPrice }
