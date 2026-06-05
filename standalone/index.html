@@ -124,26 +124,29 @@
       --border-strong:    #94A3B8;
       /* Text — slate-900, not pure black. Four-tier mirror of dark.
          Primary 16.8:1, Body 11.2:1, Secondary 7.5:1, Muted 4.7:1. */
-      --text-primary:     #0B1220;
-      --text-body:        #1E293B;
+      /* v0.24.2 — Midnight Sapphire (light edition): sapphire-ink text, deep
+         sapphire accent (richer than bright royal blue), champagne-bronze gold
+         (dark enough for text/icons on white). Surfaces stay clean white. */
+      --text-primary:     #0F1B30;       /* sapphire-ink (was #0B1220) */
+      --text-body:        #1F2C44;
       --text-secondary:   #475569;
       --text-muted:       #64748B;
       --text-inverted:    #FFFFFF;
-      /* Accents — intelligent blue primary, emerald growth, gold premium */
-      --accent:           #1D4ED8;       /* intelligent blue */
-      --accent-hover:     #1E40AF;
-      --accent-soft:      rgba(29,78,216,0.10);
-      --accent-soft-2:    rgba(29,78,216,0.18);
-      --btn-primary:      #1D4ED8;       /* primary CTA bg (light) */
-      --btn-primary-hover:#1E40AF;
-      --color-indigo:     #1D4ED8;       /* fold into blue */
-      --color-blue:       #1D4ED8;
+      /* Accents — deep sapphire primary, emerald growth, champagne-bronze gold */
+      --accent:           #1E3A8A;       /* deep sapphire */
+      --accent-hover:     #172E6B;
+      --accent-soft:      rgba(30,58,138,0.09);
+      --accent-soft-2:    rgba(30,58,138,0.16);
+      --btn-primary:      #1E3A8A;       /* primary CTA bg (light) */
+      --btn-primary-hover:#172E6B;
+      --color-indigo:     #1E3A8A;       /* fold into sapphire */
+      --color-blue:       #1E3A8A;
       --color-green:      #10B981;       /* emerald */
       --color-green-soft: rgba(16,185,129,0.12);
-      --color-red:        #DC2626;
-      --color-red-soft:   rgba(220,38,38,0.10);
-      --color-amber:      #F59E0B;       /* gold — premium IQ */
-      --color-amber-soft: rgba(245,158,11,0.12);
+      --color-red:        #C8443C;       /* muted coral-red */
+      --color-red-soft:   rgba(200,68,60,0.10);
+      --color-amber:      #B0801F;       /* champagne-bronze — premium IQ */
+      --color-amber-soft: rgba(176,128,31,0.12);
       --color-teal:       #0E7490;       /* teal-cyan — data */
       --color-violet:     #7C3AED;
       --color-orange:     #EA580C;
@@ -954,10 +957,11 @@
 
     .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
 
-    /* v0.24 — wordmark gradient: platinum → champagne in dark (var-driven so
-       light keeps its own readable pairing via the override below). */
+    /* v0.24.2 — wordmark gradient is now var-driven in BOTH themes:
+       dark  → platinum (#9DB7DE) → champagne (#E5C76B)
+       light → deep sapphire (#1E3A8A) → champagne-bronze (#B0801F)
+       both readable on their respective backgrounds. */
     .gradient-text { background: linear-gradient(90deg, var(--accent), var(--color-amber)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-    [data-theme="light"] .gradient-text { background: linear-gradient(90deg, #1D4ED8, #047857); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
     /* Brand mark — used in the nav. Navy/white "Invest" + gradient "IQ" +
        gold insight dot. Pure inline so it scales on retina + theme-aware. */
