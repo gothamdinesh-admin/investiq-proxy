@@ -6,10 +6,11 @@ This is the single source of truth for what's next. Priority order is intentiona
 
 ---
 
-## ✅ Recently completed (v0.21 → v0.23)
+## ✅ Recently completed (v0.21 → v0.24)
 
 | Tag | What |
 |---|---|
+| **`v0.24-midnight-sapphire`** | **Premium palette refresh — "Midnight Sapphire & Platinum".** Pure CSS-variable reskin (both themes). Dark: deep ink-navy surfaces, platinum-blue accent, platinum-sapphire CTAs, champagne gold, muted coral losses. Light: deep sapphire accent, sapphire-ink text, champagne-bronze gold. New `--btn-primary` var + one `[style*="#6366f1"]` override retargets all 22 legacy indigo CTAs; global inline-hex retargets shift ~190 legacy brand hues onto the vars. All brand gradients (wordmark, brand icon, welcome tile, invite banner) + `.btn-secondary` aligned. No markup/JS churn. |
 | `v0.23` _(pending live verify)_ | **Consolidated navigation.** 13 flat sidebar sections → 6 grouped entries (Overview · Portfolio · Intelligence · Planning · Watchlist · TraderIQ). Multi-child groups show a `.segmented-control` pill bar (`#groupSubNav`); AI features (AI Insights · Market · News) now live under **Intelligence**. Pure nav-layer change — every section body reused untouched. Group-based active-highlight (`data-group`); preserved IDs keep auth toggles + onboarding tour working. Sidebar "Today's Movers" removed (redundant with the `#portfolioPulse` strip). Mobile tab bar trimmed (Market folded into Intel). |
 | `v0.21a → v0.21e` | **Multi-portfolio epic.** Header switcher, combined "All portfolios" view, per-portfolio AI + tax scoping, per-portfolio daily snapshots, family aggregate per-member split. Built on the `state.portfolio` accessor pattern (zero section-code churn). Includes v0.21.1 data-loss hotfix: settings stash (`settings._portfolios`) + structure guard + `NOTIFY pgrst` after migration 016. |
 | `v0.22` | **Pro reports** — per-platform breakdown + per-portfolio breakdown report types; FIF tax report now per-person across all portfolios (NZ$50k de-minimis). |
