@@ -1402,46 +1402,109 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(500, {"error": str(ex)})
 
     def _yahoo_quotes(self, symbols):
+        out = {}
+        # ── Fast path: yfinance bulk download ────────────────────────────
+        # Works when it works, but Yahoo frequently rate-limits / blocks
+        # datacenter IPs (Render), in which case df is empty. We DON'T give up
+        # there any more — we fall through to a direct chart-API fallback for
+        # whatever yfinance missed. (This is the fix for price alerts never
+        # firing: the alert checker hits /api/market, which used to return {}.)
         try:
             import yfinance as yf
-            # Single bulk download — much faster than per-symbol calls
             df = yf.download(symbols, period='2d', auto_adjust=True,
                              progress=False, threads=True)
-            if df.empty:
-                return {}
-            out = {}
-            close = df['Close']
-            if len(symbols) == 1:
-                sym = symbols[0]
-                vals = close.dropna()
-                if vals.empty:
-                    return {}
-                price = float(vals.iloc[-1])
-                prev  = float(vals.iloc[-2]) if len(vals) > 1 else price
-                chg   = price - prev
-                pct   = (chg / prev * 100) if prev else 0
-                out[sym] = {"price": round(price,4), "change": round(chg,4),
-                            "changePct": round(pct,4), "name": sym}
-            else:
-                for sym in symbols:
-                    try:
-                        col = close[sym].dropna()
-                        if col.empty:
-                            continue
-                        price = float(col.iloc[-1])
-                        prev  = float(col.iloc[-2]) if len(col) > 1 else price
+            if df is not None and not df.empty:
+                close = df['Close']
+                if len(symbols) == 1:
+                    vals = close.dropna()
+                    if not vals.empty:
+                        price = float(vals.iloc[-1])
+                        prev  = float(vals.iloc[-2]) if len(vals) > 1 else price
                         chg   = price - prev
                         pct   = (chg / prev * 100) if prev else 0
-                        out[sym] = {"price": round(price,4), "change": round(chg,4),
-                                    "changePct": round(pct,4), "name": sym}
-                    except Exception:
-                        pass
-            return out
+                        out[symbols[0]] = {"price": round(price,4), "change": round(chg,4),
+                                           "changePct": round(pct,4), "name": symbols[0]}
+                else:
+                    for sym in symbols:
+                        try:
+                            col = close[sym].dropna()
+                            if col.empty:
+                                continue
+                            price = float(col.iloc[-1])
+                            prev  = float(col.iloc[-2]) if len(col) > 1 else price
+                            chg   = price - prev
+                            pct   = (chg / prev * 100) if prev else 0
+                            out[sym] = {"price": round(price,4), "change": round(chg,4),
+                                        "changePct": round(pct,4), "name": sym}
+                        except Exception:
+                            pass
         except ImportError:
             print("  ℹ run:  py -m pip install yfinance  for live market data")
         except Exception as ex:
             print(f"  ✗ yfinance error: {ex}")
-        return {}
+
+        # ── Fallback: direct Yahoo chart API for any symbol still missing ──
+        missing = [s for s in symbols if s not in out]
+        if missing:
+            print(f"  ⟳ chart-API fallback for: {missing}")
+        for sym in missing:
+            q = self._yahoo_chart_quote(sym)
+            if q:
+                out[sym] = q
+        return out
+
+    def _yahoo_chart_quote(self, symbol):
+        """Direct Yahoo chart-API quote — fallback when yfinance returns nothing.
+
+        Uses query1.finance.yahoo.com/v8/finance/chart/<symbol>, which (unlike
+        the v7 quote API) needs no crumb/cookie and tolerates datacenter IPs
+        far better than the yfinance library. Returns the same shape as the
+        yfinance path: {price, change, changePct, name} — or None on failure.
+        """
+        import json as _json, urllib.request, urllib.error, urllib.parse
+        symbol = (symbol or "").strip()
+        if not symbol:
+            return None
+        hosts = ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]
+        for host in hosts:
+            url = f"https://{host}/v8/finance/chart/{urllib.parse.quote(symbol)}?range=5d&interval=1d"
+            try:
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                  "Chrome/120.0 Safari/537.36",
+                    "Accept": "application/json",
+                })
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    data = _json.loads(resp.read().decode("utf-8"))
+                res = (((data or {}).get("chart") or {}).get("result") or [None])[0]
+                if not res:
+                    continue
+                meta = res.get("meta") or {}
+                price = meta.get("regularMarketPrice")
+                prev  = meta.get("chartPreviousClose") or meta.get("previousClose")
+                if price is None:
+                    # Fall back to the last close in the series.
+                    try:
+                        closes = [c for c in (res["indicators"]["quote"][0]["close"] or []) if c is not None]
+                        if closes:
+                            price = closes[-1]
+                            if prev is None and len(closes) > 1:
+                                prev = closes[-2]
+                    except Exception:
+                        pass
+                if price is None:
+                    continue
+                price = float(price)
+                prev = float(prev) if prev else price
+                chg = price - prev
+                pct = (chg / prev * 100) if prev else 0
+                return {"price": round(price, 4), "change": round(chg, 4),
+                        "changePct": round(pct, 4), "name": meta.get("symbol", symbol)}
+            except Exception as ex:
+                print(f"  ✗ chart-API {host} failed for {symbol}: {ex}")
+                continue
+        return None
 
     # ── Agents (basic pass-through to Anthropic) ─────────────────
     def _run_agents(self, body):
