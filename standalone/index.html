@@ -2886,6 +2886,9 @@
           <button onclick="adminTestDigest()" class="btn btn-sm" style="background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);">
             <i class="fas fa-envelope mr-1"></i>Send Test Digest
           </button>
+          <button onclick="adminRunAlertCheck()" class="btn btn-sm" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">
+            <i class="fas fa-bell mr-1"></i>Run Alert Check
+          </button>
           <button onclick="adminTestSentry()" class="btn btn-sm" style="background:rgba(168,139,250,0.1);color:#a78bfa;border:1px solid rgba(168,139,250,0.3);">
             <i class="fas fa-bug mr-1"></i>Test Sentry
           </button>
@@ -12204,6 +12207,83 @@ async function adminTestDigest() {
   } catch(e) {
     _adminLog(`✗ Network error: ${e.message}`);
     _adminLog('  Function may not be deployed yet. Check Supabase Dashboard → Edge Functions.');
+  }
+}
+
+// Manually invoke the check-price-alerts Edge Function and report exactly what
+// it did — proves the cron path end-to-end (function deployed? secrets set?
+// email sends?) without waiting for the 30-min schedule. Same auth model as
+// the digest test: transient CRON_SECRET prompt (never stored).
+async function adminRunAlertCheck() {
+  _adminClearOutput();
+  const supaUrl = (state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/,'');
+  if (!supaUrl) return _adminLog('✗ Supabase URL not set in PLATFORM_CONFIG');
+  _adminLog('🔍 Will invoke: ' + supaUrl + '/functions/v1/check-price-alerts\n');
+  const result = await showFormModal({
+    title: 'Run Alert Check',
+    icon: 'fa-bell',
+    iconColor: '#fbbf24',
+    description: 'Manually fires the check-price-alerts Edge Function now (same job pg_cron runs every 30 min). Paste the CRON_SECRET from Supabase Function secrets — used once, not stored. If an alert matches and email is configured, you\'ll get a real email.',
+    fields: [{ name: 'secret', type: 'password', label: 'CRON_SECRET', required: true, placeholder: 'Paste your cron secret', autocomplete: 'off' }],
+    submitLabel: 'Run check now',
+    submitVariant: 'primary'
+  });
+  if (!result?.secret) return _adminLog('✗ Cancelled — no secret entered');
+  const secret = result.secret.trim();
+
+  let userJwt = '';
+  try { userJwt = (await _getFreshJwt()) || ''; } catch(e) { /* fall through */ }
+  if (!userJwt) _adminLog('⚠ No active Supabase session — Verify-JWT gateway may reject. Sign in first.');
+
+  _adminLog('🚀 Calling Edge Function …');
+  try {
+    const res = await fetch(supaUrl + '/functions/v1/check-price-alerts', {
+      method:  'POST',
+      headers: {
+        'Authorization': 'Bearer ' + (userJwt || PLATFORM_CONFIG.supabaseKey),
+        'X-Cron-Secret': secret,
+        'Content-Type':  'application/json'
+      },
+      body: '{}',
+      signal: AbortSignal.timeout(40000)
+    });
+    const text = await res.text();
+    let body; try { body = JSON.parse(text); } catch { body = text; }
+    _adminLog(`Response: ${res.status}`);
+    if (res.status === 401) {
+      _adminLog('✗ Unauthorised — your CRON_SECRET doesn\'t match the function\'s. Re-set it:');
+      _adminLog('  supabase secrets set CRON_SECRET=<your-value>');
+    } else if (res.status === 404) {
+      _adminLog('✗ Function not deployed. Deploy it (Verify JWT OFF):');
+      _adminLog('  supabase functions deploy check-price-alerts --no-verify-jwt');
+    } else if (res.ok && body && body.checked !== undefined) {
+      _adminLog('✓ Function ran.');
+      _adminLog(`  total alerts: ${body.total_alerts}`);
+      _adminLog(`  off cooldown: ${body.off_cooldown}`);
+      _adminLog(`  checked:      ${body.checked}`);
+      _adminLog(`  fired (sent): ${body.fired}`);
+      _adminLog(`  failed:       ${body.failed || 0}`);
+      if (body.details?.length) {
+        _adminLog('\n  per-alert:');
+        body.details.forEach(d => _adminLog(`    ${d.ok ? '✓' : '✗'} ${d.fired_for || d.alert_id}${d.reason ? ' — ' + d.reason : ' (email sent)'}`));
+      }
+      if (body.fired > 0) _adminLog('\n  📬 Email sent — check your inbox (and spam).');
+      if (body.off_cooldown === 0 && body.total_alerts > 0) _adminLog('\n  💡 All alerts are on cooldown (fired recently). Wait out the cooldown or lower it, then retry.');
+      if ((body.failed || 0) > 0 && body.details?.some(d => /resend|RESEND_API/i.test(d.reason || ''))) {
+        _adminLog('\n  💡 Email not configured. Set the Resend secrets:');
+        _adminLog('     supabase secrets set RESEND_API_KEY=re_xxx');
+        _adminLog('     supabase secrets set RESEND_FROM_EMAIL=\'InvestIQ <onboarding@resend.dev>\'');
+      }
+      if (body.checked > 0 && body.fired === 0 && (body.failed || 0) === 0 && body.off_cooldown > 0) {
+        _adminLog('\n  ℹ Ran but nothing matched server-side. If the in-app "Test alerts now" says WOULD FIRE, the proxy price the function fetched may differ — retry in a minute.');
+      }
+    } else {
+      _adminLog('✗ Unexpected response:');
+      _adminLog(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+    }
+  } catch(e) {
+    _adminLog(`✗ Network error: ${e.message}`);
+    _adminLog('  Function may not be deployed. Check Supabase Dashboard → Edge Functions.');
   }
 }
 
