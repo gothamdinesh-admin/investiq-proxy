@@ -116,15 +116,15 @@
       /* v0.24.3 — Warm Ivory surfaces: soft cream paper instead of pure white,
          kills glare and reads "private-wealth report". Pairs with the deep
          sapphire accent + champagne-bronze gold. */
-      --bg:               #F2EFE9;       /* warm ivory page */
-      --bg-panel:         #FBF9F5;       /* soft cream cards (was #FFFFFF) */
-      --bg-panel-2:       #EDE9E1;       /* warm sand — elevated */
-      --bg-input:         #FCFBF8;       /* a touch brighter than cards for inputs */
-      --bg-deep:          #F6F3ED;       /* warm inset */
-      --bg-hover:         #EDE9E1;
-      /* Borders — soft warm taupe for separation without harsh lines */
-      --border:           #DDD6C9;
-      --border-strong:    #B9B0A0;
+      --bg:               #EEE8D9;       /* warm cream page (creamier) */
+      --bg-panel:         #FAF5EA;       /* cream cards */
+      --bg-panel-2:       #E9E1CF;       /* warm cream sand — elevated */
+      --bg-input:         #FCF9F0;       /* a touch brighter than cards for inputs */
+      --bg-deep:          #F2ECDE;       /* warm inset */
+      --bg-hover:         #E9E1CF;
+      /* Borders — warm taupe for separation without harsh lines */
+      --border:           #D9CFB9;
+      --border-strong:    #B4A98F;
       /* Text — slate-900, not pure black. Four-tier mirror of dark.
          Primary 16.8:1, Body 11.2:1, Secondary 7.5:1, Muted 4.7:1. */
       /* v0.24.2 — Midnight Sapphire (light edition): sapphire-ink text, deep
@@ -132,8 +132,8 @@
          (dark enough for text/icons on white). Surfaces stay clean white. */
       --text-primary:     #0F1B30;       /* sapphire-ink (was #0B1220) */
       --text-body:        #1F2C44;
-      --text-secondary:   #475569;
-      --text-muted:       #64748B;
+      --text-secondary:   #44505F;
+      --text-muted:       #586577;       /* darkened for AA on the cream bg */
       --text-inverted:    #FFFFFF;
       /* Accents — deep sapphire primary, emerald growth, champagne-bronze gold */
       --accent:           #1E3A8A;       /* deep sapphire */
@@ -236,7 +236,7 @@
     [style*="color:#60A5FA"], [style*="color: #60A5FA"] { color: var(--accent) !important; }
 
     /* Common selectors targeting class-based / explicit components */
-    [data-theme="light"] nav { background: rgba(251,249,245,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
+    [data-theme="light"] nav { background: rgba(250,245,234,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
     /* Cards lift off the bg with subtle shadows + thicker borders in light
        mode. Without this they melted into the bg-50 background — the
