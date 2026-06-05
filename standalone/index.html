@@ -1684,37 +1684,28 @@
     </div>
 
     <!-- Nav -->
-    <nav class="space-y-1 mb-6">
-      <div class="nav-link active" onclick="showSection('overview',this)"><i class="fas fa-th-large"></i> Overview</div>
-      <div class="nav-link" onclick="showSection('holdings',this)"><i class="fas fa-briefcase"></i> Holdings</div>
-      <div class="nav-link" onclick="showSection('performance',this)"><i class="fas fa-chart-line"></i> Performance</div>
-      <div class="nav-link" onclick="showSection('market',this)"><i class="fas fa-globe"></i> Market</div>
-      <div class="nav-link" id="navLinkInsights" onclick="showSection('insights',this)"><i class="fas fa-brain"></i> AI Insights</div>
-      <div class="nav-link" onclick="showSection('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
-      <div class="nav-link" onclick="showSection('news',this)"><i class="fas fa-newspaper"></i> News</div>
-      <div class="nav-link" onclick="showSection('tax',this)"><i class="fas fa-receipt"></i> NZ Tax (FIF)</div>
-      <div class="nav-link" onclick="showSection('dividends',this)"><i class="fas fa-coins"></i> Dividends</div>
-      <div class="nav-link" onclick="showSection('calendar',this)"><i class="fas fa-calendar-days"></i> Calendar</div>
-      <div class="nav-link" onclick="showSection('reports',this)"><i class="fas fa-file-pdf"></i> Reports</div>
-      <div class="nav-link" id="navLinkGoals" onclick="showSection('goals',this)"><i class="fas fa-bullseye"></i> Goals</div>
-      <div class="nav-link" id="navLinkTrader" onclick="showSection('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
-      <div class="nav-link" id="familyNavLink" onclick="showSection('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
+    <!-- v0.23 — Consolidated navigation. 13 flat sections grouped into 6
+         top-level entries. Multi-child groups (Portfolio / Intelligence /
+         Planning) reveal a segmented pill bar (#groupSubNav) at the top of
+         the content to switch between siblings. data-group drives the
+         active-highlight; preserved IDs keep auth toggles + the onboarding
+         tour working. -->
+    <nav class="space-y-1 mb-6" id="primaryNav">
+      <div class="nav-link active" data-group="overview" onclick="showGroup('overview',this)"><i class="fas fa-th-large"></i> Overview</div>
+      <div class="nav-link" data-group="portfolio" onclick="showGroup('portfolio',this)"><i class="fas fa-briefcase"></i> Portfolio</div>
+      <div class="nav-link" id="navLinkInsights" data-group="intelligence" onclick="showGroup('intelligence',this)"><i class="fas fa-brain"></i> Intelligence</div>
+      <div class="nav-link" id="navLinkGoals" data-group="planning" onclick="showGroup('planning',this)"><i class="fas fa-compass"></i> Planning</div>
+      <div class="nav-link" data-group="watchlist" onclick="showGroup('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
+      <div class="nav-link" id="navLinkTrader" data-group="trader" onclick="showGroup('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
+      <div class="nav-link" id="familyNavLink" data-group="family" onclick="showGroup('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
-      <div class="nav-link" id="adminNavLink" onclick="showSection('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i> Admin Panel</div>
+      <div class="nav-link" id="adminNavLink" data-group="admin" onclick="showGroup('admin',this)" style="display:none;color:#fbbf24;"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i> Admin Panel</div>
     </nav>
 
-    <!-- Today's Movers — top 3 gainers + bottom 3 losers in your portfolio.
-         Replaces the old Quick Stats which mostly duplicated info shown
-         elsewhere on the Overview. Clickable: tap a row to open the
-         Holding Detail page. -->
-    <div class="text-xs neutral uppercase font-semibold mb-3 flex items-center justify-between" style="letter-spacing:0.5px;">
-      <span><i class="fas fa-fire mr-1" style="color:var(--color-amber);"></i>Today's Movers</span>
-      <span id="moversAsOf" class="neutral" style="font-size:9px;text-transform:none;letter-spacing:0;"></span>
-    </div>
-    <div id="moversList" class="space-y-1">
-      <div class="text-xs neutral py-3 text-center">No price data yet</div>
-    </div>
+    <!-- v0.23 — Today's Movers strip removed from the sidebar (it duplicated
+         the #portfolioPulse strip at the top of the Overview). renderTodaysMovers()
+         is null-guarded on #moversList, so it safely no-ops now. -->
 
     <!-- Hidden file inputs used by import flows (still referenced from
          elsewhere — Holdings page, modals). Action buttons themselves
@@ -1736,6 +1727,11 @@
 
   <!-- MAIN CONTENT -->
   <main class="flex-1 p-6 overflow-auto">
+
+    <!-- v0.23 — Group sub-nav (segmented pill bar). Populated by
+         renderGroupSubNav() with the siblings of the active section's group.
+         Hidden for single-child groups (Overview / Watchlist / TraderIQ). -->
+    <div id="groupSubNav" style="display:none;margin-bottom:20px;"></div>
 
     <!-- OVERVIEW SECTION -->
     <div id="section-overview">
@@ -9510,9 +9506,11 @@ function _showSectionCore(name, el) {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
-  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
-  const active = el || document.querySelector(`.nav-link[onclick*="'${name}'"]`);
-  if (active) active.classList.add('active');
+  // v0.23 — highlight the sidebar GROUP, render the group's pill bar, and
+  // remember this child so re-entering the group lands back here.
+  _highlightGroupNav(name);
+  _groupLastChild[_groupOf(name)] = name;
+  renderGroupSubNav(name);
   currentSection = name;
   if (name === 'market') renderMarketSection();
   if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); }
@@ -12998,11 +12996,89 @@ if (document.readyState === 'loading') {
 }
 
 // Public showSection — wraps core + syncs mobile tab bar
+// ═══════════════════════════════════════════════════════════════════════
+// NAVIGATION GROUPS (v0.23) — consolidate 13 flat sections into 6 grouped
+// sidebar entries. Multi-child groups render a segmented pill bar
+// (#groupSubNav) at the top of the content to switch siblings. All existing
+// section bodies + render functions are reused untouched — this is a pure
+// nav-layer change.
+// ═══════════════════════════════════════════════════════════════════════
+const NAV_GROUPS = [
+  { id:'overview',     label:'Overview',     children:['overview'] },
+  { id:'portfolio',    label:'Portfolio',    children:['holdings','performance','dividends'] },
+  { id:'intelligence', label:'Intelligence', children:['insights','market','news'] },
+  { id:'planning',     label:'Planning',     children:['goals','calendar','tax','reports'] },
+  { id:'watchlist',    label:'Watchlist',    children:['watchlist'] },
+  { id:'trader',       label:'TraderIQ',     children:['trader'] },
+  { id:'family',       label:'Family',       children:['family'] },
+  { id:'admin',        label:'Admin',        children:['admin'] }
+];
+const SECTION_LABELS = {
+  overview:'Overview', holdings:'Holdings', performance:'Performance', dividends:'Dividends',
+  insights:'AI Insights', market:'Market', news:'News',
+  goals:'Goals', calendar:'Calendar', tax:'NZ Tax (FIF)', reports:'Reports',
+  watchlist:'Watchlist', trader:'TraderIQ', family:'Family', admin:'Admin'
+};
+const SECTION_ICONS = {
+  holdings:'fa-briefcase', performance:'fa-chart-line', dividends:'fa-coins',
+  insights:'fa-brain', market:'fa-globe', news:'fa-newspaper',
+  goals:'fa-bullseye', calendar:'fa-calendar-days', tax:'fa-receipt', reports:'fa-file-pdf'
+};
+// child-section → group-id lookup, built once from NAV_GROUPS
+const _SECTION_TO_GROUP = (() => {
+  const m = {};
+  NAV_GROUPS.forEach(g => g.children.forEach(c => { m[c] = g.id; }));
+  return m;
+})();
+// remember the last-opened child per group so re-entering a group lands
+// where you left off (e.g. back to Market, not always AI Insights)
+const _groupLastChild = {};
+
+function _groupOf(section)  { return _SECTION_TO_GROUP[section] || section; }
+function _groupDef(groupId) { return NAV_GROUPS.find(g => g.id === groupId); }
+
+// Open a group from the sidebar → show its remembered (or first) child.
+function showGroup(groupId, el) {
+  const g = _groupDef(groupId);
+  if (!g) return;
+  showSection(_groupLastChild[groupId] || g.children[0], null);
+}
+
+// Render the segmented pill bar for the active section's group.
+// Single-child groups hide the bar entirely.
+function renderGroupSubNav(section) {
+  const bar = document.getElementById('groupSubNav');
+  if (!bar) return;
+  const g = _groupDef(_groupOf(section));
+  if (!g || g.children.length <= 1) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const pills = g.children.map(c => {
+    const active = c === section ? ' active' : '';
+    const icon = SECTION_ICONS[c] ? `<i class="fas ${SECTION_ICONS[c]} mr-2"></i>` : '';
+    return `<button class="seg-btn${active}" onclick="showSection('${c}',null)">${icon}${SECTION_LABELS[c] || c}</button>`;
+  }).join('');
+  bar.innerHTML = `<div class="segmented-control">${pills}</div>`;
+  bar.style.display = '';
+}
+
+// Highlight the GROUP in the sidebar (not the individual child section),
+// so the broken legacy [onclick*='market'] selectors no longer matter.
+function _highlightGroupNav(section) {
+  const group = _groupOf(section);
+  document.querySelectorAll('#primaryNav .nav-link').forEach(n => {
+    if (n.dataset.group) n.classList.toggle('active', n.dataset.group === group);
+    else n.classList.remove('active');
+  });
+}
+
 function showSection(name, el) {
   _showSectionCore(name, el);
-  document.querySelectorAll('.mob-tab').forEach(t => {
-    t.classList.toggle('active', t.dataset.section === name);
-  });
+  // Mobile bottom-tab highlight: activate exactly one tab. Prefer an exact
+  // section match; otherwise the first tab whose group matches (so 'market'
+  // / 'news' light the 'Intel' tab, 'dividends' lights the 'Portfolio' tab).
+  const _mobTabs = [...document.querySelectorAll('.mob-tab')].filter(t => t.dataset.section);
+  const _mobTarget = _mobTabs.find(t => t.dataset.section === name)
+                  || _mobTabs.find(t => _groupOf(t.dataset.section) === _groupOf(name));
+  _mobTabs.forEach(t => t.classList.toggle('active', t === _mobTarget));
   // v0.10 — render the Market Pulse personal exposure card when its
   // section opens. Cheap, recalculated from current portfolio metrics.
   if (name === 'market') {
@@ -13191,27 +13267,23 @@ function renderMarketExposure() {
 
 <!-- MOBILE BOTTOM TAB BAR -->
 <div id="mobileTabBar">
-  <div class="mob-tab active" data-section="overview" onclick="showSection('overview',document.querySelector('.nav-link[onclick*=\'overview\']'))">
+  <div class="mob-tab active" data-section="overview" onclick="showSection('overview',null)">
     <i class="fas fa-th-large"></i>
     <span>Overview</span>
   </div>
-  <div class="mob-tab" data-section="holdings" onclick="showSection('holdings',document.querySelector('.nav-link[onclick*=\'holdings\']'))">
+  <div class="mob-tab" data-section="holdings" onclick="showSection('holdings',null)">
     <i class="fas fa-briefcase"></i>
-    <span>Holdings</span>
+    <span>Portfolio</span>
   </div>
-  <div class="mob-tab" data-section="performance" onclick="showSection('performance',document.querySelector('.nav-link[onclick*=\'performance\']'))">
+  <div class="mob-tab" data-section="performance" onclick="showSection('performance',null)">
     <i class="fas fa-chart-line"></i>
     <span>Performance</span>
   </div>
-  <div class="mob-tab" data-section="market" onclick="showSection('market',document.querySelector('.nav-link[onclick*=\'market\']'))">
-    <i class="fas fa-globe"></i>
-    <span>Market</span>
-  </div>
-  <div class="mob-tab" data-section="insights" onclick="showSection('insights',document.querySelector('.nav-link[onclick*=\'insights\']'))">
+  <div class="mob-tab" data-section="insights" onclick="showSection('insights',null)">
     <i class="fas fa-brain"></i>
-    <span>AI</span>
+    <span>Intel</span>
   </div>
-  <div class="mob-tab" id="mobileAdminTab" data-section="admin" onclick="showSection('admin',document.querySelector('.nav-link[onclick*=\'admin\']'))" style="display:none;color:#fbbf24;">
+  <div class="mob-tab" id="mobileAdminTab" data-section="admin" onclick="showSection('admin',null)" style="display:none;color:#fbbf24;">
     <i class="fas fa-shield-alt"></i>
     <span>Admin</span>
   </div>

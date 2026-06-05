@@ -1,8 +1,19 @@
 # InvestIQ — Prioritised Action Plan
 
-_Last revisited: 2026-05-28 · **v0.20-auth-data-safety** shipped (see `docs/CHECKPOINT_v0.20.md`)_
+_Last revisited: 2026-06-05 · **v0.22.x price-alerts pipeline verified end-to-end** (real email delivered)_
 
 This is the single source of truth for what's next. Priority order is intentional — do P0 first, then P1 top-down.
+
+---
+
+## ✅ Recently completed (v0.21 → v0.23)
+
+| Tag | What |
+|---|---|
+| `v0.23` _(pending live verify)_ | **Consolidated navigation.** 13 flat sidebar sections → 6 grouped entries (Overview · Portfolio · Intelligence · Planning · Watchlist · TraderIQ). Multi-child groups show a `.segmented-control` pill bar (`#groupSubNav`); AI features (AI Insights · Market · News) now live under **Intelligence**. Pure nav-layer change — every section body reused untouched. Group-based active-highlight (`data-group`); preserved IDs keep auth toggles + onboarding tour working. Sidebar "Today's Movers" removed (redundant with the `#portfolioPulse` strip). Mobile tab bar trimmed (Market folded into Intel). |
+| `v0.21a → v0.21e` | **Multi-portfolio epic.** Header switcher, combined "All portfolios" view, per-portfolio AI + tax scoping, per-portfolio daily snapshots, family aggregate per-member split. Built on the `state.portfolio` accessor pattern (zero section-code churn). Includes v0.21.1 data-loss hotfix: settings stash (`settings._portfolios`) + structure guard + `NOTIFY pgrst` after migration 016. |
+| `v0.22` | **Pro reports** — per-platform breakdown + per-portfolio breakdown report types; FIF tax report now per-person across all portfolios (NZ$50k de-minimis). |
+| `v0.22.1 → v0.22.4` | **Price-alert diagnosis + fix.** Root cause: yfinance returns empty on Render datacenter IPs → proxy fed `NO DATA` → condition never evaluated. Fix: Yahoo chart-API fallback in `claude_proxy.py` (`_yahoo_chart_quote`). Plus in-app "Test alerts now" diagnostic + admin "Run Alert Check" button. **✅ Verified 2026-06-05: alert fired on the 30-min cron, Resend delivered the email to inbox.** |
 
 ---
 
