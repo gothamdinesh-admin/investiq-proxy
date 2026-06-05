@@ -60,49 +60,53 @@
          action, emerald growth, teal-cyan data, gold for premium "IQ"
          moments. Dark surfaces stay slightly desaturated for readability
          (Google dark-mode guidance — saturated on dark causes eye strain). */
-      /* Surfaces */
-      --bg:               #07111F;       /* deep navy app bg */
-      --bg-panel:         #0F172A;       /* card surface */
-      --bg-panel-2:       #182235;       /* elevated panel */
-      --bg-input:         #182235;
-      --bg-deep:          #0B1F3A;       /* nested insets — navy */
-      --bg-hover:         #1E2A44;
-      /* Borders */
-      --border:           #334155;
-      --border-strong:    #475569;
+      /* Surfaces — Midnight Sapphire (v0.24): richer, deeper ink-navy than
+         the old tech-blue; surfaces carry a faint sapphire undertone. */
+      --bg:               #060B16;       /* deep ink navy app bg */
+      --bg-panel:         #0E1626;       /* sapphire card surface */
+      --bg-panel-2:       #16223A;       /* elevated panel */
+      --bg-input:         #16223A;
+      --bg-deep:          #0A1426;       /* nested insets */
+      --bg-hover:         #1C2A45;
+      /* Borders — cooler, refined */
+      --border:           #283750;
+      --border-strong:    #3C5070;
       /* Text — four-tier system, audited against WCAG AA on bg #07111F.
          Primary: titles + key numbers (17.8:1, AAA).
          Body:    paragraph text — new middle tier (11.5:1, AAA).
          Secondary: labels + meta — slightly brighter slate (7.6:1, AAA).
          Muted:   timestamps + hints — bumped from #64748B (failed AA at
                   3.7:1) to slate-400 (5.6:1, passes AA body). */
-      --text-primary:     #F8FAFC;
-      --text-body:        #CBD5E1;
-      --text-secondary:   #A3B1C6;
-      --text-muted:       #7B8BAA;
-      --text-inverted:    #07111F;
-      /* Accents (functional, not decorative) */
-      --accent:           #60A5FA;       /* intelligent blue — primary CTA */
-      --accent-hover:     #3B82F6;
-      --accent-soft:      rgba(96,165,250,0.12);
-      --accent-soft-2:    rgba(96,165,250,0.22);
-      --color-indigo:     #60A5FA;       /* fold into blue for consistency */
-      --color-blue:       #60A5FA;       /* info */
-      --color-green:      #34D399;       /* gains — emerald */
+      --text-primary:     #EFF3F9;       /* cool white (was #F8FAFC) */
+      --text-body:        #C6D2E4;
+      --text-secondary:   #9FAFC8;
+      --text-muted:       #7585A8;
+      --text-inverted:    #060B16;
+      /* Accents (functional, not decorative) — platinum-blue links/icons,
+         platinum-sapphire CTA, champagne gold for premium "IQ" moments. */
+      --accent:           #9DB7DE;       /* platinum-blue — links, icons, soft fills */
+      --accent-hover:     #7E9DCB;
+      --accent-soft:      rgba(157,183,222,0.12);
+      --accent-soft-2:    rgba(157,183,222,0.22);
+      --btn-primary:      #3F6BB0;       /* platinum-sapphire — primary CTA bg (white text) */
+      --btn-primary-hover:#34598F;
+      --color-indigo:     #9DB7DE;       /* fold into platinum-blue */
+      --color-blue:       #9DB7DE;       /* info */
+      --color-green:      #34D399;       /* gains — emerald (kept) */
       --color-green-soft: rgba(52,211,153,0.12);
-      --color-red:        #F87171;       /* losses */
-      --color-red-soft:   rgba(248,113,113,0.12);
-      --color-amber:      #FCD34D;       /* premium IQ / dividends — gold */
-      --color-amber-soft: rgba(252,211,77,0.12);
+      --color-red:        #F0746A;       /* losses — muted coral */
+      --color-red-soft:   rgba(240,116,106,0.12);
+      --color-amber:      #E5C76B;       /* premium IQ / dividends — champagne gold */
+      --color-amber-soft: rgba(229,199,107,0.12);
       --color-teal:       #22D3EE;       /* data accent — teal-cyan */
       --color-violet:     #A78BFA;       /* KiwiSaver / secondary tier */
       --color-orange:     #FB923C;       /* real estate */
       /* Charts */
-      --chart-grid:       rgba(51,65,85,0.4);
-      --chart-text:       #64748B;
+      --chart-grid:       rgba(40,55,80,0.45);
+      --chart-text:       #7585A8;
       /* Scrollbar */
-      --scrollbar-bg:     #0F172A;
-      --scrollbar-fg:     #334155;
+      --scrollbar-bg:     #0E1626;
+      --scrollbar-fg:     #283750;
     }
 
     [data-theme="light"] {
@@ -130,6 +134,8 @@
       --accent-hover:     #1E40AF;
       --accent-soft:      rgba(29,78,216,0.10);
       --accent-soft-2:    rgba(29,78,216,0.18);
+      --btn-primary:      #1D4ED8;       /* primary CTA bg (light) */
+      --btn-primary-hover:#1E40AF;
       --color-indigo:     #1D4ED8;       /* fold into blue */
       --color-blue:       #1D4ED8;
       --color-green:      #10B981;       /* emerald */
@@ -208,6 +214,21 @@
     [data-theme="light"] [style*="background:#080d1a"] { background: var(--bg) !important; }
     [data-theme="light"] [style*="background:#1e2d4a"] { background: var(--bg-panel-2) !important; }
 
+    /* ═══════════════════════════════════════════════════════════════════
+       v0.24 — MIDNIGHT SAPPHIRE global inline-hex retargets. Theme-agnostic
+       (var() resolves per theme); the [data-theme="light"] rules above win in
+       light mode by higher specificity. This shifts the ~190 legacy inline
+       brand hues onto the refined palette without editing each style attribute:
+         old gold  #fbbf24 / #fcd34d → champagne  (--color-amber)
+         old blue  #818cf8 / #60a5fa → platinum   (--accent)
+       ═══════════════════════════════════════════════════════════════════ */
+    [style*="color:#fbbf24"], [style*="color: #fbbf24"],
+    [style*="color:#fcd34d"], [style*="color: #fcd34d"],
+    [style*="color:#FCD34D"], [style*="color: #FCD34D"] { color: var(--color-amber) !important; }
+    [style*="color:#818cf8"], [style*="color: #818cf8"],
+    [style*="color:#60a5fa"], [style*="color: #60a5fa"],
+    [style*="color:#60A5FA"], [style*="color: #60A5FA"] { color: var(--accent) !important; }
+
     /* Common selectors targeting class-based / explicit components */
     [data-theme="light"] nav { background: rgba(255,255,255,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
@@ -270,8 +291,14 @@
     .badge-neutral { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
 
     .btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
-    .btn-primary { background: #6366f1; color: white; }
-    .btn-primary:hover { background: #5254cc; transform: translateY(-1px); }
+    .btn-primary { background: var(--btn-primary); color: white; }
+    .btn-primary:hover { background: var(--btn-primary-hover); transform: translateY(-1px); }
+    /* v0.24 — retarget the 22 legacy hardcoded indigo (#6366f1) CTAs to the
+       theme's platinum-sapphire primary without editing each inline style.
+       Attribute selector + !important overrides inline backgrounds; gradients
+       (linear-gradient(...#6366f1...)) are intentionally untouched. */
+    [style*="background:#6366f1"],
+    [style*="background: #6366f1"] { background: var(--btn-primary) !important; }
     .btn-secondary { background: #1e2d4a; color: #c8d6ef; border: 1px solid #2a3f60; }
     .btn-secondary:hover { background: #253554; }
     .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -332,11 +359,11 @@
     }
     .metric-card.clickable:hover::after { opacity: 0.7; transform: translateX(2px); }
     .metric-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
-    .metric-card.blue::before { background: linear-gradient(90deg, #6366f1, transparent); }
-    .metric-card.green::before { background: linear-gradient(90deg, #34d399, transparent); }
-    .metric-card.red::before { background: linear-gradient(90deg, #f87171, transparent); }
-    .metric-card.purple::before { background: linear-gradient(90deg, #a78bfa, transparent); }
-    .metric-card.yellow::before { background: linear-gradient(90deg, #fbbf24, transparent); }
+    .metric-card.blue::before { background: linear-gradient(90deg, var(--accent), transparent); }
+    .metric-card.green::before { background: linear-gradient(90deg, var(--color-green), transparent); }
+    .metric-card.red::before { background: linear-gradient(90deg, var(--color-red), transparent); }
+    .metric-card.purple::before { background: linear-gradient(90deg, var(--color-violet), transparent); }
+    .metric-card.yellow::before { background: linear-gradient(90deg, var(--color-amber), transparent); }
 
     .sidebar { width: 260px; min-width: 260px; }
 
