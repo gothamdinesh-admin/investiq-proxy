@@ -299,8 +299,8 @@
        (linear-gradient(...#6366f1...)) are intentionally untouched. */
     [style*="background:#6366f1"],
     [style*="background: #6366f1"] { background: var(--btn-primary) !important; }
-    .btn-secondary { background: #1e2d4a; color: #c8d6ef; border: 1px solid #2a3f60; }
-    .btn-secondary:hover { background: #253554; }
+    .btn-secondary { background: var(--bg-panel-2); color: var(--text-body); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--bg-hover); }
     .btn-sm { padding: 5px 10px; font-size: 12px; }
     .btn-danger { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
     .btn-danger:hover { background: rgba(248,113,113,0.25); }
@@ -954,16 +954,20 @@
 
     .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
 
-    .gradient-text { background: linear-gradient(90deg, #1D4ED8, #10B981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    /* v0.24 — wordmark gradient: platinum → champagne in dark (var-driven so
+       light keeps its own readable pairing via the override below). */
+    .gradient-text { background: linear-gradient(90deg, var(--accent), var(--color-amber)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     [data-theme="light"] .gradient-text { background: linear-gradient(90deg, #1D4ED8, #047857); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
 
     /* Brand mark — used in the nav. Navy/white "Invest" + gradient "IQ" +
        gold insight dot. Pure inline so it scales on retina + theme-aware. */
     .brand-mark { display: inline-flex; align-items: baseline; gap: 2px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; }
     .brand-mark .bm-invest { color: var(--text-primary); }
-    .brand-mark .bm-iq { background: linear-gradient(90deg, #1D4ED8, #10B981); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; padding-left: 2px; }
-    .brand-mark .bm-dot { width: 6px; height: 6px; border-radius: 50%; background: #F59E0B; box-shadow: 0 0 8px rgba(245,158,11,0.6); margin-left: 4px; align-self: center; }
-    .brand-icon { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #0B1F3A 0%, #1D4ED8 50%, #10B981 100%); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(29,78,216,0.25); }
+    .brand-mark .bm-iq { background: linear-gradient(90deg, var(--accent), var(--color-amber)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; padding-left: 2px; }
+    .brand-mark .bm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-amber); box-shadow: 0 0 8px rgba(229,199,107,0.6); margin-left: 4px; align-self: center; }
+    /* v0.24 — brand icon: fixed deep-sapphire → platinum → champagne. Kept a
+       dark start so the glyph stays legible in light mode too. */
+    .brand-icon { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #0A1426 0%, #3F6BB0 50%, #E5C76B 100%); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(63,107,176,0.25); }
     .brand-icon i { color: #FFFFFF; font-size: 14px; }
     .brand-icon::after { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #FCD34D; transform: translate(11px,-11px); box-shadow: 0 0 6px rgba(252,211,77,0.7); }
     .brand-icon { position: relative; }
@@ -1165,7 +1169,7 @@
 <div id="toastContainer" style="position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 40px);"></div>
 
 <!-- FAMILY INVITE BANNER — shown when URL has ?family_invite=<token> -->
-<div id="familyInviteBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#6366f1,#22d3ee);padding:14px 20px;color:white;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+<div id="familyInviteBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#3F6BB0,#22d3ee);padding:14px 20px;color:white;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
   <div style="max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
     <i class="fas fa-envelope-open-text" style="font-size:18px;"></i>
     <div style="flex:1;min-width:220px;">
@@ -1354,7 +1358,7 @@
     <!-- Step 1 — Welcome -->
     <div id="onboardingStep1">
       <div class="text-center mb-6">
-        <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#818cf8);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(99,102,241,0.3);">
+        <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#3F6BB0,#9DB7DE);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(63,107,176,0.3);">
           <i class="fas fa-chart-line text-white" style="font-size:28px;"></i>
         </div>
         <h2 class="text-2xl font-bold gradient-text mb-2">Welcome to InvestIQ</h2>
