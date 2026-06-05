@@ -8863,13 +8863,29 @@ async function diagnosePriceAlerts() {
   // Live prices for ticker alerts (via the same proxy the app uses).
   const tickers = [...new Set(alerts.filter(a => a.scope === 'ticker' && a.symbol).map(a => a.symbol))];
   let prices = {};
+  let proxyStatus = '';
   if (tickers.length) {
-    try {
-      const base = (state.settings.proxyUrl || '').replace(/\/$/, '');
-      const res = await fetch(`${base}/api/market?symbols=${encodeURIComponent(tickers.join(','))}`, { headers: proxyHeaders(), signal: AbortSignal.timeout(12000) });
-      if (res.ok) prices = await res.json();
-    } catch (e) { console.warn('[alert-diag] price fetch failed', e); }
+    const base = (state.settings.proxyUrl || '').replace(/\/$/, '');
+    const url = `${base}/api/market?symbols=${encodeURIComponent(tickers.join(','))}`;
+    // Try twice — the first hit may be a cold Render start (slow first response).
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(url, { headers: proxyHeaders(), signal: AbortSignal.timeout(attempt === 1 ? 12000 : 20000) });
+        if (res.ok) {
+          prices = await res.json();
+          const got = Object.keys(prices).filter(k => prices[k] && prices[k].price != null);
+          proxyStatus = `Price source ${_escape(base.replace(/^https?:\/\//, ''))} → HTTP ${res.status}, ${got.length}/${tickers.length} symbol(s) priced`;
+          break;
+        }
+        proxyStatus = `Price source returned HTTP ${res.status} — ${res.status === 403 ? 'auth (X-Proxy-Secret)' : res.status === 429 ? 'rate-limited' : 'server error'}`;
+      } catch (e) {
+        proxyStatus = `Price source unreachable: ${_escape((e && e.message) || 'timeout')} — Render proxy may be cold; try again in ~30s`;
+      }
+      if (attempt === 1 && !Object.keys(prices).length) await new Promise(r => setTimeout(r, 1500));
+    }
   }
+  const proxyOk = Object.keys(prices).some(k => prices[k] && prices[k].price != null);
+  let anyNoData = false;
   // Portfolio day-% from latest + prior snapshot.
   let pfVal = null, pfDayPct = null;
   if (alerts.some(a => a.scope === 'portfolio')) {
@@ -8899,7 +8915,10 @@ async function diagnosePriceAlerts() {
     let price = null, pct = null, note = '';
     if (isTicker) {
       const q = prices[a.symbol];
-      if (!q || q.price == null) { note = 'no live price (proxy cold / symbol invalid)'; }
+      if (!q || q.price == null) {
+        note = proxyOk ? 'Yahoo didn’t recognise this symbol (check ticker)' : 'price source unavailable — retry';
+        anyNoData = true;
+      }
       else { price = q.price; pct = q.changePct; }
     } else {
       price = pfVal; pct = pfDayPct;
@@ -8926,7 +8945,13 @@ async function diagnosePriceAlerts() {
     </tr>`;
   }).join('');
 
-  const hint = anyStuck
+  const hint = anyNoData
+    ? `<div style="margin-top:14px;padding:12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:8px;font-size:12px;color:#fca5a5;line-height:1.6;">
+         <b>⚠ No live price for one or more tickers.</b> This is the likely reason the alert never fires — the checker skips any symbol it can't price. ${proxyOk
+           ? 'The price source is up but didn’t recognise that symbol — confirm the exact Yahoo ticker (e.g. <b>UBER</b> for US, suffixes like <b>.NZ</b> / <b>.AX</b> / <b>.L</b> for other exchanges).'
+           : 'The price source (Render proxy) didn’t respond — it may be cold or down. Re-run this test in ~30s; if it keeps failing, check Admin → <b>Test Proxy</b> and the Render dashboard.'}
+       </div>`
+    : anyStuck
     ? `<div style="margin-top:14px;padding:12px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:8px;font-size:12px;color:#fbbf24;line-height:1.6;">
          <b>⚠ At least one alert would fire now but has never fired.</b> The condition is fine — the background checker isn't delivering. Check in Supabase:
          <ol style="margin:6px 0 0 18px;padding:0;color:#c8d6ef;">
@@ -8938,10 +8963,14 @@ async function diagnosePriceAlerts() {
        </div>`
     : `<div style="margin-top:14px;font-size:12px;color:#7a9cc0;line-height:1.5;">No alert matches its condition right now, so nothing would fire this moment. "WOULD FIRE NOW" appears when a live value crosses your threshold.</div>`;
 
+  const statusLine = proxyStatus
+    ? `<div style="margin:0 0 10px;font-size:11px;color:${proxyOk ? '#34d399' : '#fbbf24'};"><i class="fas fa-plug mr-1"></i>${proxyStatus}</div>`
+    : '';
+
   if (typeof showInfo === 'function') showInfo({
     title: 'Alert diagnostic',
     icon: 'fa-stethoscope',
-    body: `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px;">
+    body: statusLine + `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px;">
         <thead><tr style="color:#7a9cc0;font-size:10px;text-transform:uppercase;letter-spacing:0.4px;">
           <th style="padding:6px 8px;text-align:left;">Target</th>
           <th style="padding:6px 8px;text-align:left;">Condition</th>
