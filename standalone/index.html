@@ -7,7 +7,7 @@
   <meta name="description" content="InvestIQ is a personal investment portfolio tracker for NZ investors. Track stocks, ETFs, crypto and more across eToro, Sharesies, and other platforms.">
   <meta property="og:title" content="InvestIQ — Personal Portfolio Dashboard">
   <meta property="og:description" content="Track your investments across platforms with live prices, AI insights, and multi-currency support.">
-  <meta name="theme-color" content="#171614">
+  <meta name="theme-color" content="#060B16">
   <link rel="icon" type="image/svg+xml" href="assets/invest_iq_app_icon.svg">
   <link rel="apple-touch-icon" href="assets/invest_iq_app_icon.png">
   <link rel="shortcut icon" href="assets/invest_iq_app_icon.png">
@@ -60,51 +60,48 @@
          action, emerald growth, teal-cyan data, gold for premium "IQ"
          moments. Dark surfaces stay slightly desaturated for readability
          (Google dark-mode guidance — saturated on dark causes eye strain). */
-      /* Surfaces — Obsidian & Gold (v0.25.1): near-neutral charcoal with only a
-         whisper of warmth. The GOLD accent carries the warmth, so surfaces stay
-         clean (no brown/muddy cast) while still pairing with the cream light. */
-      --bg:               #171614;       /* near-neutral charcoal app bg */
-      --bg-panel:         #201F1C;       /* graphite card surface */
-      --bg-panel-2:       #292824;       /* elevated panel */
-      --bg-input:         #201F1C;
-      --bg-deep:          #100F0E;       /* nested insets (deeper) */
-      --bg-hover:         #2F2E2A;
-      /* Borders — neutral graphite, faint warmth */
-      --border:           #35332E;
-      --border-strong:    #4B4940;
-      /* Text — warm-ivory four-tier, audited WCAG-AA on bg #1B1812.
-         Primary titles/numbers AAA; muted darkened to keep AA on the lifted bg. */
-      --text-primary:     #F4F1E9;       /* soft ivory (less yellow) */
-      --text-body:        #D7D3C9;
-      --text-secondary:   #AFAB9F;
-      --text-muted:       #8C8980;
-      --text-inverted:    #171614;
-      /* Accents — champagne gold is the brand/CTA accent; warm-ivory on gold
-         buttons (dark text, handled by --text-inverted). Info-blue kept for
-         charts/info so not everything is gold. */
-      --accent:           #E0C173;       /* champagne gold — links, icons, soft fills */
-      --accent-hover:     #CBAA57;
-      --accent-soft:      rgba(224,193,115,0.12);
-      --accent-soft-2:    rgba(224,193,115,0.22);
-      --btn-primary:      #E0C173;       /* champagne gold — primary CTA bg (dark text) */
-      --btn-primary-hover:#CBAA57;
-      --color-indigo:     #E0C173;       /* fold into gold accent */
-      --color-blue:       #7BA0D6;       /* info / chart blue (kept distinct) */
-      --color-green:      #3FCF8E;       /* gains — emerald (pops on warm charcoal) */
-      --color-green-soft: rgba(63,207,142,0.12);
+      /* Surfaces — Midnight Sapphire (v0.24, restored): richer deep ink-navy
+         with a faint sapphire undertone. Pairs with the cream light theme. */
+      --bg:               #060B16;       /* deep ink navy app bg */
+      --bg-panel:         #0E1626;       /* sapphire card surface */
+      --bg-panel-2:       #16223A;       /* elevated panel */
+      --bg-input:         #16223A;
+      --bg-deep:          #0A1426;       /* nested insets */
+      --bg-hover:         #1C2A45;
+      /* Borders — cool, refined */
+      --border:           #283750;
+      --border-strong:    #3C5070;
+      /* Text — cool-white four-tier, audited WCAG-AA on bg #060B16. */
+      --text-primary:     #EFF3F9;       /* cool white */
+      --text-body:        #C6D2E4;
+      --text-secondary:   #9FAFC8;
+      --text-muted:       #7585A8;
+      --text-inverted:    #060B16;
+      /* Accents — platinum-blue links/icons, platinum-sapphire CTA (white text),
+         champagne gold for premium "IQ" moments. */
+      --accent:           #9DB7DE;       /* platinum-blue — links, icons, soft fills */
+      --accent-hover:     #7E9DCB;
+      --accent-soft:      rgba(157,183,222,0.12);
+      --accent-soft-2:    rgba(157,183,222,0.22);
+      --btn-primary:      #3F6BB0;       /* platinum-sapphire — primary CTA bg (white text) */
+      --btn-primary-hover:#34598F;
+      --color-indigo:     #9DB7DE;       /* fold into platinum-blue */
+      --color-blue:       #9DB7DE;       /* info */
+      --color-green:      #34D399;       /* gains — emerald */
+      --color-green-soft: rgba(52,211,153,0.12);
       --color-red:        #F0746A;       /* losses — muted coral */
       --color-red-soft:   rgba(240,116,106,0.12);
-      --color-amber:      #E5C76B;       /* premium IQ / dividends — champagne */
+      --color-amber:      #E5C76B;       /* premium IQ / dividends — champagne gold */
       --color-amber-soft: rgba(229,199,107,0.12);
-      --color-teal:       #4FD0D9;       /* data accent — teal */
-      --color-violet:     #B79BE0;       /* KiwiSaver / secondary tier */
-      --color-orange:     #F0A04B;       /* real estate */
+      --color-teal:       #22D3EE;       /* data accent — teal-cyan */
+      --color-violet:     #A78BFA;       /* KiwiSaver / secondary tier */
+      --color-orange:     #FB923C;       /* real estate */
       /* Charts */
-      --chart-grid:       rgba(74,73,66,0.32);
-      --chart-text:       #8C8980;
+      --chart-grid:       rgba(40,55,80,0.45);
+      --chart-text:       #7585A8;
       /* Scrollbar */
-      --scrollbar-bg:     #201F1C;
-      --scrollbar-fg:     #35332E;
+      --scrollbar-bg:     #0E1626;
+      --scrollbar-fg:     #283750;
     }
 
     [data-theme="light"] {
@@ -295,7 +292,7 @@
     .badge-neutral { background: rgba(148,163,184,0.12); color: #94a3b8; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
 
     .btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
-    .btn-primary { background: var(--btn-primary); color: var(--text-inverted); }
+    .btn-primary { background: var(--btn-primary); color: white; }
     .btn-primary:hover { background: var(--btn-primary-hover); transform: translateY(-1px); }
     /* v0.24 — retarget the 22 legacy hardcoded indigo (#6366f1) CTAs to the
        theme's platinum-sapphire primary without editing each inline style.
@@ -303,10 +300,6 @@
        (linear-gradient(...#6366f1...)) are intentionally untouched. */
     [style*="background:#6366f1"],
     [style*="background: #6366f1"] { background: var(--btn-primary) !important; }
-    /* v0.25 — the gold CTA needs DARK text (gold + white = poor contrast). The
-       inline buttons hardcode color:white, so flip them to the inverted text
-       in DARK only; light keeps white-on-sapphire. */
-    [data-theme="dark"] [style*="background:#6366f1"] { color: var(--text-inverted) !important; }
     .btn-secondary { background: var(--bg-panel-2); color: var(--text-body); border: 1px solid var(--border); }
     .btn-secondary:hover { background: var(--bg-hover); }
     .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -976,7 +969,7 @@
     .brand-mark .bm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-amber); box-shadow: 0 0 8px rgba(229,199,107,0.6); margin-left: 4px; align-self: center; }
     /* v0.24 — brand icon: fixed deep-sapphire → platinum → champagne. Kept a
        dark start so the glyph stays legible in light mode too. */
-    .brand-icon { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #14120C 0%, #6B5524 50%, #E5C76B 100%); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(224,193,115,0.22); }
+    .brand-icon { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, #0A1426 0%, #3F6BB0 50%, #E5C76B 100%); display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(63,107,176,0.25); }
     .brand-icon i { color: #FFFFFF; font-size: 14px; }
     .brand-icon::after { content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #FCD34D; transform: translate(11px,-11px); box-shadow: 0 0 6px rgba(252,211,77,0.7); }
     .brand-icon { position: relative; }
@@ -1178,7 +1171,7 @@
 <div id="toastContainer" style="position:fixed;bottom:20px;right:20px;z-index:10000;display:flex;flex-direction:column;gap:10px;pointer-events:none;max-width:calc(100vw - 40px);"></div>
 
 <!-- FAMILY INVITE BANNER — shown when URL has ?family_invite=<token> -->
-<div id="familyInviteBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#B08D3A,#E0C173);padding:14px 20px;color:#1B1812;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
+<div id="familyInviteBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9998;background:linear-gradient(90deg,#3F6BB0,#22d3ee);padding:14px 20px;color:white;box-shadow:0 4px 12px rgba(0,0,0,0.3);">
   <div style="max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
     <i class="fas fa-envelope-open-text" style="font-size:18px;"></i>
     <div style="flex:1;min-width:220px;">
@@ -1367,7 +1360,7 @@
     <!-- Step 1 — Welcome -->
     <div id="onboardingStep1">
       <div class="text-center mb-6">
-        <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#6B5524,#E5C76B);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(224,193,115,0.3);">
+        <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#3F6BB0,#9DB7DE);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(63,107,176,0.3);">
           <i class="fas fa-chart-line text-white" style="font-size:28px;"></i>
         </div>
         <h2 class="text-2xl font-bold gradient-text mb-2">Welcome to InvestIQ</h2>
