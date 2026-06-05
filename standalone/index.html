@@ -113,15 +113,18 @@
       /* InvestIQ light palette — slate scale. Body bg is slate-100, not
          slate-50 — gives enough contrast to white cards that they read as
          cards. Pure white reserved for cards + inputs (max contrast). */
-      --bg:               #F7FAFC;
-      --bg-panel:         #FFFFFF;
-      --bg-panel-2:       #F1F5F9;
-      --bg-input:         #FFFFFF;
-      --bg-deep:          #F8FAFC;
-      --bg-hover:         #F1F5F9;
-      /* Borders — slate-300 / 400 for visible separation on white */
-      --border:           #CBD5E1;
-      --border-strong:    #94A3B8;
+      /* v0.24.3 — Warm Ivory surfaces: soft cream paper instead of pure white,
+         kills glare and reads "private-wealth report". Pairs with the deep
+         sapphire accent + champagne-bronze gold. */
+      --bg:               #F2EFE9;       /* warm ivory page */
+      --bg-panel:         #FBF9F5;       /* soft cream cards (was #FFFFFF) */
+      --bg-panel-2:       #EDE9E1;       /* warm sand — elevated */
+      --bg-input:         #FCFBF8;       /* a touch brighter than cards for inputs */
+      --bg-deep:          #F6F3ED;       /* warm inset */
+      --bg-hover:         #EDE9E1;
+      /* Borders — soft warm taupe for separation without harsh lines */
+      --border:           #DDD6C9;
+      --border-strong:    #B9B0A0;
       /* Text — slate-900, not pure black. Four-tier mirror of dark.
          Primary 16.8:1, Body 11.2:1, Secondary 7.5:1, Muted 4.7:1. */
       /* v0.24.2 — Midnight Sapphire (light edition): sapphire-ink text, deep
@@ -151,11 +154,11 @@
       --color-violet:     #7C3AED;
       --color-orange:     #EA580C;
       /* Charts */
-      --chart-grid:       rgba(203,213,225,0.6);
-      --chart-text:       #64748B;
+      --chart-grid:       rgba(185,176,160,0.45);
+      --chart-text:       #6B6357;
       /* Scrollbar */
-      --scrollbar-bg:     #F1F5F9;
-      --scrollbar-fg:     #CBD5E1;
+      --scrollbar-bg:     #EDE9E1;
+      --scrollbar-fg:     #DDD6C9;
     }
 
     * { box-sizing: border-box; }
@@ -233,7 +236,7 @@
     [style*="color:#60A5FA"], [style*="color: #60A5FA"] { color: var(--accent) !important; }
 
     /* Common selectors targeting class-based / explicit components */
-    [data-theme="light"] nav { background: rgba(255,255,255,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
+    [data-theme="light"] nav { background: rgba(251,249,245,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
     /* Cards lift off the bg with subtle shadows + thicker borders in light
        mode. Without this they melted into the bg-50 background — the
