@@ -139,7 +139,7 @@ This is the single source of truth for what's next. Priority order is intentiona
 ## 🧠 P4 — AI & intelligence
 
 - [ ] **LM Studio / Ollama integration testing** — infrastructure is ready (`aiProvider: 'openai-compatible'` in Settings). Need to actually test with a local model via ngrok tunnel. Est: 1 hour to test + document.
-- [ ] **AI chat interface** — natural-language portfolio Q&A ("what's my tech exposure?", "should I rebalance?"). Uses existing Claude setup with conversation history. Est: half day.
+- [x] **AI chat interface** — DONE 2026-06-06 (v0.28). "Ask IQ" sub-page under Intelligence. Conversational Q&A over the active portfolio: a compact live snapshot (totals, day/return %, top 25 holdings, by-type/sector/region/platform aggregates) + last few transcript turns are fed to a Haiku `chat` agent. FMA-safe system prompt (educational analysis only, no personalised buy/sell advice, never invents figures). Suggested-question chips, quota-gated (admins/BYOK skip), respects combined-view scope.
 - [ ] **Custom agent creation** — admin can define new agent types with custom prompts. Est: 2 hours.
 - [ ] **AI-written rebalancing plan** — "you're 65% tech, target 40% — sell X shares of NVDA, buy Y of VT." Complements the Opportunity Scout agent. Est: 3 hours.
 - [x] **News feed for your holdings** — DONE 2026-04-19. New `/api/news` proxy endpoint (yfinance), News tab with scope filter (all / portfolio / watchlist / movers >2%), card layout with thumbnails, server-cached 30 min.

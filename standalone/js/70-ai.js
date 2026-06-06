@@ -381,8 +381,166 @@ Synthesize all four into a clear, prioritised action plan:
 4. **30-day focus** — one single thing the investor should do first
 
 Use the actual portfolio data. Reference specific holdings by ticker. NZ-based investor. Under 320 words.`
+  },
+  // v0.28 — "Ask IQ" conversational Q&A over the user's own portfolio.
+  // FMA-safe: educational analysis only, never personalised buy/sell advice.
+  chat: {
+    label: '💬 Ask IQ',
+    model: 'claude-haiku-4-5',
+    modelOpenAI: 'local-model',
+    maxTokens: 700,
+    system: `You are "Ask IQ", a friendly analyst built into the InvestIQ app. You answer the user's questions about THEIR OWN portfolio using ONLY the PORTFOLIO DATA provided in the message.
+
+Hard rules:
+- Educational analysis ONLY — never personalised financial advice. Do NOT tell the user to buy, sell, or hold specific securities. If they ask "should I…", explain the relevant factors (concentration, diversification, FX/currency exposure, sector tilt, tax) and suggest they consult a licensed financial adviser for a personal recommendation. (NZ FMA compliance — this is mandatory.)
+- Use ONLY the numbers in the provided data. NEVER invent holdings, prices, weights, or figures. If the data doesn't contain the answer, say so plainly.
+- The investor is NZ-based; the base currency is shown in the data. Reference real tickers and weights from the data.
+- Be concise (under ~180 words). Plain, warm tone. Use short bullets when they help. No filler preamble ("Certainly", "Great question"). Answer directly.`
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// ASK IQ (v0.28) — conversational Q&A over the active portfolio. Single
+// turn at the API layer (callClaude sends one user message), but we inject a
+// compact portfolio snapshot + the last few turns of transcript so follow-ups
+// have context. Educational only — the system prompt enforces FMA wording.
+// ═══════════════════════════════════════════════════════════════════════
+let askIQHistory = []; // [{ role:'user'|'assistant', content }]
+
+// Compact, token-bounded snapshot of the ACTIVE portfolio for the model.
+function buildAskIQContext() {
+  const m = getMetrics();
+  const base = state.settings.currency || 'NZD';
+  const sym  = CURRENCY_SYMBOLS[base] || 'NZ$';
+  if (!m.holdings.length) return null;
+
+  const sorted = [...m.holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  const TOP_N = 25;
+  const top = sorted.slice(0, TOP_N).map(h => ({
+    symbol: h.symbol, type: h.type,
+    sector: h.sector || _typeFallbackSector(h),
+    region: h.region || _regionFromSymbol(h),
+    platform: h.platform || 'Unknown',
+    value: Math.round(h.currentValue || 0),
+    weight: +(h.weight || 0).toFixed(1),
+    dayPct: (typeof h.dayChangePct === 'number') ? +h.dayChangePct.toFixed(2) : null,
+    totalPct: +(h.gainPct || 0).toFixed(1)
+  }));
+
+  // Aggregates so questions about exposure work even past the top 25.
+  const agg = (keyFn) => {
+    const out = {};
+    m.holdings.forEach(h => { const k = keyFn(h) || 'Unknown'; out[k] = (out[k] || 0) + (h.currentValue || 0); });
+    const tv = m.totalValue || 1;
+    return Object.entries(out).sort((a,b)=>b[1]-a[1])
+      .map(([k,v]) => ({ name:k, weight:+(v/tv*100).toFixed(1) }));
+  };
+
+  return {
+    baseCurrency: base, currencySymbol: sym,
+    totalValue: Math.round(m.totalValue || 0),
+    totalCost: Math.round(m.totalCost || 0),
+    totalReturnPct: +(m.totalGainPct || 0).toFixed(1),
+    dayChangePct: m.totalCost > 0 ? +(((m.totalDayChange||0)/m.totalValue)*100).toFixed(2) : null,
+    holdingsCount: m.holdings.length,
+    portfolioName: (typeof isViewingAll === 'function' && isViewingAll()) ? 'All portfolios (combined)'
+                   : (typeof getActivePortfolio === 'function' ? (getActivePortfolio()?.name || 'Portfolio') : 'Portfolio'),
+    byAssetType: agg(h => _assetTypeLabel ? _assetTypeLabel(h.type) : h.type),
+    bySector:    agg(h => h.sector || _typeFallbackSector(h)),
+    byRegion:    agg(h => h.region || _regionFromSymbol(h)),
+    byPlatform:  agg(h => h.platform || 'Unknown'),
+    topHoldings: top
+  };
+}
+
+async function askIQSend(presetText) {
+  const input = document.getElementById('askiqInput');
+  const text = (presetText != null ? presetText : (input ? input.value : '')).trim();
+  if (!text) return;
+
+  const ctx = buildAskIQContext();
+  if (!ctx) {
+    renderAskIQError('Add some holdings first — then I can answer questions about your portfolio.');
+    return;
+  }
+
+  // Each message is an AI call → counts against quota (admins/BYOK skip).
+  const allowed = await tryConsumeAiQuota();
+  if (!allowed) return; // paywall modal already shown
+
+  if (input) input.value = '';
+  askIQHistory.push({ role: 'user', content: text });
+  renderAskIQ(true); // true = show a thinking bubble
+
+  // Compose: portfolio snapshot + recent transcript + the current question.
+  const recent = askIQHistory.slice(-9, -1) // last few turns, excluding the just-pushed question
+    .map(t => `${t.role === 'user' ? 'User' : 'IQ'}: ${t.content}`).join('\n');
+  const composed =
+`PORTFOLIO DATA (live, base currency ${ctx.currencySymbol}):
+${JSON.stringify(ctx)}
+
+${recent ? `CONVERSATION SO FAR:\n${recent}\n\n` : ''}CURRENT QUESTION:
+${text}`;
+
+  try {
+    const answer = await callClaude('chat', composed);
+    askIQHistory.push({ role: 'assistant', content: answer });
+    renderAskIQ();
+  } catch (e) {
+    askIQHistory.push({ role: 'assistant', content: `⚠️ I couldn't answer that just now: ${e.message || 'request failed'}. Try again in a moment.` });
+    renderAskIQ();
+  }
+}
+
+function renderAskIQError(msg) {
+  const wrap = document.getElementById('askiqMessages');
+  if (wrap) wrap.innerHTML = `<div class="text-sm" style="color:var(--color-amber);padding:12px;">${_escape(msg)}</div>`;
+}
+
+function renderAskIQ(thinking) {
+  const wrap = document.getElementById('askiqMessages');
+  if (!wrap) return;
+
+  if (!askIQHistory.length && !thinking) {
+    wrap.innerHTML = `
+      <div class="text-center" style="padding:32px 16px;color:var(--text-muted);">
+        <i class="fas fa-comments" style="font-size:28px;opacity:0.4;"></i>
+        <div class="text-sm mt-3" style="color:var(--text-secondary);">Ask anything about your portfolio.</div>
+        <div class="text-xs mt-1">e.g. concentration, currency exposure, sector mix, diversification.</div>
+      </div>`;
+    return;
+  }
+
+  const bubble = (t) => {
+    if (t.role === 'user') {
+      return `<div style="display:flex;justify-content:flex-end;margin:10px 0;">
+        <div style="max-width:80%;background:var(--accent-soft-2);color:var(--text-primary);padding:10px 14px;border-radius:14px 14px 4px 14px;font-size:13px;line-height:1.5;">${_escape(t.content)}</div>
+      </div>`;
+    }
+    return `<div style="display:flex;justify-content:flex-start;margin:10px 0;">
+      <div style="max-width:88%;background:var(--bg-panel-2);border:1px solid var(--border);padding:10px 14px;border-radius:14px 14px 14px 4px;font-size:13px;line-height:1.55;">${formatMarkdown(t.content)}</div>
+    </div>`;
+  };
+
+  let html = askIQHistory.map(bubble).join('');
+  if (thinking) {
+    html += `<div style="display:flex;justify-content:flex-start;margin:10px 0;">
+      <div style="background:var(--bg-panel-2);border:1px solid var(--border);padding:10px 14px;border-radius:14px;font-size:13px;color:var(--text-muted);">
+        <span class="spinner" style="width:12px;height:12px;display:inline-block;margin-right:6px;"></span>IQ is thinking…</div>
+    </div>`;
+  }
+  wrap.innerHTML = html;
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function askIQKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); askIQSend(); }
+}
+
+function askIQClear() {
+  askIQHistory = [];
+  renderAskIQ();
+}
 
 async function callClaude(agentKey, userMessage) {
   const def = AGENT_DEFS[agentKey];
