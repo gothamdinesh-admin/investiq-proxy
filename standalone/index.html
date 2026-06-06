@@ -1724,12 +1724,12 @@
          active-highlight; preserved IDs keep auth toggles + the onboarding
          tour working. -->
     <nav class="space-y-1 mb-6" id="primaryNav">
-      <div class="nav-link active" data-group="overview" onclick="showGroup('overview',this)"><i class="fas fa-th-large"></i> Overview</div>
-      <div class="nav-link" data-group="portfolio" onclick="showGroup('portfolio',this)"><i class="fas fa-briefcase"></i> Portfolio</div>
+      <div class="nav-link active" data-group="overview" onclick="showGroup('overview',this)"><i class="fas fa-gauge-high"></i> Overview</div>
+      <div class="nav-link" data-group="portfolio" onclick="showGroup('portfolio',this)"><i class="fas fa-wallet"></i> Portfolio</div>
       <div class="nav-link" id="navLinkInsights" data-group="intelligence" onclick="showGroup('intelligence',this)"><i class="fas fa-brain"></i> Intelligence</div>
       <div class="nav-link" id="navLinkGoals" data-group="planning" onclick="showGroup('planning',this)"><i class="fas fa-compass"></i> Planning</div>
       <div class="nav-link" data-group="watchlist" onclick="showGroup('watchlist',this)"><i class="fas fa-eye"></i> Watchlist</div>
-      <div class="nav-link" id="navLinkTrader" data-group="trader" onclick="showGroup('trader',this)" style="color:var(--accent);"><i class="fas fa-chart-line" style="color:var(--accent);"></i> TraderIQ</div>
+      <div class="nav-link" id="navLinkTrader" data-group="trader" onclick="showGroup('trader',this)" style="color:var(--accent);"><i class="fas fa-arrow-trend-up" style="color:var(--accent);"></i> TraderIQ</div>
       <div class="nav-link" id="familyNavLink" data-group="family" onclick="showGroup('family',this)" style="display:none;color:#22d3ee;"><i class="fas fa-users" style="color:var(--color-teal);"></i> Family</div>
       <!-- Account nav link — visible to all signed-in users -->
       <div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid #1e2d4a;margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>
@@ -1783,22 +1783,22 @@
       <!-- Summary metrics row -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div class="metric-card blue clickable fadeIn" onclick="showSection('holdings')" title="See all holdings that make up this value" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Total Value</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-sack-dollar mr-2"></i>Total Value</div>
           <div class="text-2xl font-bold mono" id="totalValue">£0.00</div>
           <div class="text-xs mt-2" id="totalCost" style="color:var(--text-muted);">Cost: £0.00</div>
         </div>
         <div class="metric-card green clickable fadeIn" onclick="showSection('performance')" title="View performance history" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Total Return</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-money-bill-trend-up mr-2"></i>Total Return</div>
           <div class="text-2xl font-bold mono" id="totalReturn">+£0.00</div>
           <div class="text-xs mt-2" id="totalReturnPct" style="color:var(--color-green);">+0.00%</div>
         </div>
         <div class="metric-card purple clickable fadeIn" onclick="showSection('performance')" title="View today's chart + history" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Day Change</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-bolt mr-2"></i>Day Change</div>
           <div class="text-2xl font-bold mono" id="dayChange">–</div>
           <div class="text-xs mt-2 neutral">Live market data</div>
         </div>
         <div class="metric-card yellow clickable fadeIn" onclick="showSection('insights')" title="Diversification breakdown + AI insights" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;">Diversification</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-shapes mr-2"></i>Diversification</div>
           <div class="text-2xl font-bold mono" id="divScore">–</div>
           <div class="text-xs mt-2 neutral" id="divHint">Add holdings to calculate</div>
         </div>
@@ -2190,7 +2190,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-brain" style="color:var(--accent);"></i>AI Insights &amp; Recommendations
+            <i class="fas fa-lightbulb" style="color:var(--accent);"></i>AI Insights &amp; Recommendations
             <span class="iq-badge">IQ</span>
           </h2>
           <div class="text-xs neutral mt-1">Four specialist Claude agents analyse your portfolio in parallel — health, sentiment, risk, opportunities.</div>
@@ -13054,7 +13054,7 @@ const SECTION_LABELS = {
 };
 const SECTION_ICONS = {
   holdings:'fa-briefcase', performance:'fa-chart-line', dividends:'fa-coins',
-  insights:'fa-brain', market:'fa-globe', news:'fa-newspaper',
+  insights:'fa-lightbulb', market:'fa-globe', news:'fa-newspaper',
   goals:'fa-bullseye', calendar:'fa-calendar-days', tax:'fa-receipt', reports:'fa-file-pdf'
 };
 // child-section → group-id lookup, built once from NAV_GROUPS
@@ -13301,11 +13301,11 @@ function renderMarketExposure() {
 <!-- MOBILE BOTTOM TAB BAR -->
 <div id="mobileTabBar">
   <div class="mob-tab active" data-section="overview" onclick="showSection('overview',null)">
-    <i class="fas fa-th-large"></i>
+    <i class="fas fa-gauge-high"></i>
     <span>Overview</span>
   </div>
   <div class="mob-tab" data-section="holdings" onclick="showSection('holdings',null)">
-    <i class="fas fa-briefcase"></i>
+    <i class="fas fa-wallet"></i>
     <span>Portfolio</span>
   </div>
   <div class="mob-tab" data-section="performance" onclick="showSection('performance',null)">
