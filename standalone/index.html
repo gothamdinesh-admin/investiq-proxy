@@ -1928,9 +1928,13 @@
           <select id="holdingsPlatformFilter" class="input" style="width:140px;" onchange="filterHoldings()">
             <option value="">All Platforms</option>
           </select>
-          <button id="groupByPlatformBtn" onclick="toggleGroupByPlatform()" class="btn btn-secondary" title="Group holdings by platform">
-            <i class="fas fa-layer-group mr-1"></i>Group
-          </button>
+          <div id="holdingsGroupSeg" class="segmented-control" style="align-self:center;" title="Group holdings by…">
+            <button class="seg-btn active" data-group="flat"     onclick="setHoldingsGroupBy('flat')">Flat</button>
+            <button class="seg-btn"        data-group="platform" onclick="setHoldingsGroupBy('platform')">Platform</button>
+            <button class="seg-btn"        data-group="sector"   onclick="setHoldingsGroupBy('sector')">Sector</button>
+            <button class="seg-btn"        data-group="country"  onclick="setHoldingsGroupBy('country')">Country</button>
+            <button class="seg-btn"        data-group="type"     onclick="setHoldingsGroupBy('type')">Type</button>
+          </div>
           <button onclick="refreshAllFundPrices()" class="btn" style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.35);" title="Refresh unit prices for every NZ fund and KiwiSaver holding">
             <i class="fas fa-bolt mr-1"></i>Refresh funds
           </button>
@@ -9921,13 +9925,13 @@ async function refreshAll() {
   btn.disabled = false;
 }
 
-let groupByPlatform = false;
+// v0.27 — Holdings grouping mode: 'flat' | 'platform' | 'sector' | 'country' | 'type'
+let holdingsGroupBy = 'flat';
 
-function toggleGroupByPlatform() {
-  groupByPlatform = !groupByPlatform;
-  const btn = document.getElementById('groupByPlatformBtn');
-  btn.style.borderColor = groupByPlatform ? '#818cf8' : '#334155';
-  btn.style.color = groupByPlatform ? '#818cf8' : '';
+function setHoldingsGroupBy(mode) {
+  holdingsGroupBy = mode;
+  document.querySelectorAll('#holdingsGroupSeg .seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.group === mode));
   filterHoldings();
 }
 
@@ -9950,8 +9954,8 @@ function filterHoldings() {
     (!typeF || h.type.toLowerCase() === typeF) &&
     (!platF || h.platform === platF)
   );
-  if (groupByPlatform) {
-    renderHoldingsByPlatform(filtered, metrics.totalValue);
+  if (holdingsGroupBy !== 'flat') {
+    renderHoldingsGrouped(filtered, metrics.totalValue, holdingsGroupBy);
   } else {
     renderDetailedHoldings(filtered, metrics.totalValue);
   }
@@ -10207,28 +10211,42 @@ ${h.dayChangePct != null ? '\nToday: '+(h.dayChangePct>=0?'+':'')+h.dayChangePct
 }
 
 // ===== PLATFORM GROUPED VIEW =====
-function renderHoldingsByPlatform(holdings, totalValue) {
+// v0.27 — group definition per dimension. Sector/Country fall back to the
+// same heuristics the Market section uses (_typeFallbackSector / _regionFromSymbol).
+const HOLDINGS_GROUP_DEFS = {
+  platform: { label:'Platform', icon:'fa-building',       get:(h)=> h.platform || 'Unknown' },
+  sector:   { label:'Sector',   icon:'fa-industry',       get:(h)=> h.sector || _typeFallbackSector(h) },
+  country:  { label:'Country',  icon:'fa-earth-americas', get:(h)=> h.region || _regionFromSymbol(h) },
+  type:     { label:'Type',     icon:'fa-shapes',         get:(h)=> _assetTypeLabel(h.type) },
+};
+function _assetTypeLabel(t) {
+  return ({ stock:'Stocks', etf:'ETFs', crypto:'Crypto', bond:'Bonds', fund:'Managed Funds',
+            mutualfund:'Mutual Funds', kiwisaver:'KiwiSaver', cash:'Cash', reit:'REITs' })[t] || 'Other';
+}
+
+function renderHoldingsGrouped(holdings, totalValue, groupKey) {
+  const def = HOLDINGS_GROUP_DEFS[groupKey] || HOLDINGS_GROUP_DEFS.platform;
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
   const el = document.getElementById('holdingsDetailed');
   if (!holdings.length) { el.innerHTML = renderEmptyHoldings(); return; }
 
-  const byPlatform = {};
+  const groups = {};
   holdings.forEach(h => {
-    const p = h.platform || 'Unknown';
-    if (!byPlatform[p]) byPlatform[p] = [];
-    byPlatform[p].push(h);
+    const k = def.get(h) || 'Unknown';
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(h);
   });
 
-  // Sort platforms by total value desc
-  const platforms = Object.keys(byPlatform).sort((a,b) => {
-    const va = byPlatform[a].reduce((s,h)=>s+h.currentValue,0);
-    const vb = byPlatform[b].reduce((s,h)=>s+h.currentValue,0);
+  // Sort groups by total value desc
+  const keys = Object.keys(groups).sort((a,b) => {
+    const va = groups[a].reduce((s,h)=>s+h.currentValue,0);
+    const vb = groups[b].reduce((s,h)=>s+h.currentValue,0);
     return vb - va;
   });
 
-  el.innerHTML = platforms.map(platform => {
-    const hs = byPlatform[platform];
+  el.innerHTML = keys.map(key => {
+    const hs = groups[key];
     const platVal   = hs.reduce((s,h) => s + h.currentValue, 0);
     const platCost  = hs.reduce((s,h) => s + h.costBasis, 0);
     const platGain  = platVal - platCost;
@@ -10241,8 +10259,8 @@ function renderHoldingsByPlatform(holdings, totalValue) {
       <div style="margin-bottom:8px;">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#0d1b2e;border-radius:8px 8px 0 0;border:1px solid #1e2d4a;border-bottom:none;">
           <div class="flex items-center gap-3">
-            <i class="fas fa-building" style="color:#818cf8;font-size:13px;"></i>
-            <span class="font-semibold text-sm">${platform}</span>
+            <i class="fas ${def.icon}" style="color:#818cf8;font-size:13px;"></i>
+            <span class="font-semibold text-sm">${_escape(String(key))}</span>
             <span class="text-xs neutral">${hs.length} holding${hs.length!==1?'s':''}</span>
           </div>
           <div class="flex items-center gap-4 text-sm">

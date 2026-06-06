@@ -119,7 +119,7 @@ This is the single source of truth for what's next. Priority order is intentiona
 - [ ] **Manual price override per holding** — lets user set price when Yahoo returns garbage (e.g. delisted or tiny-cap tickers). Est: 1 hour.
 - [x] **"Ignore this holding" toggle** — DONE 2026-04-19. Row button + view modal button + Hide-ignored filter + Total Value subtitle. Excludes from totals.
 - [ ] **Ticker autocomplete on Add Holding** — search Yahoo as user types. Est: 2 hours. _(Partial: implemented on watchlist via `/api/search` proxy route + native datalist. Same pattern can be lifted into Add Holding modal next session.)_
-- [ ] **Holdings grouping toggle** — by platform / by sector / by country / by asset type. Already partially there for platform. Est: 2 hours.
+- [x] **Holdings grouping toggle** — DONE 2026-06-06 (v0.27). Segmented control above Holdings: Flat / Platform / Sector / Country / Type, each non-flat mode renders groups with a subtotal header (value · gain $/% · % of portfolio). Generalised the old platform-only toggle; Sector/Country fall back to `_typeFallbackSector` / `_regionFromSymbol`.
 - [ ] **Per-holding notes/tags** — freeform + taggable ("long-term", "speculative", "dividend", etc). Est: 2 hours.
 
 ---
