@@ -156,6 +156,24 @@
       --scrollbar-fg:     #DDD6C9;
     }
 
+    /* ═══════════════════════════════════════════════════════════════════
+       HARBOUR EDITION theme (v0.29) — applied when <html data-edition="harbour">
+       (set by 00-config.js EDITION detection). PLACEHOLDER palette — REPLACE
+       with the official Harbour brand kit (hex) once provided. Overrides only
+       the brand accent/CTA; surfaces stay on the dark base. Works over either
+       light or dark via the variable layer.
+       ═══════════════════════════════════════════════════════════════════ */
+    :root[data-edition="harbour"] {
+      --accent:            #2DB7A3;   /* TODO: Harbour brand teal (placeholder) */
+      --accent-hover:      #1F9587;
+      --accent-soft:       rgba(45,183,163,0.12);
+      --accent-soft-2:     rgba(45,183,163,0.22);
+      --btn-primary:       #178A7B;   /* deeper teal for white-text CTAs */
+      --btn-primary-hover: #126E62;
+      --color-indigo:      #2DB7A3;
+      --color-amber:       #2DB7A3;   /* TODO: Harbour secondary accent */
+    }
+
     * { box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
     ::-webkit-scrollbar { width: 12px; height: 12px; }
@@ -1650,7 +1668,7 @@
     <div class="brand-mark" style="font-size:18px;">
       <span class="bm-invest">Invest</span><span class="bm-iq">IQ</span><span class="bm-dot"></span>
     </div>
-    <div class="text-xs neutral mt-1">Intelligent Investing Dashboard</div>
+    <div id="drawerTagline" class="text-xs neutral mt-1">Intelligent Investing Dashboard</div>
   </div>
 
   <div class="drawer-section-title">Sections</div>
@@ -12932,7 +12950,53 @@ function showSkeletons() {
   }
 }
 
+// v0.29 — apply the active EDITION (white-label): branding text, and the
+// feature flags that hide Family / Goals for the Harbour trial. The theme hook
+// (<html data-edition>) is already set in 00-config.js; this handles the DOM.
+function applyEdition() {
+  const ed = (typeof EDITION !== 'undefined' && EDITION) ? EDITION : null;
+  if (!ed) return;
+  try { document.title = ed.name + (ed.tagline ? ' — ' + ed.tagline : ''); } catch(e) {}
+
+  // Wordmarks — rewrite "InvestIQ" to the edition name. Skip the TraderIQ
+  // sub-brand (its lead text is "Trader"), which keeps its own name.
+  document.querySelectorAll('.brand-mark').forEach(bm => {
+    const lead = bm.querySelector('.bm-invest');
+    const acc  = bm.querySelector('.bm-iq');
+    if (!lead || lead.textContent === 'Trader') return;
+    lead.textContent = ed.wordmark.lead;
+    if (acc) acc.textContent = ed.wordmark.accent || '';
+  });
+
+  // Taglines
+  ['navTagline', 'drawerTagline'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = ed.tagline;
+  });
+
+  const feat = ed.features || {};
+  // Family OFF → remove the nav link + invite banner so it's unreachable.
+  if (!feat.family) {
+    document.getElementById('familyNavLink')?.remove();
+    document.getElementById('familyInviteBanner')?.remove();
+  }
+  // Goals OFF → drop the Goals pill from the Planning group.
+  if (typeof NAV_GROUPS !== 'undefined') {
+    if (!feat.goals) {
+      const plan = NAV_GROUPS.find(g => g.id === 'planning');
+      if (plan) plan.children = plan.children.filter(c => c !== 'goals');
+    }
+    if (!feat.family) {
+      const i = NAV_GROUPS.findIndex(g => g.id === 'family');
+      if (i >= 0) NAV_GROUPS.splice(i, 1);
+    }
+  }
+}
+
 async function init() {
+  // v0.29 — apply white-label edition (branding + feature flags) before
+  // anything renders, so the correct name/nav show on first paint.
+  try { applyEdition(); } catch(e) { console.warn('[edition]', e); }
+
   // Sentry error monitoring (Security C5). Initialise as early as possible
   // so we capture errors during loadState/initSupabase/etc. The SDK script
   // is loaded with `defer` so it may not be ready yet on the first paint;

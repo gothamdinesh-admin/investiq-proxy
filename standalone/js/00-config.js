@@ -3,12 +3,59 @@
 // Loaded FIRST. No dependencies. Safe to read from any later module.
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// EDITIONS (v0.29) — white-label / multi-tenant config. ONE codebase, many
+// branded instances. Each edition overrides branding, theme, enabled features,
+// and its OWN Supabase project (data isolation). Active edition is detected
+// from the hostname, overridable via ?edition=<id> or localStorage for testing
+// (e.g. open ?edition=harbour to preview the Harbour build locally).
+// ═══════════════════════════════════════════════════════════════════════
+const EDITIONS = {
+  personal: {
+    id: 'personal',
+    name: 'InvestIQ',
+    wordmark: { lead: 'Invest', accent: 'IQ' },      // .bm-invest + .bm-iq
+    tagline: 'Intelligent Investing Dashboard',
+    theme: 'navy',                                    // default theme (no [data-edition] override)
+    features: { family: true, goals: true },
+    supabaseUrl: 'https://szyclmouetbbigxexdrn.supabase.co',
+    supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno'
+  },
+  harbour: {
+    id: 'harbour',
+    name: 'Harbour',                                  // TODO: confirm exact wordmark with brand kit
+    wordmark: { lead: 'Harbour', accent: '' },
+    tagline: 'Portfolio Intelligence',                // TODO: confirm tagline
+    theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
+    features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)
+    // TODO: Harbour's OWN Supabase project (data isolation). Replace before go-live.
+    supabaseUrl: '<HARBOUR_SUPABASE_URL>',
+    supabaseKey: '<HARBOUR_SUPABASE_ANON_KEY>'
+  }
+};
+
+function detectEdition() {
+  try {
+    const q = new URL(location.href).searchParams.get('edition');
+    if (q && EDITIONS[q]) { try { localStorage.setItem('investiq_edition', q); } catch(e){} return q; }
+    const stored = localStorage.getItem('investiq_edition');
+    if (stored && EDITIONS[stored]) return stored;
+    if (location.hostname.toLowerCase().includes('harbour')) return 'harbour';
+  } catch(e) {}
+  return 'personal';
+}
+
+const EDITION = EDITIONS[detectEdition()] || EDITIONS.personal;
+// Apply the theme hook on <html> ASAP so the CSS override is live before paint.
+try { document.documentElement.setAttribute('data-edition', EDITION.theme); } catch(e) {}
+
 // PLATFORM CONFIG — managed by admin, baked in for all users.
 // Regular users never need to enter these. Admin can override in Settings.
 // The Supabase anon key is designed to be public; RLS enforces security.
+// supabaseUrl/Key now come from the active EDITION (per-tenant data isolation).
 const PLATFORM_CONFIG = {
-  supabaseUrl:  'https://szyclmouetbbigxexdrn.supabase.co',
-  supabaseKey:  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno',
+  supabaseUrl:  EDITION.supabaseUrl,
+  supabaseKey:  EDITION.supabaseKey,
   proxyUrl:     'https://investiq-proxy.onrender.com',
   adminEmails:  ['gothamdinesh@gmail.com'],
   // Set PROXY_SECRET here to match the PROXY_SECRET env var on your Render service.
