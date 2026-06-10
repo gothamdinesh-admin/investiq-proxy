@@ -157,34 +157,35 @@
     }
 
     /* ═══════════════════════════════════════════════════════════════════
-       HARBOUR EDITION theme (v0.29.1) — applied when <html data-edition="harbour">.
-       Official brand palette extracted from the Harbour logo SVG:
-         Harbour Blue  #005A7A   (primary — sails + wordmark)
-         Slate         #35404A   (secondary)
-       CTA uses #005A7A with white text. Links/icons use a lighter Harbour-blue
-       on dark (#3E9BBE) and the full #005A7A on light, for contrast either way.
+       HARBOUR EDITION theme (v0.29.2) — applied when <html data-edition="harbour">.
+       OFFICIAL Harbour brand palette (Brand Colours quick guide):
+         Primary:   Harbour Blue #005A79 · Slate #44546A · greys #E4E7E9 / #BFC8CC
+         Secondary: Cyan #2BB0D4 · Aqua #76CED9 · Blue-grey #6CA0B1 · Sand #D9BB8A · Bronze #C29144
+       Mapping: CTA = Harbour Blue (white text); accent/links = cyan on dark,
+       Harbour Blue on light; "gold" accents = sand on dark / bronze on light.
        ═══════════════════════════════════════════════════════════════════ */
     :root[data-edition="harbour"] {
-      --btn-primary:       #005A7A;   /* Harbour Blue — CTA (white text) */
-      --btn-primary-hover: #00475F;
-      --accent-soft:       rgba(0,90,122,0.14);
-      --accent-soft-2:     rgba(0,90,122,0.26);
+      --btn-primary:       #005A79;   /* Harbour Blue — CTA (white text) */
+      --btn-primary-hover: #00485F;
+      --accent-soft:       rgba(0,90,121,0.14);
+      --accent-soft-2:     rgba(0,90,121,0.26);
+      --border-strong:     #44546A;   /* Harbour slate */
     }
     :root[data-theme="dark"][data-edition="harbour"] {
-      --accent:       #3E9BBE;   /* lighter Harbour blue for links/icons on dark */
-      --accent-hover: #005A7A;
-      --color-indigo: #3E9BBE;
-      --color-blue:   #3E9BBE;
-      --color-amber:  #7FB2C4;   /* harbour-tinted accent in place of gold */
+      --accent:       #2BB0D4;   /* Harbour secondary cyan — pops on dark */
+      --accent-hover: #76CED9;   /* Harbour aqua */
+      --color-indigo: #2BB0D4;
+      --color-blue:   #2BB0D4;
+      --color-amber:  #D9BB8A;   /* Harbour sand (gold equivalent) on dark */
     }
     :root[data-theme="light"][data-edition="harbour"] {
-      --accent:       #005A7A;   /* full Harbour Blue reads well on cream */
-      --accent-hover: #00475F;
-      --color-indigo: #005A7A;
-      --color-blue:   #005A7A;
-      --color-amber:  #0E7C9C;
-      --btn-primary:  #005A7A;
-      --btn-primary-hover: #00475F;
+      --accent:       #005A79;   /* Harbour Blue reads on cream */
+      --accent-hover: #00485F;
+      --color-indigo: #005A79;
+      --color-blue:   #005A79;
+      --color-amber:  #C29144;   /* Harbour bronze on light */
+      --btn-primary:  #005A79;
+      --btn-primary-hover: #00485F;
     }
 
     * { box-sizing: border-box; }
@@ -12999,7 +13000,7 @@ function applyEdition() {
     document.querySelectorAll('link[rel~="icon"], link[rel="apple-touch-icon"]').forEach(l => { l.href = ed.favicon; });
   }
   if (ed.id === 'harbour') {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#005A7A');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#005A79');
   }
 
   const feat = ed.features || {};

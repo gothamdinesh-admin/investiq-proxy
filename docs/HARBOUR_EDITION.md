@@ -27,10 +27,11 @@ A separate Harbour file was rejected — a fork rots (the old `.claude/worktrees
 ## Preview locally / on the live URL
 Append `?edition=harbour` to the URL (e.g. `investiq-nz.netlify.app/?edition=harbour`). The gate/login screen shows the Harbour wordmark + theme. (Full login needs the Harbour Supabase keys — see pending.) To switch back: `?edition=personal`.
 
-## Brand kit — DONE (v0.29.1)
-Extracted from the official Harbour logo SVG (`Logos.zip`):
-- **Harbour Blue `#005A7A`** (primary — sails + wordmark), **Slate `#35404A`** (secondary), white.
-- Theme wired in `:root[data-edition="harbour"]` (theme-aware: lighter `#3E9BBE` accent on dark, full `#005A7A` on light; `#005A7A` CTAs with white text).
+## Brand kit — DONE (v0.29.2, official quick guide)
+Per the official **Harbour Brand Colours quick guide**:
+- **Primary:** Harbour Blue `#005A79` · Slate `#44546A` · greys `#E4E7E9` / `#BFC8CC`
+- **Secondary:** Cyan `#2BB0D4` · Aqua `#76CED9` · Blue-grey `#6CA0B1` · Sand `#D9BB8A` · Bronze `#C29144`
+- Theme wired in `:root[data-edition="harbour"]` (theme-aware): CTA = Harbour Blue (white text); accent/links = **cyan #2BB0D4 on dark**, **Harbour Blue #005A79 on light**; "gold" accents = sand on dark / bronze on light; border-strong = slate.
 - Brand mark = the **sails icon** (`standalone/assets/harbour/harbour-sails-blue.png`, reads on light + dark) + "Harbour" wordmark. Favicon + mobile theme-color also set to Harbour Blue.
 - Full-logo SVGs available for larger placements (gate/reports/email): `harbour-logo-blue.svg`, `harbour-logo-white.svg`.
 

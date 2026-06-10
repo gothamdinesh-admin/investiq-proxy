@@ -29,7 +29,8 @@ const EDITIONS = {
     logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — reads on light + dark
     favicon: 'assets/harbour/harbour-sails-blue.png',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
-    // Brand: Harbour Blue #005A7A + slate #35404A (extracted from the official logo SVG).
+    // Brand (official quick guide): Harbour Blue #005A79 + slate #44546A;
+    // secondary cyan #2BB0D4 / aqua #76CED9 / sand #D9BB8A / bronze #C29144.
     features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)
     // TODO: Harbour's OWN Supabase project (data isolation). Replace before go-live.
     supabaseUrl: '<HARBOUR_SUPABASE_URL>',
