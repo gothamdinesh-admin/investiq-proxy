@@ -26,7 +26,8 @@ const EDITIONS = {
     name: 'Harbour IQ',
     wordmark: { lead: 'Harbour', accent: 'IQ' },      // "IQ" shown in the brand accent
     tagline: 'Investment portfolio dashboard',        // TODO: confirm exact tagline with Harbour
-    logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — reads on light + dark
+    logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — on light surfaces
+    logoOnDark: 'assets/harbour/harbour-sails-white.png', // white sails — on the blue chrome (nav)
     favicon: 'assets/harbour/harbour-sails-blue.png',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
     lightOnly: true,                                  // Harbour palette has no true-dark → light theme only
