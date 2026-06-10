@@ -32,9 +32,10 @@ const EDITIONS = {
     // Brand (official quick guide): Harbour Blue #005A79 + slate #44546A;
     // secondary cyan #2BB0D4 / aqua #76CED9 / sand #D9BB8A / bronze #C29144.
     features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)
-    // TODO: Harbour's OWN Supabase project (data isolation). Replace before go-live.
-    supabaseUrl: '<HARBOUR_SUPABASE_URL>',
-    supabaseKey: '<HARBOUR_SUPABASE_ANON_KEY>'
+    // Harbour's OWN Supabase project (data isolation). Key is the browser-safe
+    // PUBLISHABLE key (RLS enforces security) — not a secret key.
+    supabaseUrl: 'https://sxbzvvzsvvkaukqrqgjt.supabase.co',
+    supabaseKey: 'sb_publishable_XvTbedw7tH80eKhO3JAhQQ_epZIJFmd'
   }
 };
 
