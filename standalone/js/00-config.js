@@ -23,10 +23,13 @@ const EDITIONS = {
   },
   harbour: {
     id: 'harbour',
-    name: 'Harbour',                                  // TODO: confirm exact wordmark with brand kit
+    name: 'Harbour',
     wordmark: { lead: 'Harbour', accent: '' },
-    tagline: 'Portfolio Intelligence',                // TODO: confirm tagline
+    tagline: 'Portfolio Intelligence',                // TODO: confirm exact tagline with Harbour
+    logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — reads on light + dark
+    favicon: 'assets/harbour/harbour-sails-blue.png',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
+    // Brand: Harbour Blue #005A7A + slate #35404A (extracted from the official logo SVG).
     features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)
     // TODO: Harbour's OWN Supabase project (data isolation). Replace before go-live.
     supabaseUrl: '<HARBOUR_SUPABASE_URL>',

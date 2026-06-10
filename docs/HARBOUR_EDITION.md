@@ -27,9 +27,19 @@ A separate Harbour file was rejected — a fork rots (the old `.claude/worktrees
 ## Preview locally / on the live URL
 Append `?edition=harbour` to the URL (e.g. `investiq-nz.netlify.app/?edition=harbour`). The gate/login screen shows the Harbour wordmark + theme. (Full login needs the Harbour Supabase keys — see pending.) To switch back: `?edition=personal`.
 
+## Brand kit — DONE (v0.29.1)
+Extracted from the official Harbour logo SVG (`Logos.zip`):
+- **Harbour Blue `#005A7A`** (primary — sails + wordmark), **Slate `#35404A`** (secondary), white.
+- Theme wired in `:root[data-edition="harbour"]` (theme-aware: lighter `#3E9BBE` accent on dark, full `#005A7A` on light; `#005A7A` CTAs with white text).
+- Brand mark = the **sails icon** (`standalone/assets/harbour/harbour-sails-blue.png`, reads on light + dark) + "Harbour" wordmark. Favicon + mobile theme-color also set to Harbour Blue.
+- Full-logo SVGs available for larger placements (gate/reports/email): `harbour-logo-blue.svg`, `harbour-logo-white.svg`.
+
+## ⚠️ Font licensing flag
+The `Monotype.zip` (Harmonia Sans, Serrano Pro) are **commercial desktop fonts under a Monotype EULA**. Embedding them as webfonts on a deployed site needs a **separate Monotype webfont licence** — a desktop licence does NOT cover `@font-face` on a public URL. So I did **not** embed them; the app keeps Inter. If Harbour holds a webfont licence (or it's an internal-only deployment that the licence covers), confirm and I'll wire Harmonia Sans for full brand fidelity.
+
 ## ⏳ PENDING (blocked on you)
-1. **Harbour brand kit** — official hex colours + logo. Replace the placeholder palette in the `:root[data-edition="harbour"]` block and confirm `EDITIONS.harbour.wordmark` / `name` / `tagline`.
-2. **Harbour Supabase project** — create a separate project (data isolation), then give me the URL + anon key to replace `<HARBOUR_SUPABASE_URL>` / `<HARBOUR_SUPABASE_ANON_KEY>` in `EDITIONS.harbour`. Run the migrations there too.
+1. **Harbour Supabase project** — create a separate project (data isolation), then give me the URL + anon key to replace `<HARBOUR_SUPABASE_URL>` / `<HARBOUR_SUPABASE_ANON_KEY>` in `EDITIONS.harbour`. Run the migrations there too. (Until then, `?edition=harbour` shows the branded gate but can't log in.)
+2. **Confirm tagline** — currently "Portfolio Intelligence" (placeholder). And confirm the **font** question above.
 3. **Deploy** — a separate Netlify site/subdomain (e.g. `harbour.investiq…`) from the same repo; the hostname auto-selects the Harbour edition. (Same Render proxy is fine.)
 4. **Deferred polish** — deeper Family gating (any Family tab inside Settings), Harbour-specific copy, and confirm whether TraderIQ stays for the trial.
 
