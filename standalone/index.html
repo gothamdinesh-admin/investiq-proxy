@@ -212,6 +212,7 @@
     :root[data-edition="harbour"] .sidebar {
       background: #005A79 !important;          /* Harbour Blue chrome */
       border-color: #00485F !important;
+      color: #FFFFFF;                          /* plain text INHERITS white (vars alone don't fix inheritance) */
       --text-primary:   #FFFFFF;
       --text-body:      #E4E7E9;
       --text-secondary: rgba(255,255,255,0.80);
@@ -233,11 +234,21 @@
     :root[data-edition="harbour"] .sidebar .nav-link.active {
       background: rgba(255,255,255,0.16) !important;
       color: #FFFFFF !important;
+      font-weight: 600;
     }
     :root[data-edition="harbour"] .sidebar .nav-link.active i { color: #FFFFFF !important; }
     :root[data-edition="harbour"] .sidebar .nav-link:hover:not(.active) {
       background: rgba(255,255,255,0.10) !important;
     }
+    /* Header buttons that still carry inline old-indigo rgba(99,102,241,…) styling
+       (e.g. the AI Agents button) — the hex remaps can't match rgba, so restyle
+       them to frosted-white-on-blue here. */
+    :root[data-edition="harbour"] nav.glass [style*="99,102,241"] {
+      background: rgba(255,255,255,0.12) !important;
+      color: #FFFFFF !important;
+      border-color: rgba(255,255,255,0.32) !important;
+    }
+    :root[data-edition="harbour"] nav.glass [style*="99,102,241"] i { color: #FFFFFF !important; }
 
     /* Harmonia Sans — Harbour's brand typeface (internal Monotype licence, per
        owner confirmation). Declared globally but the browser only FETCHES a
@@ -1051,7 +1062,7 @@
     .table-row:last-child { border-bottom: none; }
     .table-header { display: grid; align-items: center; color: #4a6080; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 16px 8px; border-bottom: 1px solid #1a2540; }
 
-    .section-title { font-size: 16px; font-weight: 600; color: #c8d6ef; display: flex; align-items: center; gap: 8px; }
+    .section-title { font-size: 16px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
 
     /* v0.24.2 — wordmark gradient is now var-driven in BOTH themes:
        dark  → platinum (#9DB7DE) → champagne (#E5C76B)
