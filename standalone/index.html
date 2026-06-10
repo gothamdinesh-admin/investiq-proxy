@@ -188,6 +188,21 @@
       --btn-primary-hover: #00485F;
     }
 
+    /* Harmonia Sans — Harbour's brand typeface (internal Monotype licence, per
+       owner confirmation). Declared globally but the browser only FETCHES a
+       weight when it's actually applied — and font-family is scoped to the
+       Harbour edition below — so the personal edition pays zero cost. */
+    @font-face { font-family:'Harmonia Sans'; font-weight:300; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Light.otf')   format('opentype'); }
+    @font-face { font-family:'Harmonia Sans'; font-weight:400; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Regular.otf') format('opentype'); }
+    @font-face { font-family:'Harmonia Sans'; font-weight:600; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-SemiBd.otf')  format('opentype'); }
+    @font-face { font-family:'Harmonia Sans'; font-weight:700; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Bold.otf')    format('opentype'); }
+    @font-face { font-family:'Harmonia Sans'; font-weight:800; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Black.otf')   format('opentype'); }
+    :root[data-edition="harbour"] body,
+    :root[data-edition="harbour"] button,
+    :root[data-edition="harbour"] input,
+    :root[data-edition="harbour"] select,
+    :root[data-edition="harbour"] textarea { font-family: 'Harmonia Sans', 'Inter', -apple-system, sans-serif; }
+
     * { box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
     ::-webkit-scrollbar { width: 12px; height: 12px; }
@@ -12981,9 +12996,13 @@ function applyEdition() {
     if (lead && lead.textContent === 'Trader') return; // keep TraderIQ as-is
     if (ed.logo) {
       bm.style.alignItems = 'center';
+      const accSpan = ed.wordmark.accent
+        ? `<span style="font-weight:700;letter-spacing:-0.3px;margin-left:5px;color:var(--accent);">${ed.wordmark.accent}</span>`
+        : '';
       bm.innerHTML =
         `<img src="${ed.logo}" alt="${ed.name}" style="height:1.3em;width:1.3em;flex-shrink:0;">` +
-        `<span style="font-weight:800;letter-spacing:-0.3px;margin-left:8px;color:var(--text-primary);">${ed.wordmark.lead}</span>`;
+        `<span style="font-weight:800;letter-spacing:-0.3px;margin-left:8px;color:var(--text-primary);">${ed.wordmark.lead}</span>` +
+        accSpan;
     } else if (lead) {
       lead.textContent = ed.wordmark.lead;
       const acc = bm.querySelector('.bm-iq'); if (acc) acc.textContent = ed.wordmark.accent || '';

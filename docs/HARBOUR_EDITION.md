@@ -35,8 +35,8 @@ Per the official **Harbour Brand Colours quick guide**:
 - Brand mark = the **sails icon** (`standalone/assets/harbour/harbour-sails-blue.png`, reads on light + dark) + "Harbour" wordmark. Favicon + mobile theme-color also set to Harbour Blue.
 - Full-logo SVGs available for larger placements (gate/reports/email): `harbour-logo-blue.svg`, `harbour-logo-white.svg`.
 
-## ⚠️ Font licensing flag
-The `Monotype.zip` (Harmonia Sans, Serrano Pro) are **commercial desktop fonts under a Monotype EULA**. Embedding them as webfonts on a deployed site needs a **separate Monotype webfont licence** — a desktop licence does NOT cover `@font-face` on a public URL. So I did **not** embed them; the app keeps Inter. If Harbour holds a webfont licence (or it's an internal-only deployment that the licence covers), confirm and I'll wire Harmonia Sans for full brand fidelity.
+## Font — DONE (Harmonia Sans, v0.29.4)
+Owner confirmed Harbour holds an internal Monotype licence covering this use. **Harmonia Sans Std** (Light/Regular/SemiBd/Bold/Black → weights 300/400/600/700/800) is embedded via `@font-face` in `standalone/fonts/harbour/` and applied to the body/controls **only** for the Harbour edition (lazy-loaded — personal edition pays no cost). Numbers keep JetBrains Mono. Serrano Pro (a BNZ font in the zip) is unused.
 
 ## ⏳ PENDING (blocked on you)
 1. **Harbour Supabase project** — create a separate project (data isolation), then give me the URL + anon key to replace `<HARBOUR_SUPABASE_URL>` / `<HARBOUR_SUPABASE_ANON_KEY>` in `EDITIONS.harbour`. Run the migrations there too. (Until then, `?edition=harbour` shows the branded gate but can't log in.)

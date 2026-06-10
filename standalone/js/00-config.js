@@ -23,9 +23,9 @@ const EDITIONS = {
   },
   harbour: {
     id: 'harbour',
-    name: 'Harbour',
-    wordmark: { lead: 'Harbour', accent: '' },
-    tagline: 'Portfolio Intelligence',                // TODO: confirm exact tagline with Harbour
+    name: 'Harbour Intelligence',
+    wordmark: { lead: 'Harbour', accent: 'Intelligence' },  // "Intelligence" shown in the brand accent
+    tagline: 'Investment portfolio dashboard',        // TODO: confirm exact tagline with Harbour
     logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — reads on light + dark
     favicon: 'assets/harbour/harbour-sails-blue.png',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
