@@ -191,10 +191,10 @@
       --color-teal:       #2BB0D4;
       --color-violet:     #6CA0B1;
       --color-orange:     #C29144;
-      --color-green:      #2BB0D4;   /* GAINS = Harbour cyan (palette-only) */
-      --color-green-soft: rgba(43,176,212,0.14);
-      --color-red:        #C29144;   /* LOSSES = Harbour bronze (palette-only) */
-      --color-red-soft:   rgba(194,145,68,0.14);
+      --color-green:      #2E9D5B;   /* GAINS — green, as the real Harbour portal uses */
+      --color-green-soft: rgba(46,157,91,0.12);
+      --color-red:        #C4524A;   /* LOSSES — muted red counterpart */
+      --color-red-soft:   rgba(196,82,74,0.12);
       --color-amber:      #C29144;   /* IQ / dividends highlight = bronze */
       --color-amber-soft: rgba(194,145,68,0.14);
       --chart-grid:       rgba(108,160,177,0.25);
@@ -202,53 +202,45 @@
       --scrollbar-bg:     #E4E7E9;
       --scrollbar-fg:     #BFC8CC;
     }
-    /* HARBOUR BLUE CHROME (v0.30.1) — "blue theme across": sidebar + top nav
-       in Harbour Blue with white text; content stays light grey + white cards.
-       Implemented by re-scoping the CSS variables inside the chrome regions, so
-       every var-driven child (nav-links, cards, buttons, inline styles) adapts
-       without touching markup. Specificity (0,2,1) + !important beats the
-       [data-theme="light"] component overrides.  */
-    :root[data-edition="harbour"] nav.glass,
-    :root[data-edition="harbour"] .sidebar {
-      background: #005A79 !important;          /* Harbour Blue chrome */
-      border-color: #00485F !important;
-      color: #FFFFFF;                          /* plain text INHERITS white (vars alone don't fix inheritance) */
-      --text-primary:   #FFFFFF;
-      --text-body:      #E4E7E9;
-      --text-secondary: rgba(255,255,255,0.80);
-      --text-muted:     rgba(255,255,255,0.58);
-      --bg-panel:       rgba(255,255,255,0.10); /* cards inside chrome → frosted */
-      --bg-panel-2:     rgba(255,255,255,0.14);
-      --bg-input:       rgba(255,255,255,0.12);
-      --bg-hover:       rgba(255,255,255,0.12);
-      --border:         rgba(255,255,255,0.22);
-      --border-strong:  rgba(255,255,255,0.36);
-      --accent:         #76CED9;               /* aqua reads on blue */
-      --accent-hover:   #2BB0D4;
-      --accent-soft:    rgba(255,255,255,0.12);
-      --accent-soft-2:  rgba(255,255,255,0.20);
-      --color-amber:    #D9BB8A;               /* sand on blue */
-      --color-green:    #76CED9;               /* gains inside chrome = aqua */
-      --color-red:      #D9BB8A;               /* losses inside chrome = sand */
+    /* HARBOUR PORTAL STYLE (v0.31) — matched to the real Harbour Investor
+       Portal (screenshot reference): WHITE-first. White header + white sidebar,
+       Harbour-Blue headings on white, blue-grey #6CA0B1 as the active-pill and
+       summary-card colour, green gains (the portal itself uses green). The
+       previous full-blue chrome read heavy and caused frosted-transparency bugs
+       in dropdowns — removed. */
+    /* White header (the light-theme rule tints it the personal cream) */
+    :root[data-edition="harbour"] nav.glass { background: rgba(255,255,255,0.95) !important; }
+    /* Headings in Harbour Blue, like the portal's "All funds" */
+    :root[data-edition="harbour"] .section-title,
+    :root[data-edition="harbour"] h2,
+    :root[data-edition="harbour"] h3 { color: #005A79; }
+    /* Sidebar portfolio summary = the portal's blue-grey summary card */
+    :root[data-edition="harbour"] #sidebarSummary {
+      background: #6CA0B1;
+      border-radius: 12px;
+      padding: 14px 16px;
     }
+    :root[data-edition="harbour"] #sidebarSummary,
+    :root[data-edition="harbour"] #sidebarSummary div,
+    :root[data-edition="harbour"] #sidebarSummary span {
+      color: #FFFFFF !important;
+    }
+    /* Active nav pill = blue-grey with white text (portal's "Since inception" pill) */
     :root[data-edition="harbour"] .sidebar .nav-link.active {
-      background: rgba(255,255,255,0.16) !important;
+      background: #6CA0B1 !important;
       color: #FFFFFF !important;
       font-weight: 600;
+      border-radius: 8px;
     }
     :root[data-edition="harbour"] .sidebar .nav-link.active i { color: #FFFFFF !important; }
-    :root[data-edition="harbour"] .sidebar .nav-link:hover:not(.active) {
-      background: rgba(255,255,255,0.10) !important;
-    }
-    /* Header buttons that still carry inline old-indigo rgba(99,102,241,…) styling
-       (e.g. the AI Agents button) — the hex remaps can't match rgba, so restyle
-       them to frosted-white-on-blue here. */
+    /* Header AI button carries inline old-indigo rgba(99,102,241,…) the hex
+       remaps can't match — restyle to a quiet Harbour-blue outline on white. */
     :root[data-edition="harbour"] nav.glass [style*="99,102,241"] {
-      background: rgba(255,255,255,0.12) !important;
-      color: #FFFFFF !important;
-      border-color: rgba(255,255,255,0.32) !important;
+      background: rgba(0,90,121,0.08) !important;
+      color: #005A79 !important;
+      border-color: rgba(0,90,121,0.30) !important;
     }
-    :root[data-edition="harbour"] nav.glass [style*="99,102,241"] i { color: #FFFFFF !important; }
+    :root[data-edition="harbour"] nav.glass [style*="99,102,241"] i { color: #005A79 !important; }
 
     /* Harmonia Sans — Harbour's brand typeface (internal Monotype licence, per
        owner confirmation). Declared globally but the browser only FETCHES a
@@ -340,7 +332,9 @@
     [style*="color:#60A5FA"], [style*="color: #60A5FA"] { color: var(--accent) !important; }
 
     /* Common selectors targeting class-based / explicit components */
-    [data-theme="light"] nav { background: rgba(250,245,234,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
+    /* Scoped to the top bar ONLY (nav.glass) — a bare `nav` selector also hit the
+       sidebar's <nav id="primaryNav">, painting a cream strip behind the nav links. */
+    [data-theme="light"] nav.glass { background: rgba(250,245,234,0.92) !important; border-bottom: 1px solid var(--border) !important; color: var(--text-primary); }
     [data-theme="light"] .sidebar { background: var(--bg-panel) !important; border-right: 1px solid var(--border) !important; }
     /* Cards lift off the bg with subtle shadows + thicker borders in light
        mode. Without this they melted into the bg-50 background — the
@@ -1798,7 +1792,7 @@
 
   <!-- SIDEBAR -->
   <aside class="sidebar p-4" style="background:#080d1a;border-right:1px solid #1e2d4a;">
-    <div class="mb-6">
+    <div class="mb-6" id="sidebarSummary">
       <div id="portfolioName" class="font-semibold text-sm mb-1" style="color:#c8d6ef;">My Portfolio</div>
       <div class="text-2xl font-bold mono" id="sidebarTotal">NZ$0.00</div>
       <div class="text-sm mt-1" id="sidebarReturn">+NZ$0.00 (0.00%)</div>
@@ -13061,8 +13055,8 @@ function applyEdition() {
     if (lead && lead.textContent === 'Trader') return; // keep TraderIQ as-is
     if (ed.logo) {
       bm.style.alignItems = 'center';
-      // On the blue chrome (top nav) use the white sails; blue circle elsewhere.
-      const logoSrc = (ed.logoOnDark && bm.closest('nav')) ? ed.logoOnDark : ed.logo;
+      // White-first chrome (v0.31): the blue-circle sails reads on all surfaces.
+      const logoSrc = ed.logo;
       const accSpan = ed.wordmark.accent
         ? `<span style="font-weight:700;letter-spacing:-0.3px;margin-left:5px;color:var(--accent);">${ed.wordmark.accent}</span>`
         : '';
