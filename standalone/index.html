@@ -169,24 +169,69 @@
       --btn-primary-hover: #00485F;
       --accent-soft:       rgba(0,90,121,0.14);
       --accent-soft-2:     rgba(0,90,121,0.26);
-      --border-strong:     #44546A;   /* Harbour slate */
     }
+    /* Harbour DARK — surfaces built from the Harbour Blue/slate family (deep
+       teal-navy), text in the Harbour light greys, cyan accent, sand "gold". */
     :root[data-theme="dark"][data-edition="harbour"] {
-      --accent:       #2BB0D4;   /* Harbour secondary cyan — pops on dark */
-      --accent-hover: #76CED9;   /* Harbour aqua */
-      --color-indigo: #2BB0D4;
-      --color-blue:   #2BB0D4;
-      --color-amber:  #D9BB8A;   /* Harbour sand (gold equivalent) on dark */
+      --bg:             #0B1B23;
+      --bg-panel:       #122A35;
+      --bg-panel-2:     #1B3A48;
+      --bg-input:       #122A35;
+      --bg-deep:        #07151C;
+      --bg-hover:       #224656;
+      --border:         #284A59;
+      --border-strong:  #44546A;   /* Harbour slate */
+      --text-primary:   #E4E7E9;   /* Harbour light grey */
+      --text-body:      #C2CFD5;
+      --text-secondary: #9DB2BB;
+      --text-muted:     #6F8A95;
+      --text-inverted:  #0B1B23;
+      --accent:         #2BB0D4;   /* Harbour secondary cyan — pops on dark */
+      --accent-hover:   #76CED9;   /* Harbour aqua */
+      --color-indigo:   #2BB0D4;
+      --color-blue:     #2BB0D4;
+      --color-amber:    #D9BB8A;   /* Harbour sand (gold equivalent) */
+      --chart-grid:     rgba(68,84,106,0.30);
+      --chart-text:     #6F8A95;
+      --scrollbar-bg:   #122A35;
+      --scrollbar-fg:   #284A59;
     }
+    /* Harbour LIGHT — Harbour greys (#E4E7E9 / #BFC8CC) surfaces, dark-slate
+       text, Harbour Blue accent, bronze "gold". */
     :root[data-theme="light"][data-edition="harbour"] {
-      --accent:       #005A79;   /* Harbour Blue reads on cream */
-      --accent-hover: #00485F;
-      --color-indigo: #005A79;
-      --color-blue:   #005A79;
-      --color-amber:  #C29144;   /* Harbour bronze on light */
-      --btn-primary:  #005A79;
+      --bg:             #ECEFF1;
+      --bg-panel:       #FFFFFF;
+      --bg-panel-2:     #E4E7E9;   /* Harbour light grey */
+      --bg-input:       #FFFFFF;
+      --bg-deep:        #F4F6F7;
+      --bg-hover:       #E4E7E9;
+      --border:         #BFC8CC;   /* Harbour grey */
+      --border-strong:  #6CA0B1;
+      --text-primary:   #1C2B33;   /* dark slate */
+      --text-body:      #35454F;
+      --text-secondary: #51626C;
+      --text-muted:     #7C8D96;
+      --text-inverted:  #FFFFFF;
+      --accent:         #005A79;   /* Harbour Blue reads on light */
+      --accent-hover:   #00485F;
+      --color-indigo:   #005A79;
+      --color-blue:     #005A79;
+      --color-amber:    #C29144;   /* Harbour bronze */
+      --btn-primary:    #005A79;
       --btn-primary-hover: #00485F;
+      --chart-grid:     rgba(191,200,204,0.6);
+      --chart-text:     #51626C;
+      --scrollbar-bg:   #E4E7E9;
+      --scrollbar-fg:   #BFC8CC;
     }
+    /* Harbour — remap the common hardcoded inline dark-panel hexes onto the
+       Harbour surfaces (var() resolves per theme), so inline-styled components
+       follow the theme too. Mirrors the light-mode overrides. */
+    :root[data-edition="harbour"] [style*="background:#080d1a"] { background: var(--bg) !important; }
+    :root[data-edition="harbour"] [style*="background:#0a1120"],
+    :root[data-edition="harbour"] [style*="background:#0f1729"] { background: var(--bg-panel) !important; }
+    :root[data-edition="harbour"] [style*="background:#141e33"],
+    :root[data-edition="harbour"] [style*="background:#1e2d4a"] { background: var(--bg-panel-2) !important; }
 
     /* Harmonia Sans — Harbour's brand typeface (internal Monotype licence, per
        owner confirmation). Declared globally but the browser only FETCHES a
@@ -1231,7 +1276,7 @@
 </div>
 
 <!-- AUTH GATE — shown when Supabase is configured but user is not signed in -->
-<div id="authGate" style="display:none;position:fixed;inset:0;z-index:9999;background:#080d1a;flex-direction:column;align-items:center;justify-content:center;">
+<div id="authGate" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;">
   <div style="width:100%;max-width:400px;padding:32px;">
     <!-- Logo -->
     <div class="flex items-center justify-center gap-3 mb-8">
@@ -13008,6 +13053,10 @@ function applyEdition() {
       const acc = bm.querySelector('.bm-iq'); if (acc) acc.textContent = ed.wordmark.accent || '';
     }
   });
+
+  // Edition with its own logo → hide the legacy InvestIQ icon tile (.brand-icon);
+  // the sails logo in the brand mark is the logo now.
+  if (ed.logo) document.querySelectorAll('.brand-icon').forEach(el => { el.style.display = 'none'; });
 
   // Taglines
   ['navTagline', 'drawerTagline'].forEach(id => {

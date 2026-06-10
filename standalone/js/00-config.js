@@ -23,8 +23,8 @@ const EDITIONS = {
   },
   harbour: {
     id: 'harbour',
-    name: 'Harbour Intelligence',
-    wordmark: { lead: 'Harbour', accent: 'Intelligence' },  // "Intelligence" shown in the brand accent
+    name: 'Harbour IQ',
+    wordmark: { lead: 'Harbour', accent: 'IQ' },      // "IQ" shown in the brand accent
     tagline: 'Investment portfolio dashboard',        // TODO: confirm exact tagline with Harbour
     logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — reads on light + dark
     favicon: 'assets/harbour/harbour-sails-blue.png',
@@ -41,11 +41,16 @@ const EDITIONS = {
 
 function detectEdition() {
   try {
+    // Hostname is AUTHORITATIVE in production: a Harbour deploy is always Harbour,
+    // and the personal domain is always personal — regardless of any stale override.
+    const host = location.hostname.toLowerCase();
+    if (host.includes('harbour')) return 'harbour';
+    // ?edition=<id> is a TRANSIENT preview override — NOT persisted. (Persisting it
+    // was the bug that stuck the personal site on Harbour after one preview visit.)
     const q = new URL(location.href).searchParams.get('edition');
-    if (q && EDITIONS[q]) { try { localStorage.setItem('investiq_edition', q); } catch(e){} return q; }
-    const stored = localStorage.getItem('investiq_edition');
-    if (stored && EDITIONS[stored]) return stored;
-    if (location.hostname.toLowerCase().includes('harbour')) return 'harbour';
+    if (q && EDITIONS[q]) return q;
+    // Clean up any override persisted by older builds.
+    try { localStorage.removeItem('investiq_edition'); } catch(e) {}
   } catch(e) {}
   return 'personal';
 }

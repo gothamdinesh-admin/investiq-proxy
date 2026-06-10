@@ -10,7 +10,7 @@ A separate Harbour file was rejected — a fork rots (the old `.claude/worktrees
 
 `standalone/js/00-config.js`:
 - `EDITIONS` map — `personal` and `harbour`. Each has: `name`, `wordmark`, `tagline`, `theme`, `features`, `supabaseUrl`, `supabaseKey`.
-- `detectEdition()` — resolves the active edition by: `?edition=<id>` (also stored to `localStorage.investiq_edition`) → stored value → hostname contains `harbour` → default `personal`.
+- `detectEdition()` — **hostname is authoritative**: hostname contains `harbour` → `harbour`; else `?edition=<id>` as a **transient** preview override (NOT persisted); else `personal`. Also clears any stale `localStorage.investiq_edition`. _(v0.29.5: removed localStorage persistence — it was sticking the personal site on Harbour after one `?edition=harbour` preview.)_
 - `EDITION` — the resolved edition object. `<html data-edition="…">` set immediately so CSS reacts before paint.
 - `PLATFORM_CONFIG.supabaseUrl/Key` now come from `EDITION` (per-tenant data isolation). Proxy is shared.
 
