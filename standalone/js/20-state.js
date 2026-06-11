@@ -153,6 +153,16 @@ function applyPlatformDefaults() {
   if (!state.settings.proxyUrl    && PLATFORM_CONFIG.proxyUrl)    state.settings.proxyUrl    = PLATFORM_CONFIG.proxyUrl;
   if (!state.settings.supabaseUrl && PLATFORM_CONFIG.supabaseUrl) state.settings.supabaseUrl = PLATFORM_CONFIG.supabaseUrl;
   if (!state.settings.supabaseKey && PLATFORM_CONFIG.supabaseKey) state.settings.supabaseKey = PLATFORM_CONFIG.supabaseKey;
+  // v0.31.2 — NON-PERSONAL EDITIONS ALWAYS OWN THEIR SUPABASE TARGET.
+  // supabaseUrl/Key are LOCAL_ONLY_SETTINGS persisted in same-origin
+  // localStorage, so on a shared domain a ?edition=harbour preview silently
+  // inherited the PERSONAL project's creds (stored values are never empty on
+  // a machine that has used the personal app) → signups hit the personal DB
+  // and its confirm-email policy. Force the edition's own project here.
+  if (typeof EDITION !== 'undefined' && EDITION.id !== 'personal') {
+    state.settings.supabaseUrl = EDITION.supabaseUrl;
+    state.settings.supabaseKey = EDITION.supabaseKey;
+  }
 }
 
 // Normalise whatever was loaded (legacy single-portfolio OR new
