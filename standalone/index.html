@@ -422,8 +422,10 @@
     .modal { background: #0f1729; border: 1px solid #1e2d4a; border-radius: 16px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; position: relative; }
 
     /* Onboarding cards */
-    .onboarding-card { display:block; width:100%; padding:16px; background:#141e33; border:1px solid #1e2d4a; border-radius:10px; cursor:pointer; transition:all 0.15s; }
-    .onboarding-card:hover { border-color:#6366f1; background:#1a2540; transform:translateY(-1px); }
+    /* v0.31.1 — var-driven (was hardcoded dark navy, rendered as dark slabs in
+       light/Harbour themes — "the view looks off" screenshot). */
+    .onboarding-card { display:block; width:100%; padding:16px; background:var(--bg-panel-2); border:1px solid var(--border); border-radius:10px; cursor:pointer; transition:all 0.15s; color:var(--text-body); }
+    .onboarding-card:hover { border-color:var(--accent); background:var(--bg-hover); transform:translateY(-1px); }
     .onboarding-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
 
     .tag { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -2331,7 +2333,7 @@
             <i class="fas fa-lightbulb" style="color:var(--accent);"></i>AI Insights &amp; Recommendations
             <span class="iq-badge">IQ</span>
           </h2>
-          <div class="text-xs neutral mt-1">Four specialist Claude agents analyse your portfolio in parallel — health, sentiment, risk, opportunities.</div>
+          <div id="insightsSubtitle" class="text-xs neutral mt-1">Four specialist Claude agents analyse your portfolio in parallel — health, sentiment, risk, opportunities.</div>
         </div>
         <button onclick="openModal('agentsModal')" class="btn btn-primary">
           <i class="fas fa-robot mr-2"></i>Run AI Analysis
@@ -13081,6 +13083,12 @@ function applyEdition() {
 
   // Generic name slots — any element tagged .edition-name shows the edition name.
   document.querySelectorAll('.edition-name').forEach(el => { el.textContent = ed.name; });
+
+  // Harbour: the unit of AI analysis is a fund, not a personal portfolio.
+  if (ed.id === 'harbour') {
+    const sub = document.getElementById('insightsSubtitle');
+    if (sub) sub.textContent = 'Specialist analysts review the fund’s underlying holdings — composition, macro, risk, positioning — then a Fund Review synthesises the whole fund.';
+  }
 
   // Favicon + mobile theme-color
   if (ed.favicon) {
