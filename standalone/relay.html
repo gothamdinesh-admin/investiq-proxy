@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Team Harbour — Pillar to Pōu Relay</title>
+<title>The Discretionary Mandates — Pillar to Pōu Relay</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { background:#04121f; color:#e8f1f8; -webkit-tap-highlight-color:transparent; }
@@ -21,8 +21,9 @@
 <div class="max-w-md mx-auto px-4 pb-28">
 
   <!-- Header -->
-  <header class="pt-6 pb-3 text-center">
-    <p class="text-[11px] tracking-[.35em] font-bold accent uppercase">Team Harbour</p>
+  <header class="pt-6 pb-3 text-center relative">
+    <button onclick="resetRace()" title="Reset race" class="btn-press absolute right-0 top-6 w-9 h-9 rounded-lg bg-[#0e2c45] border border-[#1c4a6e] text-slate-400 text-base">↺</button>
+    <p class="text-[11px] tracking-[.25em] font-bold accent uppercase px-10">The Discretionary Mandates</p>
     <h1 class="text-2xl font-extrabold tracking-tight mt-1">🏃‍♀️ Pillar to Pōu Relay</h1>
     <p class="text-sm text-slate-400 mt-1">Taupō · 7 km laps · 11 laps · 77 km</p>
   </header>
@@ -369,7 +370,7 @@ function renderLive(){
         <div class="text-5xl mb-3">🏆</div>
         <h2 class="text-xl font-bold">Race complete!</h2>
         <div class="timer text-4xl font-extrabold my-3">${fmtClock(total)}</div>
-        <p class="text-sm text-slate-400">${state.order.length * LAP_KM} km · ${state.order.length} laps · Team Harbour</p>
+        <p class="text-sm text-slate-400">${state.order.length * LAP_KM} km · ${state.order.length} laps · The Discretionary Mandates</p>
         <button onclick="undoSplit()" class="btn-press mt-5 w-full py-3 rounded-xl bg-[#0e2c45] text-slate-300 text-sm font-semibold">↩︎ Undo last handover</button>
       </div>
       ${renderSplits()}`;
