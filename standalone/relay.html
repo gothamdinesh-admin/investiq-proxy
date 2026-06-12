@@ -46,6 +46,7 @@
         <p id="ruleFinishSlack" class="mt-0.5 font-semibold timer">–</p>
       </div>
     </div>
+    <p id="goalLine" class="text-xs font-semibold mt-2 text-slate-300">🎯 Goal: 10–11 laps</p>
   </div>
 
   <!-- Overall progress -->
@@ -93,6 +94,8 @@ const DEFAULT_ORDER = ["jack","olivia","james","matt","dinesh","jack","olivia","
 
 // Event rules
 const RULE = { open:[10,0], lastLapBy:[15,30], close:[16,30] };
+// Team goal — always aim for 10–11 laps (never plan beyond max)
+const GOAL = { min:10, max:11 };
 
 const STORE_KEY = "pillar_pou_relay_v2";
 
@@ -286,15 +289,36 @@ function autoArrange(){
   const locked = lockedCount();
   if (!presentRunners().length) return;
   if (state.phase !== "setup" && state.order.length - locked <= 0) return; // mid final lap — nothing to plan
-  // Auto-size BOTH ways: the most laps that still fit the 3:30 last-start + 4:30 finish rules.
-  // Faster runner times ⇒ more laps fit; slower ⇒ fewer. Always at least 1 remaining lap.
+  // Auto-size BOTH ways: the most laps that still fit the 3:30 last-start + 4:30 finish rules,
+  // capped at the team goal of 11. Faster runner times ⇒ more laps fit; slower ⇒ fewer.
   let best = null;
-  for (let n = 1; n <= 30; n++) {
+  for (let n = 1; n <= Math.max(1, GOAL.max - locked); n++) {
     const ord = buildOrder(n);
     if (fitsRules(ord)) best = ord;
   }
   state.order = best || buildOrder(1);
   save(); render();
+}
+
+/* What average lap time / entered pace would unlock `target` total laps within the 3:30 rule */
+function goalNeeds(target){
+  const locked = lockedCount();
+  const p = projection();
+  const cutLast = dayAt(RULE.lastLapBy, p.gun);
+  let refMs, lapsBetween, bufN;
+  if (state.phase === "setup") {
+    refMs = gunTime(); lapsBetween = target - 1; bufN = target - 1;
+  } else if (state.phase === "live") {
+    const d = state.splits.length;
+    const elapsed = (Date.now() - state.currentLapStart) / 1000;
+    refMs = state.currentLapStart + Math.max(leviedSec(state.order[d]), elapsed) * 1000;
+    lapsBetween = target - locked - 1; bufN = target - locked;
+  } else return null;
+  if (lapsBetween < 1) return null;
+  const lapSec = ((cutLast - refMs) / 1000 - bufN * state.bufferSec) / lapsBetween;
+  // what to enter in Runner times (planner adds the levy on top)
+  const enterPace = lapSec / (1 + state.paceLevyPct / 100) / LAP_KM;
+  return { lapSec, enterPace, possible: enterPace >= 180 };
 }
 
 /* Untangle back-to-back laps by swapping within the unlocked region (anchor slot stays put) */
@@ -530,9 +554,18 @@ function renderPlan(){
   const finSlack = (dayAt(RULE.close, proj.gun) - proj.finish) / 1000;
   const worst = Math.min(lastSlack, finSlack);
   const statusIcon = worst < 0 ? "🛑" : worst < 900 ? "⚠️" : "✅";
-  const advice = worst < 0
+  const planned = state.order.length;
+  const goalBits = [GOAL.min, GOAL.max].filter(t => t > planned).map(t => {
+    const need = goalNeeds(t);
+    return need && need.possible
+      ? `<b class="text-slate-200">${t} laps</b> needs times averaging <b class="timer text-slate-200">${fmtPace(Math.round(need.enterPace))}</b> (laps ~${fmtMS(need.lapSec)})`
+      : `<b class="text-slate-200">${t} laps</b> isn't reachable in today's window`;
+  }).join("; ");
+  const advice = (worst < 0
     ? `At current paces only ~${fittingLapCount()} laps fit the 3:30 last-start rule — use “− Drop lap” (removes the slowest runner's lap) or lower the levy if the team is running hot.`
-    : worst < 900 ? "Tight against the cutoff — keep handovers sharp or trim a lap." : "Plan fits the race window comfortably.";
+    : worst < 900 ? "Tight against the cutoff — keep handovers sharp." : "Plan fits the race window comfortably.")
+    + (planned >= GOAL.max ? " 🎯 Goal maxed: 11 laps planned!"
+       : goalBits ? ` 🎯 To push the goal: ${goalBits}. If real laps come in quicker, lower the runner times and laps are added automatically.` : "");
 
   const paceRows = RUNNERS.map(r => `
     <div class="flex items-center gap-2 py-2 border-b border-[#16405e] last:border-0 ${state.present[r.id] ? "" : "opacity-40"}">
@@ -646,6 +679,26 @@ function tick(){
   fs.textContent = (proj.actual ? "✓ done " : "") + fmtSlack(finSlack);
   ls.className = "mt-0.5 font-semibold timer " + (lastSlack < 0 ? "behind" : lastSlack < 900 ? "text-amber-400" : "ahead");
   fs.className = "mt-0.5 font-semibold timer " + (finSlack < 0 ? "behind" : finSlack < 900 ? "text-amber-400" : "ahead");
+
+  // goal tracker — always aiming for 10–11 laps
+  const planned = state.order.length;
+  const gl = $("#goalLine");
+  if (state.phase === "done") {
+    gl.textContent = `🎯 Goal 10–11 laps — finished with ${planned} (${planned * LAP_KM} km)${planned >= GOAL.min ? " 🎉" : ""}`;
+    gl.className = "text-xs font-semibold mt-2 " + (planned >= GOAL.min ? "ahead" : "text-slate-300");
+  } else if (planned >= GOAL.min) {
+    const next = goalNeeds(planned + 1);
+    gl.textContent = `🎯 Goal 10–11 laps — plan is on ${planned}! ` +
+      (planned < GOAL.max && next && next.possible ? `For ${planned + 1}: laps under ${fmtMS(next.lapSec)}.` : "");
+    gl.className = "text-xs font-semibold mt-2 ahead";
+  } else {
+    const need = goalNeeds(GOAL.min);
+    gl.textContent = `🎯 Goal 10–11 laps — plan is ${planned}. ` +
+      (need && need.possible
+        ? `For 10: set runner times to avg ${fmtPace(Math.round(need.enterPace))} (laps ~${fmtMS(need.lapSec)}).`
+        : `10 isn't reachable in today's window — bank the most laps we can.`);
+    gl.className = "text-xs font-semibold mt-2 text-amber-400";
+  }
 
   if (!state.startTime) return;
 
