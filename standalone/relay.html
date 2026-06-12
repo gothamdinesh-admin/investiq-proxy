@@ -3,14 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Pillar to Pōu Relay — Taupō</title>
+<title>Team Harbour — Pillar to Pōu Relay</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { background:#0b0f14; color:#e7edf3; -webkit-tap-highlight-color:transparent; }
-  .card { background:#121821; border:1px solid #1f2937; border-radius:1rem; }
+  body { background:#04121f; color:#e8f1f8; -webkit-tap-highlight-color:transparent; }
+  .card { background:#0a2236; border:1px solid #16405e; border-radius:1rem; }
   .timer { font-variant-numeric: tabular-nums; letter-spacing:.02em; }
   .btn-press:active { transform:scale(.97); }
   .ahead { color:#34d399; } .behind { color:#f87171; }
+  .accent { color:#27cfe0; }
+  select { background:#0e2c45; border:1px solid #1c4a6e; border-radius:.5rem; padding:.35rem .5rem; color:#e8f1f8; font-size:.75rem; }
   ::-webkit-scrollbar { display:none; }
 </style>
 </head>
@@ -19,19 +21,40 @@
 <div class="max-w-md mx-auto px-4 pb-28">
 
   <!-- Header -->
-  <header class="pt-6 pb-4 text-center">
-    <h1 class="text-2xl font-extrabold tracking-tight">🏃‍♀️ Pillar to Pōu Relay</h1>
-    <p class="text-sm text-slate-400 mt-1">Taupō · 7 km laps · 11 laps · 77 km total</p>
+  <header class="pt-6 pb-3 text-center">
+    <p class="text-[11px] tracking-[.35em] font-bold accent uppercase">Team Harbour</p>
+    <h1 class="text-2xl font-extrabold tracking-tight mt-1">🏃‍♀️ Pillar to Pōu Relay</h1>
+    <p class="text-sm text-slate-400 mt-1">Taupō · 7 km laps · 11 laps · 77 km</p>
   </header>
 
-  <!-- Overall progress (always visible once started) -->
+  <!-- Race rules + cutoff status (always visible) -->
+  <div class="card p-4 mb-3">
+    <div class="flex justify-between items-center mb-2">
+      <p class="text-xs uppercase tracking-widest text-slate-400">Race rules</p>
+      <p class="text-[11px] text-slate-400">window <b class="text-slate-200">10:00 am – 4:30 pm</b></p>
+    </div>
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="bg-[#0e2c45] rounded-lg p-2.5">
+        <p class="text-slate-400">Last lap by <b class="text-slate-200">3:30 pm</b></p>
+        <p class="mt-1">est. start <b id="ruleLastStart" class="timer text-slate-100">–</b></p>
+        <p id="ruleLastSlack" class="mt-0.5 font-semibold timer">–</p>
+      </div>
+      <div class="bg-[#0e2c45] rounded-lg p-2.5">
+        <p class="text-slate-400">Finish by <b class="text-slate-200">4:30 pm</b></p>
+        <p class="mt-1">est. finish <b id="ruleFinish" class="timer text-slate-100">–</b></p>
+        <p id="ruleFinishSlack" class="mt-0.5 font-semibold timer">–</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall progress -->
   <div id="progressCard" class="card p-4 mb-4 hidden">
     <div class="flex justify-between text-xs text-slate-400 mb-1">
       <span id="progressLabel">Lap 0 / 11</span>
       <span id="progressKm">0 km</span>
     </div>
-    <div class="h-3 bg-slate-800 rounded-full overflow-hidden">
-      <div id="progressBar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700" style="width:0%"></div>
+    <div class="h-3 bg-[#0e2c45] rounded-full overflow-hidden">
+      <div id="progressBar" class="h-full bg-gradient-to-r from-teal-400 to-cyan-300 transition-all duration-700" style="width:0%"></div>
     </div>
     <div class="flex justify-between mt-2 text-xs">
       <span class="text-slate-400">Race time <span id="raceClock" class="timer text-slate-200 font-semibold">0:00:00</span></span>
@@ -43,7 +66,7 @@
   <main id="screen"></main>
 
   <!-- Tab bar -->
-  <nav class="fixed bottom-0 left-0 right-0 bg-[#0e131b]/95 backdrop-blur border-t border-slate-800">
+  <nav class="fixed bottom-0 left-0 right-0 bg-[#061a2c]/95 backdrop-blur border-t border-[#16405e]">
     <div class="max-w-md mx-auto grid grid-cols-3 text-center text-sm">
       <button data-tab="live"  class="tabBtn py-4 font-semibold">⏱️ Live</button>
       <button data-tab="plan"  class="tabBtn py-4 font-semibold">📋 Plan</button>
@@ -54,7 +77,7 @@
 
 <script>
 "use strict";
-/* ============ Data — from the team plan photo ============ */
+/* ============ Data — from the team plan ============ */
 const LAP_KM = 7;
 const RUNNERS = [
   { id:"jack",   name:"Jack Aitken",       pace:300, emoji:"⚡", laps:3 },  // 5:00 /km
@@ -64,10 +87,13 @@ const RUNNERS = [
   { id:"dinesh", name:"Dinesh Muthusamy",  pace:390, emoji:"🚀", laps:1 },  // 6:30 /km
   { id:"sarah",  name:"Sarah Ashby",       pace:390, emoji:"✨", laps:1 },
 ];
-// Default run order — fastest leads off and anchors, spread so everyone gets rest
+// Best-performance default: fastest leads off + anchors, slower legs mid-day, max rest between repeats
 const DEFAULT_ORDER = ["jack","olivia","james","matt","dinesh","jack","olivia","james","matt","sarah","jack"];
 
-const STORE_KEY = "pillar_pou_relay_v1";
+// Event rules
+const RULE = { open:[10,0], lastLapBy:[15,30], close:[16,30] };
+
+const STORE_KEY = "pillar_pou_relay_v2";
 
 /* ============ State ============ */
 let state = load() || {
@@ -77,6 +103,9 @@ let state = load() || {
   currentLapStart: null,     // ms epoch
   splits: [],                // [{runnerId, startMs, endMs}]
   tab: "live",
+  present: Object.fromEntries(RUNNERS.map(r => [r.id, true])),
+  paceLevyPct: 5,            // safety levy on estimated lap times
+  bufferSec: 60,             // handover buffer per changeover
 };
 
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -86,46 +115,181 @@ function load(){ try { return JSON.parse(localStorage.getItem(STORE_KEY)); } cat
 const $ = sel => document.querySelector(sel);
 const runner = id => RUNNERS.find(r => r.id === id);
 const estLapSec = id => runner(id).pace * LAP_KM;
+const leviedSec = id => estLapSec(id) * (1 + state.paceLevyPct / 100);
+const presentRunners = () => RUNNERS.filter(r => state.present[r.id]);
+const lockedCount = () => state.splits.length + (state.phase === "live" ? 1 : 0);
 
-function fmtClock(sec){ // h:mm:ss
+function todayAt(hm){ const d = new Date(); d.setHours(hm[0], hm[1], 0, 0); return d.getTime(); }
+
+function fmtClock(sec){
   sec = Math.max(0, Math.round(sec));
   const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
   return h + ":" + String(m).padStart(2,"0") + ":" + String(s).padStart(2,"0");
 }
-function fmtMS(sec){ // mm:ss
+function fmtMS(sec){
   sec = Math.max(0, Math.round(sec));
   return Math.floor(sec/60) + ":" + String(sec%60).padStart(2,"0");
 }
 function fmtPace(secPerKm){ return fmtMS(secPerKm) + " /km"; }
 function fmtTime(ms){ return new Date(ms).toLocaleTimeString([], {hour:"numeric", minute:"2-digit"}); }
-function fmtDiff(sec){
-  const sign = sec <= 0 ? "−" : "+";
-  return sign + fmtMS(Math.abs(sec));
+function fmtDiff(sec){ return (sec <= 0 ? "−" : "+") + fmtMS(Math.abs(sec)); }
+function fmtSlack(sec){
+  const a = Math.abs(Math.round(sec));
+  const txt = Math.floor(a/3600) ? Math.floor(a/3600) + "h " + Math.floor(a%3600/60) + "m" : Math.floor(a/60) + " min";
+  return sec >= 0 ? txt + " spare" : txt + " OVER";
 }
 
-/* Projected wall-clock start for each remaining lap */
-function projection(){
-  if (!state.startTime) return null;
+/* ============ Projection — real-time, with levy + handover buffer ============ */
+function projection(order){
+  order = order || state.order;
   const now = Date.now();
-  const done = state.splits.length;
-  let t; // ms when next lap boundary occurs
-  if (state.phase === "live") {
-    const cur = state.order[done];
+  const bufMs = state.bufferSec * 1000;
+  const starts = {};
+  let t, from;
+
+  if (state.phase === "done") {
+    const last = state.splits[state.splits.length - 1];
+    return { starts, lastLapStart: last.startMs, finish: last.endMs, actual: true };
+  }
+  if (state.phase === "setup") {
+    t = Math.max(now, todayAt(RULE.open));      // assume gun at 10:00 (or now, if later)
+    starts[0] = t;
+    t += leviedSec(order[0]) * 1000;
+    from = 1;
+  } else { // live
+    const d = state.splits.length;
     const elapsed = (now - state.currentLapStart) / 1000;
-    // current lap finishes at est time, or "now" if already over estimate
-    t = state.currentLapStart + Math.max(estLapSec(cur), elapsed) * 1000;
-  } else {
-    t = state.splits.length ? state.splits[done-1].endMs : now;
+    t = state.currentLapStart + Math.max(leviedSec(order[d]), elapsed) * 1000;
+    from = d + 1;
   }
-  const starts = []; // for laps after the current one
-  for (let i = done + 1; i < state.order.length; i++) {
+  for (let i = from; i < order.length; i++) {
+    t += bufMs;
     starts[i] = t;
-    t += estLapSec(state.order[i]) * 1000;
+    t += leviedSec(order[i]) * 1000;
   }
-  return { laterStarts: starts, finish: t };
+  const lastIdx = order.length - 1;
+  const lastLapStart = starts[lastIdx] !== undefined ? starts[lastIdx]
+    : (state.phase === "live" && state.splits.length === lastIdx ? state.currentLapStart : t);
+  return { starts, lastLapStart, finish: t, actual: false };
 }
 
-/* ============ Actions ============ */
+/* How many laps actually fit the 3:30 last-start + 4:30 finish rules at current paces */
+function fittingLapCount(){
+  const locked = lockedCount();
+  const ord = [...state.order];
+  while (ord.length - locked > 1) {
+    const p = projection(ord);
+    if (todayAt(RULE.lastLapBy) - p.lastLapStart >= 0 && todayAt(RULE.close) - p.finish >= 0) break;
+    const cands = ord.slice(locked, -1);   // drop the slowest remaining non-anchor lap
+    let dropIdx = -1, slowest = -1;
+    cands.forEach((id, i) => { if (runner(id).pace >= slowest) { slowest = runner(id).pace; dropIdx = locked + i; } });
+    if (dropIdx < 0) break;
+    ord.splice(dropIdx, 1);
+  }
+  return ord.length;
+}
+
+/* ============ Tactics — auto-arrange remaining laps for the runners who turned up ============ */
+function autoArrange(){
+  const locked = lockedCount();
+  const slotsN = state.order.length - locked;
+  const present = presentRunners();
+  if (!present.length || slotsN <= 0) return;
+
+  // Remaining lap quota per present runner = plan laps minus laps already locked in
+  const lockedRuns = {};
+  state.order.slice(0, locked).forEach(id => lockedRuns[id] = (lockedRuns[id] || 0) + 1);
+  const counts = {};
+  present.forEach(r => counts[r.id] = Math.max(0, r.laps - (lockedRuns[r.id] || 0)));
+
+  // Redistribute absentees' laps: extras go to the fastest present runners first
+  const byPaceAsc = [...present].sort((a,b) => a.pace - b.pace);
+  let sum = Object.values(counts).reduce((a,b) => a+b, 0), i = 0;
+  while (sum < slotsN) { counts[byPaceAsc[i % byPaceAsc.length].id]++; sum++; i++; }
+  while (sum > slotsN) { // too many — trim from slowest first
+    const r = [...byPaceAsc].reverse().find(r => counts[r.id] > 0);
+    counts[r.id]--; sum--;
+  }
+
+  // Reserve the anchor (final lap) for the fastest runner with quota left
+  const anchor = byPaceAsc.find(r => counts[r.id] > 0);
+  counts[anchor.id]--;
+
+  // Fill remaining slots greedily: maximise rest since last run, avoid back-to-backs
+  const lastPos = {};
+  state.order.slice(0, locked).forEach((id, idx) => lastPos[id] = idx);
+  const seq = [];
+  for (let s = 0; s < slotsN - 1; s++) {
+    const pos = locked + s;
+    const prev = seq.length ? seq[seq.length-1] : state.order[locked-1];
+    let best = null, bestScore = -1e9;
+    present.forEach(r => {
+      if (counts[r.id] <= 0) return;
+      const rest = pos - (lastPos[r.id] !== undefined ? lastPos[r.id] : -99);
+      let score = rest * 10 + counts[r.id] * 3 - r.pace / 1000;
+      if (prev === r.id) score -= 1000;
+      if (r.id === anchor.id && s === slotsN - 2) score -= 800; // don't run into your own anchor lap
+      if (score > bestScore) { bestScore = score; best = r; }
+    });
+    seq.push(best.id); counts[best.id]--; lastPos[best.id] = pos;
+  }
+  seq.push(anchor.id);
+
+  // untangle any remaining back-to-backs by swapping (anchor slot stays put)
+  const prevLocked = locked > 0 ? state.order[locked-1] : null;
+  const neighborsOk = i => {
+    const left = i === 0 ? prevLocked : seq[i-1];
+    const right = i + 1 < seq.length ? seq[i+1] : null;
+    return seq[i] !== left && seq[i] !== right;
+  };
+  for (let s = 1; s < seq.length; s++) {
+    if (seq[s] !== seq[s-1]) continue;
+    const m = s === seq.length - 1 ? s - 1 : s;
+    for (let k = 0; k < seq.length - 1; k++) {
+      if (k === m || seq[k] === seq[m]) continue;
+      [seq[m], seq[k]] = [seq[k], seq[m]];
+      if (neighborsOk(m) && neighborsOk(k)) break;
+      [seq[m], seq[k]] = [seq[k], seq[m]];
+    }
+  }
+
+  state.order = [...state.order.slice(0, locked), ...seq];
+  save(); render();
+}
+
+function togglePresent(id){
+  if (state.phase === "live" && state.order[state.splits.length] === id) {
+    alert(runner(id).name + " is mid-lap — can't mark them out right now.");
+    return;
+  }
+  state.present[id] = !state.present[id];
+  autoArrange(); // re-plan instantly for whoever has turned up
+}
+
+function removeLap(){
+  const locked = lockedCount();
+  if (state.order.length - locked <= 1) return;
+  // drop the last remaining (non-anchor) lap of the slowest runner
+  const candidates = state.order.slice(locked, -1);
+  let dropIdx = -1, slowest = -1;
+  candidates.forEach((id, i) => {
+    if (runner(id).pace >= slowest) { slowest = runner(id).pace; dropIdx = locked + i; }
+  });
+  if (dropIdx < 0) return;
+  state.order.splice(dropIdx, 1);
+  save(); render();
+}
+function addLap(){
+  const present = presentRunners();
+  if (!present.length) return;
+  const fastest = [...present].sort((a,b) => a.pace - b.pace)[0];
+  state.order.splice(state.order.length - 1, 0, fastest.id); // before the anchor
+  autoArrange();
+}
+function setLevy(v){ state.paceLevyPct = Number(v); save(); render(); }
+function setBuffer(v){ state.bufferSec = Number(v); save(); render(); }
+
+/* ============ Race actions ============ */
 function startRace(){
   const now = Date.now();
   state.phase = "live";
@@ -156,14 +320,15 @@ function undoSplit(){
 }
 function moveLap(i, dir){
   const j = i + dir;
-  const min = state.splits.length + (state.phase === "live" ? 1 : 0); // can't move done/current laps
+  const min = lockedCount();
   if (j < min || j >= state.order.length || i < min) return;
   [state.order[i], state.order[j]] = [state.order[j], state.order[i]];
   save(); render();
 }
 function resetRace(){
   if (!confirm("Reset the whole race? All recorded splits will be lost.")) return;
-  state = { phase:"setup", order:[...DEFAULT_ORDER], startTime:null, currentLapStart:null, splits:[], tab:"live" };
+  state = { phase:"setup", order:[...DEFAULT_ORDER], startTime:null, currentLapStart:null, splits:[], tab:"live",
+            present:Object.fromEntries(RUNNERS.map(r=>[r.id,true])), paceLevyPct:5, bufferSec:60 };
   save(); render();
 }
 function setTab(tab){ state.tab = tab; save(); render(); }
@@ -172,7 +337,7 @@ function setTab(tab){ state.tab = tab; save(); render(); }
 function render(){
   document.querySelectorAll(".tabBtn").forEach(b => {
     b.className = "tabBtn py-4 font-semibold btn-press " +
-      (b.dataset.tab === state.tab ? "text-cyan-400" : "text-slate-500");
+      (b.dataset.tab === state.tab ? "accent" : "text-slate-500");
   });
   $("#progressCard").classList.toggle("hidden", state.phase === "setup");
   const el = $("#screen");
@@ -184,13 +349,15 @@ function render(){
 
 function renderLive(){
   if (state.phase === "setup") {
+    const absent = RUNNERS.filter(r => !state.present[r.id]);
     return `
       <div class="card p-6 text-center">
         <div class="text-5xl mb-3">🏁</div>
         <h2 class="text-xl font-bold mb-1">Ready to go</h2>
         <p class="text-sm text-slate-400 mb-1">First up: <b class="text-slate-200">${runner(state.order[0]).emoji} ${runner(state.order[0]).name}</b></p>
-        <p class="text-xs text-slate-500 mb-5">Check the run order in the Plan tab, then hit start when the gun goes.</p>
-        <button onclick="startRace()" class="btn-press w-full py-4 rounded-xl bg-emerald-500 text-black text-lg font-extrabold">START RACE</button>
+        <p class="text-xs text-slate-500 mb-2">Gun at 10:00 am. Mark anyone who hasn't turned up in the Plan tab — the order re-plans itself.</p>
+        ${absent.length ? `<p class="text-xs text-amber-400 mb-3">⚠️ Out today: ${absent.map(r=>r.name.split(" ")[0]).join(", ")} — laps redistributed</p>` : ""}
+        <button onclick="startRace()" class="btn-press w-full py-4 rounded-xl bg-teal-400 text-[#04121f] text-lg font-extrabold">START RACE</button>
       </div>
       ${renderUpcoming(0)}`;
   }
@@ -202,8 +369,8 @@ function renderLive(){
         <div class="text-5xl mb-3">🏆</div>
         <h2 class="text-xl font-bold">Race complete!</h2>
         <div class="timer text-4xl font-extrabold my-3">${fmtClock(total)}</div>
-        <p class="text-sm text-slate-400">77 km · 11 laps · 6 legends</p>
-        <button onclick="undoSplit()" class="btn-press mt-5 w-full py-3 rounded-xl bg-slate-800 text-slate-300 text-sm font-semibold">↩︎ Undo last handover</button>
+        <p class="text-sm text-slate-400">${state.order.length * LAP_KM} km · ${state.order.length} laps · Team Harbour</p>
+        <button onclick="undoSplit()" class="btn-press mt-5 w-full py-3 rounded-xl bg-[#0e2c45] text-slate-300 text-sm font-semibold">↩︎ Undo last handover</button>
       </div>
       ${renderSplits()}`;
   }
@@ -223,15 +390,15 @@ function renderLive(){
         <div><div class="text-slate-500">Plan pace</div><div class="text-slate-200 font-semibold timer">${fmtPace(cur.pace)}</div></div>
         <div><div class="text-slate-500">vs target</div><div id="lapDiff" class="font-semibold timer">–</div></div>
       </div>
-      <div class="h-2 bg-slate-800 rounded-full overflow-hidden mt-3">
-        <div id="lapBar" class="h-full bg-cyan-400 transition-all" style="width:0%"></div>
+      <div class="h-2 bg-[#0e2c45] rounded-full overflow-hidden mt-3">
+        <div id="lapBar" class="h-full bg-cyan-300 transition-all" style="width:0%"></div>
       </div>
     </div>
 
-    <button onclick="handover()" class="btn-press w-full py-5 rounded-2xl bg-cyan-400 text-black text-xl font-extrabold mb-3">
+    <button onclick="handover()" class="btn-press w-full py-5 rounded-2xl bg-cyan-300 text-[#04121f] text-xl font-extrabold mb-3">
       ${next ? `🤝 HANDOVER → ${next.name.split(" ")[0]}` : "🏁 FINISH RACE"}
     </button>
-    ${state.splits.length ? `<button onclick="undoSplit()" class="btn-press w-full py-2.5 rounded-xl bg-slate-800 text-slate-400 text-sm font-semibold mb-4">↩︎ Undo last handover</button>` : `<div class="mb-4"></div>`}
+    ${state.splits.length ? `<button onclick="undoSplit()" class="btn-press w-full py-2.5 rounded-xl bg-[#0e2c45] text-slate-400 text-sm font-semibold mb-4">↩︎ Undo last handover</button>` : `<div class="mb-4"></div>`}
 
     ${next ? `<div class="card p-4 mb-4 flex items-center justify-between">
         <div><p class="text-xs text-slate-500 uppercase tracking-widest">On deck</p>
@@ -247,54 +414,92 @@ function renderUpcoming(from){
   const rows = [];
   for (let i = from; i < state.order.length; i++) {
     const r = runner(state.order[i]);
-    const eta = proj && proj.laterStarts[i] ? fmtTime(proj.laterStarts[i]) : "–";
+    const eta = proj.starts[i] !== undefined ? fmtTime(proj.starts[i]) : "–";
+    const out = !state.present[r.id];
     rows.push(`
-      <div class="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0">
+      <div class="flex items-center gap-3 py-2.5 border-b border-[#16405e] last:border-0 ${out ? "opacity-40" : ""}">
         <span class="text-slate-500 text-xs w-10">Lap ${i+1}</span>
-        <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
+        <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}${out ? " ⛔" : ""}</span>
         <span class="text-xs text-slate-400 timer">${fmtMS(estLapSec(r.id))}</span>
-        ${state.phase !== "setup" ? `<span class="text-xs text-slate-500 timer w-16 text-right">${eta}</span>` : ""}
+        <span class="text-xs text-slate-500 timer w-16 text-right">${eta}</span>
       </div>`);
   }
   if (!rows.length) return "";
-  return `<div class="card p-4"><p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Coming up</p>${rows.join("")}</div>`;
+  return `<div class="card p-4"><p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Coming up · est. start times</p>${rows.join("")}</div>`;
 }
 
 function renderPlan(){
-  const roster = RUNNERS.map(r => `
-    <div class="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0">
-      <span class="text-xl">${r.emoji}</span>
-      <span class="flex-1 text-sm font-semibold">${r.name}</span>
+  const orderCounts = {};
+  state.order.forEach(id => orderCounts[id] = (orderCounts[id] || 0) + 1);
+
+  const roster = RUNNERS.map(r => {
+    const inToday = state.present[r.id];
+    return `
+    <div class="flex items-center gap-3 py-2.5 border-b border-[#16405e] last:border-0 ${inToday ? "" : "opacity-50"}">
+      <button onclick="togglePresent('${r.id}')" class="btn-press text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg ${inToday ? "bg-teal-400 text-[#04121f]" : "bg-[#0e2c45] text-slate-500 border border-[#1c4a6e]"}">${inToday ? "IN" : "OUT"}</button>
+      <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
       <span class="text-xs text-slate-400 timer">${fmtPace(r.pace)}</span>
       <span class="text-xs text-slate-400 timer w-12 text-right">~${fmtMS(estLapSec(r.id))}</span>
-      <span class="text-xs text-cyan-400 font-bold w-8 text-right">${r.laps}×</span>
-    </div>`).join("");
+      <span class="text-xs accent font-bold w-8 text-right">${orderCounts[r.id] || 0}×</span>
+    </div>`;
+  }).join("");
 
-  const lockedUpTo = state.splits.length + (state.phase === "live" ? 1 : 0);
+  const locked = lockedCount();
   const order = state.order.map((id, i) => {
     const r = runner(id);
-    const locked = i < lockedUpTo;
+    const isLocked = i < locked;
     const status = i < state.splits.length ? "✅" : (state.phase === "live" && i === state.splits.length ? "🏃" : "");
     return `
-      <div class="flex items-center gap-2 py-2 border-b border-slate-800 last:border-0 ${locked ? "opacity-50" : ""}">
+      <div class="flex items-center gap-2 py-2 border-b border-[#16405e] last:border-0 ${isLocked ? "opacity-50" : ""}">
         <span class="text-slate-500 text-xs w-10">Lap ${i+1}</span>
-        <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name} ${status}</span>
-        ${!locked ? `
-          <button onclick="moveLap(${i},-1)" class="btn-press w-9 h-9 rounded-lg bg-slate-800 text-slate-300">↑</button>
-          <button onclick="moveLap(${i},1)" class="btn-press w-9 h-9 rounded-lg bg-slate-800 text-slate-300">↓</button>` : ""}
+        <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name} ${status}${!state.present[id] ? " ⛔" : ""}</span>
+        ${!isLocked ? `
+          <button onclick="moveLap(${i},-1)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-slate-300">↑</button>
+          <button onclick="moveLap(${i},1)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-slate-300">↓</button>` : ""}
       </div>`;
   }).join("");
 
-  const totalEst = state.order.reduce((s,id) => s + estLapSec(id), 0);
+  const proj = projection();
+  const lastSlack = (todayAt(RULE.lastLapBy) - proj.lastLapStart) / 1000;
+  const finSlack = (todayAt(RULE.close) - proj.finish) / 1000;
+  const worst = Math.min(lastSlack, finSlack);
+  const statusIcon = worst < 0 ? "🛑" : worst < 900 ? "⚠️" : "✅";
+  const advice = worst < 0
+    ? `At current paces only ~${fittingLapCount()} laps fit the 3:30 last-start rule — use “− Drop lap” (removes the slowest runner's lap) or lower the levy if the team is running hot.`
+    : worst < 900 ? "Tight against the cutoff — keep handovers sharp or trim a lap." : "Plan fits the race window comfortably.";
 
   return `
-    <div class="card p-4 mb-4">
-      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Team · conservative pacing</p>
+    <div class="card p-4 mb-3">
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Who's turned up · tap IN/OUT — plan re-arranges live</p>
       ${roster}
-      <p class="text-xs text-slate-500 mt-3">Total plan: <b class="text-slate-300 timer">${fmtClock(totalEst)}</b> for 77 km</p>
     </div>
+
+    <div class="card p-4 mb-3">
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Tactics ${statusIcon}</p>
+      <p class="text-xs text-slate-300 mb-3">${advice}</p>
+      <div class="grid grid-cols-2 gap-2 text-xs mb-3">
+        <div class="bg-[#0e2c45] rounded-lg p-2.5">
+          <p class="text-slate-400">Levy on times</p>
+          <select class="mt-1 w-full" onchange="setLevy(this.value)">
+            ${[0,5,10,15].map(v => `<option value="${v}" ${state.paceLevyPct===v?"selected":""}>+${v}% safety</option>`).join("")}
+          </select>
+        </div>
+        <div class="bg-[#0e2c45] rounded-lg p-2.5">
+          <p class="text-slate-400">Handover buffer</p>
+          <select class="mt-1 w-full" onchange="setBuffer(this.value)">
+            ${[0,30,60,120].map(v => `<option value="${v}" ${state.bufferSec===v?"selected":""}>${v ? fmtMS(v) + " / changeover" : "none"}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button onclick="autoArrange()" class="btn-press py-2.5 rounded-lg bg-teal-400 text-[#04121f] text-xs font-extrabold">✨ Auto-arrange</button>
+        <button onclick="addLap()" class="btn-press py-2.5 rounded-lg bg-[#0e2c45] text-slate-300 text-xs font-bold border border-[#1c4a6e]">+ Add lap</button>
+        <button onclick="removeLap()" class="btn-press py-2.5 rounded-lg bg-[#0e2c45] text-slate-300 text-xs font-bold border border-[#1c4a6e]">− Drop lap</button>
+      </div>
+    </div>
+
     <div class="card p-4 mb-4">
-      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Run order ${state.phase==="setup" ? "· tap ↑↓ to reorder" : "· future laps can still be reordered"}</p>
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Run order · ${state.order.length} laps, ${state.order.length*LAP_KM} km ${state.phase==="setup" ? "· tap ↑↓ to tweak" : "· future laps still editable"}</p>
       ${order}
     </div>
     <button onclick="resetRace()" class="btn-press w-full py-3 rounded-xl bg-red-950 text-red-400 text-sm font-semibold border border-red-900">Reset race</button>`;
@@ -309,7 +514,7 @@ function renderSplits(){
     const diff = actual - estLapSec(r.id);
     const pace = actual / LAP_KM;
     return `
-      <div class="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0">
+      <div class="flex items-center gap-3 py-2.5 border-b border-[#16405e] last:border-0">
         <span class="text-slate-500 text-xs w-10">Lap ${i+1}</span>
         <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
         <span class="text-xs text-slate-400 timer">${fmtPace(Math.round(pace))}</span>
@@ -318,7 +523,6 @@ function renderSplits(){
       </div>`;
   }).join("");
 
-  // per-runner summary
   const byRunner = {};
   state.splits.forEach(s => {
     (byRunner[s.runnerId] = byRunner[s.runnerId] || []).push((s.endMs - s.startMs)/1000);
@@ -328,7 +532,7 @@ function renderSplits(){
     const total = arr.reduce((a,b)=>a+b,0);
     const avgPace = Math.round(total / (arr.length * LAP_KM));
     return `
-      <div class="flex items-center gap-3 py-2 border-b border-slate-800 last:border-0">
+      <div class="flex items-center gap-3 py-2 border-b border-[#16405e] last:border-0">
         <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
         <span class="text-xs text-slate-400">${arr.length} lap${arr.length>1?"s":""} · ${arr.length*LAP_KM} km</span>
         <span class="text-xs text-slate-200 font-semibold timer">${fmtPace(avgPace)}</span>
@@ -348,8 +552,21 @@ function renderSplits(){
 
 /* ============ Live ticking (every 500ms) ============ */
 function tick(){
-  if (!state.startTime) return;
   const now = Date.now();
+  const proj = projection();
+
+  // race-rules card — always live
+  $("#ruleLastStart").textContent = fmtTime(proj.lastLapStart);
+  $("#ruleFinish").textContent = fmtTime(proj.finish);
+  const lastSlack = (todayAt(RULE.lastLapBy) - proj.lastLapStart) / 1000;
+  const finSlack = (todayAt(RULE.close) - proj.finish) / 1000;
+  const ls = $("#ruleLastSlack"), fs = $("#ruleFinishSlack");
+  ls.textContent = (proj.actual ? "✓ started " : "") + fmtSlack(lastSlack);
+  fs.textContent = (proj.actual ? "✓ done " : "") + fmtSlack(finSlack);
+  ls.className = "mt-0.5 font-semibold timer " + (lastSlack < 0 ? "behind" : lastSlack < 900 ? "text-amber-400" : "ahead");
+  fs.className = "mt-0.5 font-semibold timer " + (finSlack < 0 ? "behind" : finSlack < 900 ? "text-amber-400" : "ahead");
+
+  if (!state.startTime) return;
 
   // overall progress
   const done = state.splits.length;
@@ -359,8 +576,7 @@ function tick(){
   $("#progressBar").style.width = (done / state.order.length * 100) + "%";
   const raceEnd = state.phase === "done" ? state.splits[done-1].endMs : now;
   $("#raceClock").textContent = fmtClock((raceEnd - state.startTime) / 1000);
-  const proj = projection();
-  $("#etaFinish").textContent = state.phase === "done" ? fmtTime(raceEnd) : (proj ? fmtTime(proj.finish) : "–");
+  $("#etaFinish").textContent = fmtTime(proj.finish);
 
   // current lap card
   if (state.phase === "live" && $("#lapTimer")) {
@@ -373,8 +589,8 @@ function tick(){
     d.textContent = fmtDiff(diff);
     d.className = "font-semibold timer " + (diff <= 0 ? "ahead" : "behind");
     $("#lapBar").style.width = Math.min(100, elapsed / est * 100) + "%";
-    $("#lapBar").className = "h-full transition-all " + (diff <= 0 ? "bg-cyan-400" : "bg-red-400");
-    if ($("#nextEta") && proj && proj.laterStarts[done+1]) $("#nextEta").textContent = fmtTime(proj.laterStarts[done+1]);
+    $("#lapBar").className = "h-full transition-all " + (diff <= 0 ? "bg-cyan-300" : "bg-red-400");
+    if ($("#nextEta") && proj.starts[done+1] !== undefined) $("#nextEta").textContent = fmtTime(proj.starts[done+1]);
   }
 }
 
