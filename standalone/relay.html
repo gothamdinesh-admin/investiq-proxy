@@ -105,17 +105,21 @@ let state = load() || {
   splits: [],                // [{runnerId, startMs, endMs}]
   tab: "live",
   present: Object.fromEntries(RUNNERS.map(r => [r.id, true])),
+  paces: Object.fromEntries(RUNNERS.map(r => [r.id, r.pace])), // editable — sec per km
   paceLevyPct: 5,            // safety levy on estimated lap times
   bufferSec: 60,             // handover buffer per changeover
 };
 
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
 function load(){ try { return JSON.parse(localStorage.getItem(STORE_KEY)); } catch(e){ return null; } }
+// migrate older saved states
+if (!state.paces) state.paces = Object.fromEntries(RUNNERS.map(r => [r.id, r.pace]));
 
 /* ============ Helpers ============ */
 const $ = sel => document.querySelector(sel);
 const runner = id => RUNNERS.find(r => r.id === id);
-const estLapSec = id => runner(id).pace * LAP_KM;
+const paceOf = id => state.paces[id];
+const estLapSec = id => paceOf(id) * LAP_KM;
 const leviedSec = id => estLapSec(id) * (1 + state.paceLevyPct / 100);
 const presentRunners = () => RUNNERS.filter(r => state.present[r.id]);
 const lockedCount = () => state.splits.length + (state.phase === "live" ? 1 : 0);
@@ -201,7 +205,7 @@ function trimToFit(ord, locked){
     let victim = null;
     ord.slice(locked, -1).forEach(id => {   // anchor lap itself is never the slot removed
       if (!victim) { victim = id; return; }
-      if (cnt[id] > cnt[victim] || (cnt[id] === cnt[victim] && runner(id).pace > runner(victim).pace)) victim = id;
+      if (cnt[id] > cnt[victim] || (cnt[id] === cnt[victim] && paceOf(id) > paceOf(victim))) victim = id;
     });
     if (!victim) break;
     for (let i = ord.length - 2; i >= locked; i--) {
@@ -230,7 +234,7 @@ function autoArrange(){
   present.forEach(r => counts[r.id] = Math.max(0, r.laps - (lockedRuns[r.id] || 0)));
 
   // Redistribute absentees' laps: extras go to the fastest present runners first
-  const byPaceAsc = [...present].sort((a,b) => a.pace - b.pace);
+  const byPaceAsc = [...present].sort((a,b) => paceOf(a.id) - paceOf(b.id));
   let sum = Object.values(counts).reduce((a,b) => a+b, 0), i = 0;
   while (sum < slotsN) { counts[byPaceAsc[i % byPaceAsc.length].id]++; sum++; i++; }
   while (sum > slotsN) { // too many — take from whoever has most laps (tie: slowest), keep everyone in
@@ -238,7 +242,7 @@ function autoArrange(){
     present.forEach(r => {
       if (counts[r.id] <= 0) return;
       if (!victim || counts[r.id] > counts[victim.id] ||
-          (counts[r.id] === counts[victim.id] && r.pace > victim.pace)) victim = r;
+          (counts[r.id] === counts[victim.id] && paceOf(r.id) > paceOf(victim.id))) victim = r;
     });
     counts[victim.id]--; sum--;
   }
@@ -258,7 +262,7 @@ function autoArrange(){
     present.forEach(r => {
       if (counts[r.id] <= 0) return;
       const rest = pos - (lastPos[r.id] !== undefined ? lastPos[r.id] : -99);
-      let score = rest * 10 + counts[r.id] * 3 - r.pace / 1000;
+      let score = rest * 10 + counts[r.id] * 3 - paceOf(r.id) / 1000;
       if (prev === r.id) score -= 1000;
       if (r.id === anchor.id && s === slotsN - 2) score -= 800; // don't run into your own anchor lap
       if (score > bestScore) { bestScore = score; best = r; }
@@ -312,7 +316,7 @@ function removeLap(){
   const candidates = state.order.slice(locked, -1);
   let dropIdx = -1, slowest = -1;
   candidates.forEach((id, i) => {
-    if (runner(id).pace >= slowest) { slowest = runner(id).pace; dropIdx = locked + i; }
+    if (paceOf(id) >= slowest) { slowest = paceOf(id); dropIdx = locked + i; }
   });
   if (dropIdx < 0) return;
   state.order.splice(dropIdx, 1);
@@ -321,12 +325,20 @@ function removeLap(){
 function addLap(){
   const present = presentRunners();
   if (!present.length) return;
-  const fastest = [...present].sort((a,b) => a.pace - b.pace)[0];
+  const fastest = [...present].sort((a,b) => paceOf(a.id) - paceOf(b.id))[0];
   state.order.splice(state.order.length - 1, 0, fastest.id); // before the anchor
   autoArrange();
 }
 function setLevy(v){ state.paceLevyPct = Number(v); save(); autoArrange(); render(); }
 function setBuffer(v){ state.bufferSec = Number(v); save(); autoArrange(); render(); }
+function adjustPace(id, delta){
+  state.paces[id] = Math.min(600, Math.max(180, paceOf(id) + delta)); // 3:00–10:00 /km
+  save(); autoArrange(); render();
+}
+function resetPaces(){
+  state.paces = Object.fromEntries(RUNNERS.map(r => [r.id, r.pace]));
+  save(); autoArrange(); render();
+}
 
 /* ============ Race actions ============ */
 function startRace(){
@@ -367,7 +379,8 @@ function moveLap(i, dir){
 function resetRace(){
   if (!confirm("Reset the whole race? All recorded splits will be lost.")) return;
   state = { phase:"setup", order:[...DEFAULT_ORDER], startTime:null, currentLapStart:null, splits:[], tab:"live",
-            present:Object.fromEntries(RUNNERS.map(r=>[r.id,true])), paceLevyPct:5, bufferSec:60 };
+            present:Object.fromEntries(RUNNERS.map(r=>[r.id,true])),
+            paces:Object.fromEntries(RUNNERS.map(r=>[r.id,r.pace])), paceLevyPct:5, bufferSec:60 };
   autoArrange();   // re-fit the fresh plan to the race rules
   save(); render();
 }
@@ -428,7 +441,7 @@ function renderLive(){
       <div id="lapTimer" class="timer text-6xl font-extrabold my-4">0:00</div>
       <div class="grid grid-cols-3 gap-2 text-xs text-slate-400 mb-1">
         <div><div class="text-slate-500">Target</div><div class="text-slate-200 font-semibold timer">${fmtMS(est)}</div></div>
-        <div><div class="text-slate-500">Plan pace</div><div class="text-slate-200 font-semibold timer">${fmtPace(cur.pace)}</div></div>
+        <div><div class="text-slate-500">Plan pace</div><div class="text-slate-200 font-semibold timer">${fmtPace(paceOf(cur.id))}</div></div>
         <div><div class="text-slate-500">vs target</div><div id="lapDiff" class="font-semibold timer">–</div></div>
       </div>
       <div class="h-2 bg-[#0e2c45] rounded-full overflow-hidden mt-3">
@@ -479,7 +492,7 @@ function renderPlan(){
     <div class="flex items-center gap-3 py-2.5 border-b border-[#16405e] last:border-0 ${inToday ? "" : "opacity-50"}">
       <button onclick="togglePresent('${r.id}')" class="btn-press text-[10px] font-extrabold px-2.5 py-1.5 rounded-lg ${inToday ? "bg-teal-400 text-[#04121f]" : "bg-[#0e2c45] text-slate-500 border border-[#1c4a6e]"}">${inToday ? "IN" : "OUT"}</button>
       <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
-      <span class="text-xs text-slate-400 timer">${fmtPace(r.pace)}</span>
+      <span class="text-xs text-slate-400 timer">${fmtPace(paceOf(r.id))}</span>
       <span class="text-xs text-slate-400 timer w-12 text-right">~${fmtMS(estLapSec(r.id))}</span>
       <span class="text-xs accent font-bold w-8 text-right">${orderCounts[r.id] || 0}×</span>
     </div>`;
@@ -509,10 +522,25 @@ function renderPlan(){
     ? `At current paces only ~${fittingLapCount()} laps fit the 3:30 last-start rule — use “− Drop lap” (removes the slowest runner's lap) or lower the levy if the team is running hot.`
     : worst < 900 ? "Tight against the cutoff — keep handovers sharp or trim a lap." : "Plan fits the race window comfortably.";
 
+  const paceRows = RUNNERS.map(r => `
+    <div class="flex items-center gap-2 py-2 border-b border-[#16405e] last:border-0 ${state.present[r.id] ? "" : "opacity-40"}">
+      <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name.split(" ")[0]}</span>
+      <button onclick="adjustPace('${r.id}',-15)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-teal-300 text-lg font-bold">−</button>
+      <span class="text-sm font-bold timer w-16 text-center">${fmtPace(paceOf(r.id))}</span>
+      <button onclick="adjustPace('${r.id}',15)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-slate-300 text-lg font-bold">+</button>
+      <span class="text-xs text-slate-400 timer w-12 text-right">~${fmtMS(estLapSec(r.id))}</span>
+    </div>`).join("");
+
   return `
     <div class="card p-4 mb-3">
       <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Who's turned up · tap IN/OUT — plan re-arranges live</p>
       ${roster}
+    </div>
+
+    <div class="card p-4 mb-3">
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Runner times · − faster / + slower (15 sec per km)</p>
+      ${paceRows}
+      <button onclick="resetPaces()" class="btn-press mt-3 w-full py-2 rounded-lg bg-[#0e2c45] text-slate-400 text-xs font-semibold border border-[#1c4a6e]">↺ Reset times to the team plan</button>
     </div>
 
     <div class="card p-4 mb-3">
