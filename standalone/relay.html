@@ -25,7 +25,7 @@
     <button onclick="resetRace()" title="Reset race" class="btn-press absolute right-0 top-6 w-9 h-9 rounded-lg bg-[#0e2c45] border border-[#1c4a6e] text-slate-400 text-base">↺</button>
     <p class="text-[11px] tracking-[.25em] font-bold accent uppercase px-10">The Discretionary Mandates</p>
     <h1 class="text-2xl font-extrabold tracking-tight mt-1">🏃‍♀️ Pillar to Pōu Relay</h1>
-    <p class="text-sm text-slate-400 mt-1">Taupō · 7 km laps · 11 laps · 77 km</p>
+    <p class="text-sm text-slate-400 mt-1" id="subTitle">Taupō · 7 km laps</p>
   </header>
 
   <!-- Race rules + cutoff status (always visible) -->
@@ -121,6 +121,16 @@ const presentRunners = () => RUNNERS.filter(r => state.present[r.id]);
 const lockedCount = () => state.splits.length + (state.phase === "live" ? 1 : 0);
 
 function todayAt(hm){ const d = new Date(); d.setHours(hm[0], hm[1], 0, 0); return d.getTime(); }
+function dayAt(hm, refMs){ const d = new Date(refMs); d.setHours(hm[0], hm[1], 0, 0); return d.getTime(); }
+// When the gun goes (or went): actual start, else 10:00 today — or 10:00 tomorrow if today's window has passed
+function gunTime(){
+  if (state.startTime) return state.startTime;
+  const now = Date.now();
+  const open = todayAt(RULE.open);
+  if (now <= open) return open;
+  if (now >= todayAt(RULE.lastLapBy)) return open + 86400000;
+  return now;
+}
 
 function fmtClock(sec){
   sec = Math.max(0, Math.round(sec));
@@ -150,10 +160,11 @@ function projection(order){
 
   if (state.phase === "done") {
     const last = state.splits[state.splits.length - 1];
-    return { starts, lastLapStart: last.startMs, finish: last.endMs, actual: true };
+    return { starts, lastLapStart: last.startMs, finish: last.endMs, gun: state.startTime, actual: true };
   }
+  const gun = gunTime();
   if (state.phase === "setup") {
-    t = Math.max(now, todayAt(RULE.open));      // assume gun at 10:00 (or now, if later)
+    t = gun;
     starts[0] = t;
     t += leviedSec(order[0]) * 1000;
     from = 1;
@@ -171,23 +182,38 @@ function projection(order){
   const lastIdx = order.length - 1;
   const lastLapStart = starts[lastIdx] !== undefined ? starts[lastIdx]
     : (state.phase === "live" && state.splits.length === lastIdx ? state.currentLapStart : t);
-  return { starts, lastLapStart, finish: t, actual: false };
+  return { starts, lastLapStart, finish: t, gun, actual: false };
+}
+
+/* Does an order respect both rules (last lap by 3:30, finish by 4:30) on the race day? */
+function fitsRules(ord){
+  const p = projection(ord);
+  return p.lastLapStart <= dayAt(RULE.lastLapBy, p.gun) && p.finish <= dayAt(RULE.close, p.gun);
+}
+
+/* Trim unlocked laps until the plan fits the rules. Everyone keeps a lap as long as
+   possible: the runner with the most remaining laps loses one first (tie: slowest). */
+function trimToFit(ord, locked){
+  ord = [...ord];
+  while (ord.length - locked > 1 && !fitsRules(ord)) {
+    const cnt = {};
+    ord.slice(locked).forEach(id => cnt[id] = (cnt[id] || 0) + 1);
+    let victim = null;
+    ord.slice(locked, -1).forEach(id => {   // anchor lap itself is never the slot removed
+      if (!victim) { victim = id; return; }
+      if (cnt[id] > cnt[victim] || (cnt[id] === cnt[victim] && runner(id).pace > runner(victim).pace)) victim = id;
+    });
+    if (!victim) break;
+    for (let i = ord.length - 2; i >= locked; i--) {
+      if (ord[i] === victim) { ord.splice(i, 1); break; }
+    }
+  }
+  return ord;
 }
 
 /* How many laps actually fit the 3:30 last-start + 4:30 finish rules at current paces */
 function fittingLapCount(){
-  const locked = lockedCount();
-  const ord = [...state.order];
-  while (ord.length - locked > 1) {
-    const p = projection(ord);
-    if (todayAt(RULE.lastLapBy) - p.lastLapStart >= 0 && todayAt(RULE.close) - p.finish >= 0) break;
-    const cands = ord.slice(locked, -1);   // drop the slowest remaining non-anchor lap
-    let dropIdx = -1, slowest = -1;
-    cands.forEach((id, i) => { if (runner(id).pace >= slowest) { slowest = runner(id).pace; dropIdx = locked + i; } });
-    if (dropIdx < 0) break;
-    ord.splice(dropIdx, 1);
-  }
-  return ord.length;
+  return trimToFit([...state.order], lockedCount()).length;
 }
 
 /* ============ Tactics — auto-arrange remaining laps for the runners who turned up ============ */
@@ -207,9 +233,14 @@ function autoArrange(){
   const byPaceAsc = [...present].sort((a,b) => a.pace - b.pace);
   let sum = Object.values(counts).reduce((a,b) => a+b, 0), i = 0;
   while (sum < slotsN) { counts[byPaceAsc[i % byPaceAsc.length].id]++; sum++; i++; }
-  while (sum > slotsN) { // too many — trim from slowest first
-    const r = [...byPaceAsc].reverse().find(r => counts[r.id] > 0);
-    counts[r.id]--; sum--;
+  while (sum > slotsN) { // too many — take from whoever has most laps (tie: slowest), keep everyone in
+    let victim = null;
+    present.forEach(r => {
+      if (counts[r.id] <= 0) return;
+      if (!victim || counts[r.id] > counts[victim.id] ||
+          (counts[r.id] === counts[victim.id] && r.pace > victim.pace)) victim = r;
+    });
+    counts[victim.id]--; sum--;
   }
 
   // Reserve the anchor (final lap) for the fastest runner with quota left
@@ -236,8 +267,17 @@ function autoArrange(){
   }
   seq.push(anchor.id);
 
-  // untangle any remaining back-to-backs by swapping (anchor slot stays put)
-  const prevLocked = locked > 0 ? state.order[locked-1] : null;
+  let ord = [...state.order.slice(0, locked), ...seq];
+  ord = trimToFit(ord, locked);   // auto-size so the plan respects the 3:30 / 4:30 rules
+  untangleOrder(ord, locked);
+  state.order = ord;
+  save(); render();
+}
+
+/* Untangle back-to-back laps by swapping within the unlocked region (anchor slot stays put) */
+function untangleOrder(ord, locked){
+  const seq = ord.slice(locked);
+  const prevLocked = locked > 0 ? ord[locked-1] : null;
   const neighborsOk = i => {
     const left = i === 0 ? prevLocked : seq[i-1];
     const right = i + 1 < seq.length ? seq[i+1] : null;
@@ -253,9 +293,7 @@ function autoArrange(){
       [seq[m], seq[k]] = [seq[k], seq[m]];
     }
   }
-
-  state.order = [...state.order.slice(0, locked), ...seq];
-  save(); render();
+  ord.splice(locked, seq.length, ...seq);
 }
 
 function togglePresent(id){
@@ -287,8 +325,8 @@ function addLap(){
   state.order.splice(state.order.length - 1, 0, fastest.id); // before the anchor
   autoArrange();
 }
-function setLevy(v){ state.paceLevyPct = Number(v); save(); render(); }
-function setBuffer(v){ state.bufferSec = Number(v); save(); render(); }
+function setLevy(v){ state.paceLevyPct = Number(v); save(); autoArrange(); render(); }
+function setBuffer(v){ state.bufferSec = Number(v); save(); autoArrange(); render(); }
 
 /* ============ Race actions ============ */
 function startRace(){
@@ -330,6 +368,7 @@ function resetRace(){
   if (!confirm("Reset the whole race? All recorded splits will be lost.")) return;
   state = { phase:"setup", order:[...DEFAULT_ORDER], startTime:null, currentLapStart:null, splits:[], tab:"live",
             present:Object.fromEntries(RUNNERS.map(r=>[r.id,true])), paceLevyPct:5, bufferSec:60 };
+  autoArrange();   // re-fit the fresh plan to the race rules
   save(); render();
 }
 function setTab(tab){ state.tab = tab; save(); render(); }
@@ -341,6 +380,7 @@ function render(){
       (b.dataset.tab === state.tab ? "accent" : "text-slate-500");
   });
   $("#progressCard").classList.toggle("hidden", state.phase === "setup");
+  $("#subTitle").textContent = `Taupō · 7 km laps · ${state.order.length} laps · ${state.order.length * LAP_KM} km`;
   const el = $("#screen");
   if (state.tab === "plan") el.innerHTML = renderPlan();
   else if (state.tab === "splits") el.innerHTML = renderSplits();
@@ -461,8 +501,8 @@ function renderPlan(){
   }).join("");
 
   const proj = projection();
-  const lastSlack = (todayAt(RULE.lastLapBy) - proj.lastLapStart) / 1000;
-  const finSlack = (todayAt(RULE.close) - proj.finish) / 1000;
+  const lastSlack = (dayAt(RULE.lastLapBy, proj.gun) - proj.lastLapStart) / 1000;
+  const finSlack = (dayAt(RULE.close, proj.gun) - proj.finish) / 1000;
   const worst = Math.min(lastSlack, finSlack);
   const statusIcon = worst < 0 ? "🛑" : worst < 900 ? "⚠️" : "✅";
   const advice = worst < 0
@@ -559,8 +599,8 @@ function tick(){
   // race-rules card — always live
   $("#ruleLastStart").textContent = fmtTime(proj.lastLapStart);
   $("#ruleFinish").textContent = fmtTime(proj.finish);
-  const lastSlack = (todayAt(RULE.lastLapBy) - proj.lastLapStart) / 1000;
-  const finSlack = (todayAt(RULE.close) - proj.finish) / 1000;
+  const lastSlack = (dayAt(RULE.lastLapBy, proj.gun) - proj.lastLapStart) / 1000;
+  const finSlack = (dayAt(RULE.close, proj.gun) - proj.finish) / 1000;
   const ls = $("#ruleLastSlack"), fs = $("#ruleFinishSlack");
   ls.textContent = (proj.actual ? "✓ started " : "") + fmtSlack(lastSlack);
   fs.textContent = (proj.actual ? "✓ done " : "") + fmtSlack(finSlack);
@@ -597,6 +637,8 @@ function tick(){
 
 document.querySelectorAll(".tabBtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 setInterval(tick, 500);
+// auto-size the plan to the race rules on first open (and for plans saved before this rule existed)
+if (state.phase === "setup" && !fitsRules(state.order)) autoArrange();
 render();
 </script>
 </body>
