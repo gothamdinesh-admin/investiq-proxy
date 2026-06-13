@@ -465,6 +465,19 @@ function adjustPace(id, delta){
   state.paces[id] = Math.min(600, Math.max(180, paceOf(id) + delta)); // 3:00–10:00 /km
   save(); autoArrange(); render();
 }
+function parsePace(txt){
+  txt = String(txt).trim();
+  const m = txt.match(/^(\d{1,2})[:.](\d{1,2})$/);   // "5:45" or "5.45"
+  if (m) return (+m[1]) * 60 + (+m[2]);
+  if (/^\d+$/.test(txt)) return +txt < 20 ? +txt * 60 : +txt;  // "6" → 6:00, "345" → 345 sec
+  return null;
+}
+function enterPace(id, txt){
+  const sec = parsePace(txt);
+  if (sec === null) { render(); return; }   // invalid input — revert display
+  state.paces[id] = Math.min(600, Math.max(180, Math.round(sec)));
+  save(); autoArrange(); render();
+}
 function resetPaces(){
   state.paces = Object.fromEntries(RUNNERS.map(r => [r.id, r.pace]));
   save(); autoArrange(); render();
@@ -508,6 +521,7 @@ function moveLap(i, dir){
 }
 function resetRace(){
   if (!confirm("Reset the whole race? All recorded splits will be lost.")) return;
+  localStorage.setItem(STORE_KEY + "_backup", JSON.stringify(state));  // undo-able
   const room = state.room, rev = state.rev || 0;  // stay in the team room across resets
   state = { phase:"setup", order:[...DEFAULT_ORDER], startTime:null, currentLapStart:null, splits:[], tab:"live",
             present:Object.fromEntries(RUNNERS.map(r=>[r.id,true])),
@@ -515,6 +529,17 @@ function resetRace(){
             targetLaps:10, room, rev };
   autoArrange();   // re-plan toward the goal
   save(); render();
+}
+function undoReset(){
+  try {
+    const b = JSON.parse(localStorage.getItem(STORE_KEY + "_backup"));
+    if (!b) return;
+    const rev = Math.max(state.rev || 0, b.rev || 0);  // restore must win the team room
+    state = b;
+    state.rev = rev;
+    localStorage.removeItem(STORE_KEY + "_backup");
+    save(); render();
+  } catch(e){}
 }
 function setTab(tab){ state.tab = tab; save(); render(); }
 
@@ -668,7 +693,8 @@ function renderPlan(){
     <div class="flex items-center gap-2 py-2 border-b border-[#16405e] last:border-0 ${state.present[r.id] ? "" : "opacity-40"}">
       <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name.split(" ")[0]}</span>
       <button onclick="adjustPace('${r.id}',-15)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-teal-300 text-lg font-bold">−</button>
-      <span class="text-sm font-bold timer w-16 text-center">${fmtPace(paceOf(r.id))}</span>
+      <input value="${fmtMS(paceOf(r.id))}" inputmode="numeric" onchange="enterPace('${r.id}', this.value)"
+        class="w-16 text-center text-sm font-bold timer bg-[#0e2c45] border border-[#1c4a6e] rounded-lg py-1.5 text-slate-100">
       <button onclick="adjustPace('${r.id}',15)" class="btn-press w-9 h-9 rounded-lg bg-[#0e2c45] text-slate-300 text-lg font-bold">+</button>
       <span class="text-xs text-slate-400 timer w-12 text-right">~${fmtMS(estLapSec(r.id))}</span>
     </div>`).join("");
@@ -696,7 +722,7 @@ function renderPlan(){
     </div>
 
     <div class="card p-4 mb-3">
-      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Runner times · − faster / + slower (15 sec per km)</p>
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Runner times · type pace (e.g. 5:45) or tap − / + (15s)</p>
       ${paceRows}
       <button onclick="resetPaces()" class="btn-press mt-3 w-full py-2 rounded-lg bg-[#0e2c45] text-slate-400 text-xs font-semibold border border-[#1c4a6e]">↺ Reset times to the team plan</button>
     </div>
@@ -737,7 +763,9 @@ function renderPlan(){
       <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Run order · ${state.order.length} laps, ${state.order.length*LAP_KM} km ${state.phase==="setup" ? "· tap ↑↓ to tweak" : "· future laps still editable"}</p>
       ${order}
     </div>
-    <button onclick="resetRace()" class="btn-press w-full py-3 rounded-xl bg-red-950 text-red-400 text-sm font-semibold border border-red-900">Reset race</button>`;
+    <button onclick="resetRace()" class="btn-press w-full py-3 rounded-xl bg-red-950 text-red-400 text-sm font-semibold border border-red-900">Reset race</button>
+    ${localStorage.getItem(STORE_KEY + "_backup") ? `
+    <button onclick="undoReset()" class="btn-press mt-2 w-full py-3 rounded-xl bg-[#0e2c45] text-teal-300 text-sm font-semibold border border-[#1c4a6e]">↩︎ Undo last reset — restore previous plan & race</button>` : ""}`;
 }
 
 function renderSplits(){
