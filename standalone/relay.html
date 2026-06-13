@@ -478,6 +478,13 @@ function enterPace(id, txt){
   state.paces[id] = Math.min(600, Math.max(180, Math.round(sec)));
   save(); autoArrange(); render();
 }
+function parseDur(txt){ // lap durations: "38:45", "38.45" or plain minutes "39"
+  txt = String(txt).trim();
+  const m = txt.match(/^(\d{1,3})[:.](\d{1,2})$/);
+  if (m) return (+m[1]) * 60 + (+m[2]);
+  if (/^\d+$/.test(txt)) return +txt * 60;
+  return null;
+}
 function resetPaces(){
   state.paces = Object.fromEntries(RUNNERS.map(r => [r.id, r.pace]));
   save(); autoArrange(); render();
@@ -492,17 +499,35 @@ function startRace(){
   state.tab = "live";
   save(); render();
 }
-function handover(){
-  const now = Date.now();
+function handover(endMs){
+  endMs = endMs || Date.now();
   const idx = state.splits.length;
-  state.splits.push({ runnerId: state.order[idx], startMs: state.currentLapStart, endMs: now });
+  state.splits.push({ runnerId: state.order[idx], startMs: state.currentLapStart, endMs });
   if (state.splits.length >= state.order.length) {
     state.phase = "done";
     state.currentLapStart = null;
   } else {
-    state.currentLapStart = now;
+    state.currentLapStart = endMs;
   }
   if (navigator.vibrate) navigator.vibrate(80);
+  save(); render();
+}
+function manualHandover(){
+  const sec = parseDur($("#manualTime") ? $("#manualTime").value : "");
+  if (sec === null || sec <= 0) { render(); return; }
+  handover(state.currentLapStart + sec * 1000);
+}
+function editSplit(i, txt){
+  const sec = parseDur(txt);
+  if (sec === null || sec <= 0) { render(); return; }
+  const s = state.splits[i];
+  const delta = (s.startMs + sec * 1000) - s.endMs;
+  s.endMs += delta;
+  for (let k = i + 1; k < state.splits.length; k++) {  // keep the timeline contiguous
+    state.splits[k].startMs += delta;
+    state.splits[k].endMs += delta;
+  }
+  if (state.phase === "live") state.currentLapStart += delta;
   save(); render();
 }
 function undoSplit(){
@@ -610,7 +635,13 @@ function renderLive(){
     <button onclick="handover()" class="btn-press w-full py-5 rounded-2xl bg-cyan-300 text-[#04121f] text-xl font-extrabold mb-3">
       ${next ? `🤝 HANDOVER → ${next.name.split(" ")[0]}` : "🏁 FINISH RACE"}
     </button>
-    ${state.splits.length ? `<button onclick="undoSplit()" class="btn-press w-full py-2.5 rounded-xl bg-[#0e2c45] text-slate-400 text-sm font-semibold mb-4">↩︎ Undo last handover</button>` : `<div class="mb-4"></div>`}
+    ${state.splits.length ? `<button onclick="undoSplit()" class="btn-press w-full py-2.5 rounded-xl bg-[#0e2c45] text-slate-400 text-sm font-semibold mb-3">↩︎ Undo last handover</button>` : `<div class="mb-3"></div>`}
+
+    <div class="card p-3 mb-4 flex items-center gap-2">
+      <input id="manualTime" placeholder="or type final time — e.g. 38:45" inputmode="numeric"
+        class="flex-1 bg-[#0e2c45] border border-[#1c4a6e] rounded-lg py-2.5 px-3 text-sm timer text-slate-100 placeholder:text-slate-500">
+      <button onclick="manualHandover()" class="btn-press py-2.5 px-4 rounded-lg bg-[#0e2c45] border border-[#1c4a6e] text-teal-300 text-sm font-bold">✓ Record</button>
+    </div>
 
     ${next ? `<div class="card p-4 mb-4 flex items-center justify-between">
         <div><p class="text-xs text-slate-500 uppercase tracking-widest">On deck</p>
@@ -781,7 +812,8 @@ function renderSplits(){
         <span class="text-slate-500 text-xs w-10">Lap ${i+1}</span>
         <span class="flex-1 text-sm font-semibold">${r.emoji} ${r.name}</span>
         <span class="text-xs text-slate-400 timer">${fmtPace(Math.round(pace))}</span>
-        <span class="text-sm font-bold timer">${fmtMS(actual)}</span>
+        <input value="${fmtMS(actual)}" inputmode="numeric" onchange="editSplit(${i}, this.value)"
+          class="w-16 text-center text-sm font-bold timer bg-[#0e2c45] border border-[#1c4a6e] rounded-lg py-1 text-slate-100">
         <span class="text-xs timer w-14 text-right ${diff <= 0 ? "ahead" : "behind"}">${fmtDiff(diff)}</span>
       </div>`;
   }).join("");
@@ -804,7 +836,7 @@ function renderSplits(){
 
   return `
     <div class="card p-4 mb-4">
-      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Lap splits · vs target</p>
+      <p class="text-xs uppercase tracking-widest text-slate-500 mb-2">Lap splits · tap a time to correct it</p>
       ${rows}
     </div>
     <div class="card p-4">
