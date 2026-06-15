@@ -17,6 +17,7 @@ const EDITIONS = {
     wordmark: { lead: 'Invest', accent: 'IQ' },      // .bm-invest + .bm-iq
     tagline: 'Intelligent Investing Dashboard',
     theme: 'navy',                                    // default theme (no [data-edition] override)
+    supportEmail: 'gothamdinesh@gmail.com',
     features: { family: true, goals: true },
     supabaseUrl: 'https://szyclmouetbbigxexdrn.supabase.co',
     supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno'
@@ -31,6 +32,7 @@ const EDITIONS = {
     favicon: 'assets/harbour/harbour-sails-blue.png',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
     lightOnly: true,                                  // Harbour palette has no true-dark → light theme only
+    supportEmail: 'dinesh.muthusamy@harbourasset.co.nz',  // TODO: confirm the right Harbour support contact
     // Brand (official quick guide): Harbour Blue #005A79 + slate #44546A;
     // secondary cyan #2BB0D4 / aqua #76CED9 / sand #D9BB8A / bronze #C29144.
     features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)

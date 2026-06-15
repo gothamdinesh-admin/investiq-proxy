@@ -1374,14 +1374,14 @@
     </div>
     <h2 class="text-2xl font-bold mb-3" style="color:#c8d6ef;">Pending admin approval</h2>
     <div class="text-sm neutral mb-6" style="line-height:1.7;">
-      Thanks for signing up! InvestIQ is currently invite-only — your account has been created and the admin (<b style="color:#818cf8;">gothamdinesh@gmail.com</b>) has been notified.
+      Thanks for signing up! <span class="edition-name">InvestIQ</span> is currently invite-only — your account has been created and the admin (<b class="support-email" style="color:#818cf8;">gothamdinesh@gmail.com</b>) has been notified.
       <br><br>
       You'll receive an email once you're approved (usually within 24 hours). Until then, you can sign out and come back later.
     </div>
     <div class="card2 p-4 mb-5 text-left">
       <div class="text-xs neutral mb-2">Want faster access?</div>
       <div class="text-sm" style="color:#c8d6ef;line-height:1.6;">
-        Email <a href="mailto:gothamdinesh@gmail.com?subject=InvestIQ%20-%20approval%20request&body=Hi,%0A%0APlease%20approve%20my%20account%20for%20InvestIQ.%0A%0AEmail:%20" style="color:#818cf8;text-decoration:underline;">gothamdinesh@gmail.com</a> with a quick note about who you are and why you'd like access.
+        Email <a class="support-email-link" href="mailto:gothamdinesh@gmail.com" style="color:#818cf8;text-decoration:underline;">gothamdinesh@gmail.com</a> with a quick note about who you are and why you'd like access.
       </div>
     </div>
     <button onclick="signOut()" class="btn btn-secondary"><i class="fas fa-sign-out-alt mr-2"></i>Sign out for now</button>
@@ -1468,7 +1468,7 @@
         <div style="display:inline-flex;width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#3F6BB0,#9DB7DE);align-items:center;justify-content:center;margin-bottom:16px;box-shadow:0 8px 24px rgba(63,107,176,0.3);">
           <i class="fas fa-chart-line text-white" style="font-size:28px;"></i>
         </div>
-        <h2 class="text-2xl font-bold gradient-text mb-2">Welcome to InvestIQ</h2>
+        <h2 class="text-2xl font-bold gradient-text mb-2" data-cms="onboarding.welcomeTitle">Welcome to InvestIQ</h2>
         <div class="text-sm neutral" style="max-width:480px;margin:0 auto;line-height:1.6;">Your personal portfolio dashboard — designed for NZ investors, but works anywhere. Track multiple platforms, see live prices, get AI insights, all in one place.</div>
       </div>
 
@@ -3712,7 +3712,7 @@
             </div>
             <div class="flex items-center gap-2 mt-3">
               <div id="settingsProxyDot" style="width:7px;height:7px;border-radius:50%;background:#34d399;flex-shrink:0;"></div>
-              <div class="text-xs" style="color:#64748b;">Connected to <span style="color:#818cf8;">InvestIQ Cloud</span> &mdash; your portfolio syncs automatically</div>
+              <div class="text-xs" style="color:#64748b;">Connected to <span style="color:#818cf8;"><span class="edition-name">InvestIQ</span> Cloud</span> &mdash; your portfolio syncs automatically</div>
             </div>
           </div>
 
@@ -4113,6 +4113,7 @@
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
 <script src="js/00-config.js"></script>
+<script src="js/05-content.js"></script>
 <script src="js/10-helpers.js"></script>
 <script src="js/20-state.js"></script>
 <script src="js/30-cloud.js"></script>
@@ -13081,8 +13082,9 @@ function applyEdition() {
     const el = document.getElementById(id); if (el) el.textContent = ed.tagline;
   });
 
-  // Generic name slots — any element tagged .edition-name shows the edition name.
-  document.querySelectorAll('.edition-name').forEach(el => { el.textContent = ed.name; });
+  // CMS Phase 0 — fill all registry-driven copy: [data-cms], .edition-name,
+  // .support-email(.support-email-link). Single source = standalone/js/05-content.js.
+  try { hydrateContent(); } catch(e) { console.warn('[cms] hydrate', e); }
 
   // Harbour: the unit of AI analysis is a fund, not a personal portfolio.
   if (ed.id === 'harbour') {

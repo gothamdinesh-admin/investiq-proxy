@@ -19,3 +19,8 @@ venv/
 
 # Node
 node_modules/
+
+# Supabase CLI temp + local schema dumps (working artifacts, not source)
+supabase/.temp/
+*_schema.sql
+harbour_schema.sql

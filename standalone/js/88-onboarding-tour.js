@@ -24,7 +24,7 @@ const _IS_MOBILE = () => window.matchMedia && window.matchMedia('(max-width: 768
 const _TOUR_STEPS_MOBILE = [
   {
     selector: null,
-    title: '👋 Welcome to InvestIQ',
+    title: cms('tour.welcomeTitle'),
     body: 'Quick 5-step phone tour. <b>Skip</b> any time, replay from <b>Help & FAQ</b>.',
     position: 'center'
   },
@@ -63,7 +63,7 @@ const _TOUR_STEPS_MOBILE = [
 const _TOUR_STEPS_DESKTOP = [
   {
     selector: null,
-    title: '👋 Welcome to InvestIQ',
+    title: cms('tour.welcomeTitle'),
     body: 'Two-minute tour. I\'ll point at the things that matter most — they all live on this page. <b>Skip</b> at any time. You can replay this from <b>Help & FAQ</b>.',
     position: 'center'
   },

@@ -230,7 +230,7 @@ function renderReportPreview() {
         </div>
         <div style="font-size:11px;color:#64748B;text-align:right;">
           <div>Generated ${_escape(generated)}</div>
-          <div style="margin-top:2px;">InvestIQ · Intelligent Investing Dashboard</div>
+          <div style="margin-top:2px;">${_escape(cms('report.footer'))}</div>
         </div>
       </div>
     </div>`;
@@ -273,7 +273,7 @@ function renderReportPreview() {
   const footer = `
     <div style="border-top:1px solid #CBD5E1;padding-top:12px;margin-top:32px;font-size:10px;color:#64748B;text-align:center;line-height:1.6;">
       Analysis only — not financial advice. Always consult a licensed adviser before acting.<br>
-      Data sourced from your InvestIQ portfolio. Generated on ${_escape(generated)} for ${_escape(userName)}.
+      ${_escape(cms('report.dataSource'))} Generated on ${_escape(generated)} for ${_escape(userName)}.
     </div>`;
 
   wrap.innerHTML = header + body + footer;
@@ -493,7 +493,7 @@ function exportReportPdf() {
   printWin.document.write(`<!DOCTYPE html>
 <html>
 <head>
-  <title>InvestIQ Report · ${_escape(userName)} · ${date}</title>
+  <title>${_escape(cms('report.title'))} · ${_escape(userName)} · ${date}</title>
   <meta charset="utf-8">
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif; margin: 0; padding: 32px; color: #0B1220; background: #fff; }
