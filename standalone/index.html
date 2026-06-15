@@ -226,7 +226,16 @@
       color: #FFFFFF;
     }
     :root[data-edition="harbour"] #sidebarSummary { background: transparent !important; padding: 0 !important; }
-    :root[data-edition="harbour"] .sidebar .nav-link.active { background: rgba(255,255,255,0.18) !important; color:#FFFFFF !important; font-weight:600; border-radius:8px; }
+    /* Force WHITE across the whole blue sidebar — beats base .nav-link colour,
+       inline colours (TraderIQ blue, Admin amber, Family teal) AND the light-
+       theme inline-hex remaps that would otherwise leave dark text on blue. */
+    :root[data-edition="harbour"] .sidebar #sidebarSummary,
+    :root[data-edition="harbour"] .sidebar #sidebarSummary *,
+    :root[data-edition="harbour"] .sidebar .nav-link,
+    :root[data-edition="harbour"] .sidebar .card2,
+    :root[data-edition="harbour"] .sidebar .card2 * { color:#FFFFFF !important; }
+    :root[data-edition="harbour"] .sidebar .nav-link i { color: rgba(255,255,255,0.82) !important; }
+    :root[data-edition="harbour"] .sidebar .nav-link.active { background: rgba(255,255,255,0.18) !important; font-weight:600; border-radius:8px; }
     :root[data-edition="harbour"] .sidebar .nav-link.active i { color:#FFFFFF !important; }
     :root[data-edition="harbour"] .sidebar .nav-link:hover:not(.active) { background: rgba(255,255,255,0.10) !important; }
     :root[data-edition="harbour"] .sidebar .card2 { background: rgba(255,255,255,0.12) !important; border-color: rgba(255,255,255,0.22) !important; }
