@@ -2815,7 +2815,7 @@
         </div>
         <div class="flex items-center gap-2 flex-wrap">
           <button onclick="openTradeModal()" class="btn btn-primary"><i class="fas fa-plus mr-1"></i>Log Trade</button>
-          <button onclick="importClosedHoldingsAsTrades()" class="btn btn-sm btn-secondary" title="Pull closed/sold InvestIQ holdings into TraderIQ as completed trades"><i class="fas fa-file-import mr-1"></i>Import from InvestIQ</button>
+          <button onclick="importClosedHoldingsAsTrades()" class="btn btn-sm btn-secondary" title="Pull closed/sold holdings into TraderIQ as completed trades"><i class="fas fa-file-import mr-1"></i><span data-cms="trader.importLabel">Import from InvestIQ</span></button>
           <button onclick="openTradeCoachModal()" class="btn btn-sm btn-secondary" title="AI Coach — pattern analysis on your trade history"><i class="fas fa-brain mr-1"></i>AI Coach</button>
         </div>
       </div>
@@ -10146,28 +10146,28 @@ function renderHoldingsKpiStrip(metrics) {
 function renderEmptyHoldings() {
   return `<div class="p-10 text-center">
     <div style="font-size:56px;margin-bottom:16px;opacity:0.6;">📊</div>
-    <div class="font-bold text-xl mb-2" style="color:#c8d6ef;">Your portfolio is empty</div>
+    <div class="font-bold text-xl mb-2" style="color:var(--text-primary);">Your portfolio is empty</div>
     <div class="neutral text-sm mb-6" style="max-width:420px;margin:0 auto 24px;">Pick one of these to get started. You can always mix and match later.</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6" style="max-width:680px;margin:0 auto;">
       <label class="onboarding-card" style="padding:20px;">
-        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(129,140,248,0.15);color:#818cf8;"><i class="fas fa-file-csv"></i></div>
+        <div class="onboarding-icon mx-auto mb-3" style="background:var(--accent-soft);color:var(--accent);"><i class="fas fa-file-csv"></i></div>
         <div class="font-semibold text-sm mb-1">Upload CSV</div>
         <div class="text-xs neutral">From eToro, Sharesies, or any platform</div>
         <input type="file" accept=".csv" style="display:none;" onchange="importCSV(event)">
       </label>
       <button onclick="openModal('addModal')" class="onboarding-card" style="padding:20px;">
-        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(167,139,250,0.15);color:#c4b5fd;"><i class="fas fa-edit"></i></div>
+        <div class="onboarding-icon mx-auto mb-3" style="background:var(--color-amber-soft);color:var(--color-amber);"><i class="fas fa-edit"></i></div>
         <div class="font-semibold text-sm mb-1">Add Manually</div>
         <div class="text-xs neutral">Enter holdings one at a time</div>
       </button>
       <button onclick="loadDemoData()" class="onboarding-card" style="padding:20px;">
-        <div class="onboarding-icon mx-auto mb-3" style="background:rgba(52,211,153,0.15);color:#34d399;"><i class="fas fa-flask"></i></div>
+        <div class="onboarding-icon mx-auto mb-3" style="background:var(--color-green-soft);color:var(--color-green);"><i class="fas fa-flask"></i></div>
         <div class="font-semibold text-sm mb-1">Try Sample Data</div>
         <div class="text-xs neutral">5 example holdings to explore the UI</div>
       </button>
     </div>
     <div class="text-xs neutral mt-4">
-      Need a starting point? <button onclick="downloadCSVTemplate()" style="background:none;border:none;color:#818cf8;cursor:pointer;text-decoration:underline;padding:0;">Download the CSV template</button>
+      Need a starting point? <button onclick="downloadCSVTemplate()" style="background:none;border:none;color:var(--accent);cursor:pointer;text-decoration:underline;padding:0;">Download the CSV template</button>
     </div>
   </div>`;
 }
@@ -13098,6 +13098,17 @@ function applyEdition() {
   }
   if (ed.id === 'harbour') {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#005A79');
+  }
+
+  // v0.32.1 — meta/PWA branding per edition (browser tab, social cards, install).
+  const setMeta = (sel, val) => { const m = document.querySelector(sel); if (m && val) m.setAttribute('content', val); };
+  setMeta('meta[name="apple-mobile-web-app-title"]', ed.name);
+  setMeta('meta[property="og:title"]', `${ed.name} — ${ed.tagline}`);
+  setMeta('meta[name="description"]', `${ed.name} — ${ed.tagline}`);
+  setMeta('meta[property="og:description"]', `${ed.name} — ${ed.tagline}`);
+  if (ed.manifest) {
+    const ml = document.querySelector('link[rel="manifest"]');
+    if (ml) ml.setAttribute('href', ed.manifest);
   }
 
   // Light-only edition → force light + hide the theme toggle(s).

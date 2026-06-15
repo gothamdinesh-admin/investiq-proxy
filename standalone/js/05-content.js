@@ -26,7 +26,10 @@ const CONTENT = {
     'report.footer':           '{name} · {tagline}',
     'report.dataSource':       'Data sourced from your {name} portfolio.',
     'report.title':            '{name} Report',
-    'tour.welcomeTitle':       '👋 Welcome to {name}'
+    'tour.welcomeTitle':       '👋 Welcome to {name}',
+    'pwa.installTitle':        'Install {name}',
+    'pwa.installInstruction':  'Add {name} to your home screen for one-tap access.',
+    'pwa.installed':           '{name} added to your home screen'
   },
   personal: {},
   harbour:  {}

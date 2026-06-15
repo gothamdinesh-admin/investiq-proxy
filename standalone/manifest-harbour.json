@@ -1,0 +1,21 @@
+{
+  "name": "Harbour IQ — Investment portfolio dashboard",
+  "short_name": "Harbour IQ",
+  "description": "Fund-level portfolio intelligence for Harbour: composition, macro, risk and positioning analysis.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#005A79",
+  "background_color": "#E4E7E9",
+  "lang": "en-NZ",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    {
+      "src": "/assets/harbour/harbour-sails-blue.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -542,11 +542,11 @@ function _showPwaBanner() {
   banner.style.cssText = 'position:fixed;bottom:90px;left:12px;right:12px;max-width:420px;margin:0 auto;padding:14px 16px;background:var(--bg-panel);border:1px solid var(--accent-soft-2);border-left:3px solid var(--accent);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.25);z-index:80;display:flex;align-items:center;gap:12px;animation:fadeIn 0.3s;';
   const instruction = isIOS
     ? 'Tap <i class="fas fa-arrow-up-from-bracket" style="color:var(--accent);"></i> then <b>Add to Home Screen</b>'
-    : 'Add InvestIQ to your home screen for one-tap access.';
+    : cms('pwa.installInstruction');
   banner.innerHTML = `
     <i class="fas fa-mobile-screen-button" style="color:var(--accent);font-size:22px;"></i>
     <div style="flex:1;">
-      <div class="font-semibold text-sm" style="color:var(--text-primary);">Install InvestIQ</div>
+      <div class="font-semibold text-sm" style="color:var(--text-primary);">${_escape(cms('pwa.installTitle'))}</div>
       <div class="text-xs neutral mt-1" style="line-height:1.4;">${instruction}</div>
     </div>
     ${_deferredInstallPrompt ? `<button onclick="installPwa()" class="btn btn-primary btn-sm" style="font-size:11px;padding:6px 12px;">Install</button>` : ''}
@@ -568,7 +568,7 @@ async function installPwa() {
   _deferredInstallPrompt.prompt();
   const choice = await _deferredInstallPrompt.userChoice;
   if (choice.outcome === 'accepted') {
-    if (window.toast) toast.success('InvestIQ added to your home screen');
+    if (window.toast) toast.success(cms('pwa.installed'));
   }
   _deferredInstallPrompt = null;
   _hidePwaBanner();

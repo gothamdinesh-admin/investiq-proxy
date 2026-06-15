@@ -18,6 +18,7 @@ const EDITIONS = {
     tagline: 'Intelligent Investing Dashboard',
     theme: 'navy',                                    // default theme (no [data-edition] override)
     supportEmail: 'gothamdinesh@gmail.com',
+    manifest: 'manifest.json',
     features: { family: true, goals: true },
     supabaseUrl: 'https://szyclmouetbbigxexdrn.supabase.co',
     supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN6eWNsbW91ZXRiYmlneGV4ZHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0NjYzODcsImV4cCI6MjA5MjA0MjM4N30.gFdk7h0sRMQAiGFmPtqkICuD8E506mLElqT8P3dyQno'
@@ -30,6 +31,7 @@ const EDITIONS = {
     logo: 'assets/harbour/harbour-sails-blue.png',    // sails mark — on light surfaces
     logoOnDark: 'assets/harbour/harbour-sails-white.png', // white sails — on the blue chrome (nav)
     favicon: 'assets/harbour/harbour-sails-blue.png',
+    manifest: 'manifest-harbour.json',
     theme: 'harbour',                                 // triggers [data-edition="harbour"] CSS overrides
     lightOnly: true,                                  // Harbour palette has no true-dark → light theme only
     supportEmail: 'dinesh.muthusamy@harbourasset.co.nz',  // TODO: confirm the right Harbour support contact
