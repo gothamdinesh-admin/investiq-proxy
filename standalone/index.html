@@ -1878,6 +1878,23 @@
          Hidden for single-child groups (Overview / Watchlist / TraderIQ). -->
     <div id="groupSubNav" style="display:none;margin-bottom:20px;"></div>
 
+    <!-- CONTENT STUDIO (v0.35, admin-only) — SilverStripe-style section editor -->
+    <div id="section-cms" style="display:none;">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-pen-to-square" style="color:var(--accent);"></i>Content Studio</h2>
+          <div class="text-xs neutral mt-1">Edit the <b><span class="edition-name">InvestIQ</span></b> edition — pick a section on the left, edit its fields on the right. Changes apply live.</div>
+        </div>
+        <button onclick="showSection('admin')" class="btn btn-sm btn-secondary"><i class="fas fa-arrow-left mr-1"></i>Back to Admin</button>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="display:grid;grid-template-columns:240px 1fr;min-height:440px;">
+          <div id="cmsStudioGroups" style="border-right:1px solid var(--border);padding:12px;background:var(--bg-panel-2);overflow-y:auto;max-height:74vh;"></div>
+          <div id="cmsStudioFields" style="padding:22px;overflow-y:auto;max-height:74vh;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ASK IQ SECTION (v0.28) — conversational Q&A over the active portfolio -->
     <div id="section-askiq" style="display:none;">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -2057,7 +2074,7 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-briefcase" style="color:var(--accent);"></i>All Holdings
+            <i class="fas fa-briefcase" style="color:var(--accent);"></i><span data-cms="section.holdings.title">All Holdings</span>
           </h2>
           <div class="text-xs neutral mt-1">Your full portfolio — units, cost, current value, return.</div>
         </div>
@@ -2160,7 +2177,7 @@
     <div id="section-performance" style="display:none;">
       <div class="mb-6">
         <h2 class="text-xl font-bold flex items-center gap-2">
-          <i class="fas fa-chart-line" style="color:var(--color-green);"></i>Performance
+          <i class="fas fa-chart-line" style="color:var(--color-green);"></i><span data-cms="section.performance.title">Performance</span>
         </h2>
         <div class="text-xs neutral mt-1">How your portfolio has actually grown — all-time, annualised, by month, and by contributor.</div>
       </div>
@@ -2282,7 +2299,7 @@
     <div id="section-market" style="display:none;">
       <div class="mb-6">
         <h2 class="text-xl font-bold flex items-center gap-2">
-          <i class="fas fa-globe" style="color:var(--color-teal);"></i>Market Pulse
+          <i class="fas fa-globe" style="color:var(--color-teal);"></i><span data-cms="section.market.title">Market Pulse</span>
         </h2>
         <div class="text-xs neutral mt-1">Your exposure first, then the wider market — so you see what matters to you.</div>
       </div>
@@ -2337,7 +2354,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-lightbulb" style="color:var(--accent);"></i>AI Insights &amp; Recommendations
+            <i class="fas fa-lightbulb" style="color:var(--accent);"></i><span data-cms="section.insights.title">AI Insights &amp; Recommendations</span>
             <span class="iq-badge">IQ</span>
           </h2>
           <div id="insightsSubtitle" class="text-xs neutral mt-1">Four specialist Claude agents analyse your portfolio in parallel — health, sentiment, risk, opportunities.</div>
@@ -2384,7 +2401,7 @@
       <div class="flex items-center justify-between mb-6">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-eye" style="color:var(--accent);"></i>Watchlist
+            <i class="fas fa-eye" style="color:var(--accent);"></i><span data-cms="section.watchlist.title">Watchlist</span>
           </h2>
           <div class="text-xs neutral mt-1">Track tickers you're researching but don't own yet.</div>
         </div>
@@ -2425,7 +2442,7 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-newspaper" style="color:var(--accent);"></i> News
+            <i class="fas fa-newspaper" style="color:var(--accent);"></i><span data-cms="section.news.title">News</span>
           </h2>
           <div class="text-xs neutral mt-1">Personal news + Daily Brief on the 'For You' tab; broader market headlines on 'Markets'.</div>
         </div>
@@ -2591,7 +2608,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-coins" style="color:var(--color-amber);"></i> Dividends
+            <i class="fas fa-coins" style="color:var(--color-amber);"></i><span data-cms="section.dividends.title">Dividends</span>
           </h2>
           <div class="text-xs neutral mt-1">
             Cash dividends, DRIPs, special distributions, returns of capital. NZ tax fields built in
@@ -2720,7 +2737,7 @@
       <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h2 class="text-xl font-bold flex items-center gap-2">
-            <i class="fas fa-file-pdf" style="color:var(--color-red);"></i>Reports
+            <i class="fas fa-file-pdf" style="color:var(--color-red);"></i><span data-cms="section.reports.title">Reports</span>
           </h2>
           <div class="text-xs neutral mt-1">Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.</div>
         </div>
@@ -2930,15 +2947,14 @@
         </button>
       </div>
 
-      <!-- CONTENT (CMS) — edit per-edition copy live (migration 017) -->
+      <!-- CONTENT STUDIO launcher (migration 017) -->
       <div class="card mb-6">
-        <div class="p-4">
-          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-            <div class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-pen-to-square" style="color:var(--accent);"></i> Content (CMS) — <span class="edition-name">InvestIQ</span> edition</div>
-            <button onclick="renderCmsEditor()" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Reload</button>
+        <div class="p-4 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-pen-to-square" style="color:var(--accent);"></i> Content Studio — <span class="edition-name">InvestIQ</span> edition</div>
+            <div class="text-xs neutral mt-1" style="line-height:1.6;">Edit every section's copy for this edition, section by section. Saved to <code>cms_content</code>; blank = built-in default. Requires migration <code>017</code>.</div>
           </div>
-          <div class="text-xs neutral mb-3" style="line-height:1.6;">Edit user-facing copy for the <b><span class="edition-name">InvestIQ</span></b> edition. Saved to this project's <code>cms_content</code> table; a blank value reverts to the built-in default. Requires migration <code>017_cms_content.sql</code>.</div>
-          <div id="cmsEditorBody"><div class="text-xs neutral py-4 text-center">Loading…</div></div>
+          <button onclick="showSection('cms')" class="btn btn-primary btn-sm"><i class="fas fa-pen-to-square mr-1"></i>Open Content Studio</button>
         </div>
       </div>
 
@@ -9698,7 +9714,7 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
-  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports'].forEach(s => {
+  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -9709,7 +9725,8 @@ function _showSectionCore(name, el) {
   renderGroupSubNav(name);
   currentSection = name;
   if (name === 'market') renderMarketSection();
-  if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); try { renderCmsEditor(); } catch(e) {} }
+  if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); }
+  if (name === 'cms') { try { renderCmsStudio(); } catch(e) {} }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
   if (name === 'news') { loadHeadlines(); loadNews(); }
@@ -10165,7 +10182,7 @@ function renderHoldingsKpiStrip(metrics) {
 function renderEmptyHoldings() {
   return `<div class="p-10 text-center">
     <div style="font-size:56px;margin-bottom:16px;opacity:0.6;">📊</div>
-    <div class="font-bold text-xl mb-2" style="color:var(--text-primary);">Your portfolio is empty</div>
+    <div class="font-bold text-xl mb-2" style="color:var(--text-primary);">${cms('overview.emptyTitle')}</div>
     <div class="neutral text-sm mb-6" style="max-width:420px;margin:0 auto 24px;">Pick one of these to get started. You can always mix and match later.</div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6" style="max-width:680px;margin:0 auto;">
       <label class="onboarding-card" style="padding:20px;">

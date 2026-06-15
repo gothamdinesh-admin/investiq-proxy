@@ -29,11 +29,61 @@ const CONTENT = {
     'tour.welcomeTitle':       '👋 Welcome to {name}',
     'pwa.installTitle':        'Install {name}',
     'pwa.installInstruction':  'Add {name} to your home screen for one-tap access.',
-    'pwa.installed':           '{name} added to your home screen'
+    'pwa.installed':           '{name} added to your home screen',
+    // Section headings (edition-neutral defaults; editable per edition in the Studio)
+    'section.holdings.title':    'All Holdings',
+    'section.performance.title': 'Performance',
+    'section.market.title':      'Market Pulse',
+    'section.insights.title':    'AI Insights & Recommendations',
+    'section.watchlist.title':   'Watchlist',
+    'section.news.title':        'News',
+    'section.dividends.title':   'Dividends',
+    'section.reports.title':     'Reports',
+    'overview.emptyTitle':       'Your portfolio is empty'
   },
   personal: {},
   harbour:  {}
 };
+
+// ── CONTENT STUDIO schema (Phase 2) — groups the editable keys BY SITE AREA,
+// so the admin editor mirrors the app section-by-section (SilverStripe-style).
+// Add a field here (+ tag its element data-cms / use cms() at the call site)
+// and it becomes editable in the Studio. type: 'text' | 'multiline'.
+const CMS_SCHEMA = [
+  { id: 'branding', label: 'Branding & Login', icon: 'fa-flag', fields: [
+    { key: 'onboarding.welcomeTitle', label: 'Onboarding welcome heading', type: 'text' },
+    { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
+  ]},
+  { id: 'overview', label: 'Overview', icon: 'fa-gauge-high', fields: [
+    { key: 'overview.emptyTitle', label: 'Empty-portfolio heading', type: 'text' }
+  ]},
+  { id: 'holdings', label: 'Portfolio / Holdings', icon: 'fa-wallet', fields: [
+    { key: 'section.holdings.title',    label: 'Holdings — heading',    type: 'text' },
+    { key: 'section.performance.title', label: 'Performance — heading', type: 'text' },
+    { key: 'section.dividends.title',   label: 'Dividends — heading',   type: 'text' }
+  ]},
+  { id: 'intelligence', label: 'Intelligence', icon: 'fa-brain', fields: [
+    { key: 'section.insights.title', label: 'AI Insights — heading', type: 'text' },
+    { key: 'section.market.title',   label: 'Market — heading',      type: 'text' },
+    { key: 'section.news.title',     label: 'News — heading',        type: 'text' }
+  ]},
+  { id: 'planning', label: 'Planning & Reports', icon: 'fa-compass', fields: [
+    { key: 'section.reports.title',  label: 'Reports — heading',     type: 'text' },
+    { key: 'report.title',           label: 'Exported report title', type: 'text' },
+    { key: 'report.footer',          label: 'Report footer',         type: 'text' },
+    { key: 'report.dataSource',      label: 'Report data-source line', type: 'text' }
+  ]},
+  { id: 'watchlist', label: 'Watchlist', icon: 'fa-eye', fields: [
+    { key: 'section.watchlist.title', label: 'Watchlist — heading', type: 'text' }
+  ]},
+  { id: 'mobile', label: 'Mobile · PWA · Tour', icon: 'fa-mobile-screen-button', fields: [
+    { key: 'pwa.installTitle',       label: 'Install banner title',  type: 'text' },
+    { key: 'pwa.installInstruction', label: 'Install instruction',   type: 'text' },
+    { key: 'pwa.installed',          label: 'Installed toast',       type: 'text' },
+    { key: 'tour.welcomeTitle',      label: 'Tour welcome',          type: 'text' }
+  ]}
+];
+let _cmsStudioGroup = 'branding';
 
 // Phase 1: { harbour: { key: 'override' }, ... } loaded from Supabase cms_content.
 let _cmsOverrides = {};
@@ -149,7 +199,7 @@ async function saveCmsKey(key) {
     _cmsOverrides[edId] = _cmsOverrides[edId] || {};
     _cmsOverrides[edId][key] = value;
     hydrateContent();
-    renderCmsEditor();
+    _cmsRefreshEditors();
     if (window.toast) toast.success('Saved · ' + key);
   } catch (e) { if (window.toast) toast.error('Save failed: ' + (e.message || e)); console.warn('[cms] save', e); }
 }
@@ -161,7 +211,66 @@ async function resetCmsKey(key) {
     if (error) throw error;
     if (_cmsOverrides[edId]) delete _cmsOverrides[edId][key];
     hydrateContent();
-    renderCmsEditor();
+    _cmsRefreshEditors();
     if (window.toast) toast.success('Reset · ' + key);
   } catch (e) { if (window.toast) toast.error('Reset failed: ' + (e.message || e)); }
+}
+
+// Re-render whichever CMS editor is mounted (flat admin card and/or Studio page).
+function _cmsRefreshEditors() {
+  if (document.getElementById('cmsEditorBody')) { try { renderCmsEditor(); } catch(e){} }
+  if (document.getElementById('cmsStudioGroups')) { try { renderCmsStudio(); } catch(e){} }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONTENT STUDIO (Phase 2) — SilverStripe-style two-pane editor on its own
+// page (#section-cms). Left: site areas (CMS_SCHEMA groups). Right: the
+// selected area's fields, each saving to cms_content for the active edition.
+// ═══════════════════════════════════════════════════════════════════════
+function selectCmsGroup(id) { _cmsStudioGroup = id; renderCmsStudio(); }
+
+function renderCmsStudio() {
+  const left = document.getElementById('cmsStudioGroups');
+  const right = document.getElementById('cmsStudioFields');
+  if (!left || !right) return;
+  const esc = (typeof _escape === 'function') ? _escape : (s => String(s));
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+
+  if (typeof _supabase === 'undefined' || !_supabase) {
+    right.innerHTML = '<div class="text-sm neutral" style="padding:24px;">Cloud not connected — sign in to edit content.</div>';
+    left.innerHTML = '';
+    return;
+  }
+
+  // Left rail — one row per site area, with how many overrides are set.
+  left.innerHTML = CMS_SCHEMA.map(g => {
+    const setCount = g.fields.filter(f => _cmsOverrides[edId] && _cmsOverrides[edId][f.key] != null).length;
+    const active = g.id === _cmsStudioGroup;
+    return `<button onclick="selectCmsGroup('${g.id}')" class="cms-group-btn" style="display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:none;border-radius:8px;cursor:pointer;font-size:13px;margin-bottom:2px;background:${active?'var(--accent-soft-2)':'transparent'};color:var(--text-primary);font-weight:${active?600:400};">
+      <i class="fas ${g.icon}" style="width:16px;text-align:center;color:var(--accent);"></i>
+      <span style="flex:1;">${esc(g.label)}</span>
+      ${setCount ? `<span class="text-xs" style="background:var(--accent);color:#fff;border-radius:9999px;padding:1px 7px;font-size:10px;">${setCount}</span>` : ''}
+    </button>`;
+  }).join('');
+
+  // Right pane — fields for the selected area.
+  const group = CMS_SCHEMA.find(g => g.id === _cmsStudioGroup) || CMS_SCHEMA[0];
+  right.innerHTML = `<div class="font-bold text-lg mb-1" style="color:var(--text-primary);">${esc(group.label)}</div>
+    <div class="text-xs neutral mb-4">Editing the <b>${esc((typeof EDITION!=='undefined'&&EDITION.name)||'')}</b> edition. Blank = built-in default.</div>` +
+    group.fields.map(f => {
+      const ov = (_cmsOverrides[edId] && _cmsOverrides[edId][f.key]) || '';
+      const def = esc(_cmsDefault(f.key));
+      const inp = f.type === 'multiline'
+        ? `<textarea id="${_cmsId(f.key)}" rows="3" class="input" style="width:100%;font-size:13px;" placeholder="${def}">${esc(ov)}</textarea>`
+        : `<input id="${_cmsId(f.key)}" type="text" class="input" style="width:100%;font-size:13px;" placeholder="${def}" value="${esc(ov)}">`;
+      return `<div class="mb-4">
+        <label style="display:block;font-size:12px;margin-bottom:4px;">${esc(f.label)} <code class="neutral" style="font-size:10px;">${esc(f.key)}</code></label>
+        ${inp}
+        <div class="flex gap-2 mt-2">
+          <button onclick="saveCmsKey('${f.key}')" class="btn btn-sm btn-primary" style="font-size:11px;">Save</button>
+          ${ov ? `<button onclick="resetCmsKey('${f.key}')" class="btn btn-sm btn-secondary" style="font-size:11px;">Reset to default</button>` : ''}
+          <span class="text-xs neutral" style="align-self:center;">default: ${def}</span>
+        </div>
+      </div>`;
+    }).join('');
 }
