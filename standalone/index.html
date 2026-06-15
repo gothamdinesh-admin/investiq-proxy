@@ -167,14 +167,18 @@
        rules + inline-hex remaps also apply). Specificity (0,2,0) beats :root.
        ═══════════════════════════════════════════════════════════════════ */
     :root[data-edition="harbour"] {
-      --bg:               #E4E7E9;   /* light-grey app background */
+      /* PRIMARY palette only (Harbour brand guide):
+         Harbour Blue #005A79 · Slate #44546A · Grey-1 #E4E7E9 · Grey-2 #BFC8CC.
+         Surfaces = white cards on Grey-1; wells/dividers use Grey-1/Grey-2;
+         text = Slate; accent/CTA = Harbour Blue. (No invented tints.) */
+      --bg:               #E4E7E9;   /* Grey-1 — app background */
       --bg-panel:         #FFFFFF;   /* white cards */
-      --bg-panel-2:       #EEF1F2;   /* subtle elevated/well */
+      --bg-panel-2:       #E4E7E9;   /* Grey-1 — elevated/well on white cards */
       --bg-input:         #FFFFFF;
-      --bg-deep:          #EEF1F2;
-      --bg-hover:         #E4E7E9;
-      --border:           #BFC8CC;   /* Harbour grey */
-      --border-strong:    #6CA0B1;   /* Harbour blue-grey */
+      --bg-deep:          #E4E7E9;   /* Grey-1 */
+      --bg-hover:         #BFC8CC;   /* Grey-2 — clear hover feedback */
+      --border:           #BFC8CC;   /* Grey-2 */
+      --border-strong:    #44546A;   /* Slate — strong dividers/emphasis */
       --text-primary:     #44546A;   /* Harbour slate */
       --text-body:        #44546A;
       --text-secondary:   rgba(68,84,106,0.72);
