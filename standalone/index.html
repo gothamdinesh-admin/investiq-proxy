@@ -2923,6 +2923,18 @@
         </button>
       </div>
 
+      <!-- CONTENT (CMS) — edit per-edition copy live (migration 017) -->
+      <div class="card mb-6">
+        <div class="p-4">
+          <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="font-semibold text-sm flex items-center gap-2"><i class="fas fa-pen-to-square" style="color:var(--accent);"></i> Content (CMS) — <span class="edition-name">InvestIQ</span> edition</div>
+            <button onclick="renderCmsEditor()" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Reload</button>
+          </div>
+          <div class="text-xs neutral mb-3" style="line-height:1.6;">Edit user-facing copy for the <b><span class="edition-name">InvestIQ</span></b> edition. Saved to this project's <code>cms_content</code> table; a blank value reverts to the built-in default. Requires migration <code>017_cms_content.sql</code>.</div>
+          <div id="cmsEditorBody"><div class="text-xs neutral py-4 text-center">Loading…</div></div>
+        </div>
+      </div>
+
       <!-- Role management callout -->
       <div class="card mb-6" style="border:1px solid rgba(251,191,36,0.25);background:rgba(251,191,36,0.04);">
         <div class="p-4">
@@ -9690,7 +9702,7 @@ function _showSectionCore(name, el) {
   renderGroupSubNav(name);
   currentSection = name;
   if (name === 'market') renderMarketSection();
-  if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); }
+  if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); try { renderCmsEditor(); } catch(e) {} }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
   if (name === 'news') { loadHeadlines(); loadNews(); }
@@ -13175,6 +13187,9 @@ async function init() {
 
   // Init Supabase and restore session if credentials saved
   if (initSupabase()) {
+    // CMS Phase 1 — pull this edition's content overrides (read is open, so
+    // gate branding reflects them even pre-login). No-op if migration 017 absent.
+    try { loadCmsOverrides(); } catch(e) {}
     try {
       // Handle email confirmation redirect — Supabase appends #access_token=... to the URL.
       // getSession() on supabase-js v2 automatically exchanges the hash for a session,

@@ -71,3 +71,97 @@ function hydrateContent() {
     el.setAttribute('href', `mailto:${ed.supportEmail}?subject=${encodeURIComponent((ed.name || 'InvestIQ') + ' — access request')}`);
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// PHASE 1 — Supabase-backed overrides + Admin → Content editor.
+// cms_content table (migration 017) holds per-edition overrides. Read is open
+// (so gate branding reflects overrides pre-login); writes are admin-only (RLS).
+// ═══════════════════════════════════════════════════════════════════════
+
+// Fetch this edition's overrides into _cmsOverrides, then re-hydrate the DOM.
+// Safe no-op if Supabase/table absent (e.g. migration 017 not yet run).
+async function loadCmsOverrides() {
+  try {
+    if (typeof _supabase === 'undefined' || !_supabase) return;
+    const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+    const { data, error } = await _supabase.from('cms_content').select('key,value').eq('edition', edId);
+    if (error) { console.warn('[cms] load skipped:', error.message); return; }
+    _cmsOverrides[edId] = {};
+    (data || []).forEach(r => { _cmsOverrides[edId][r.key] = r.value; });
+    hydrateContent();
+  } catch (e) { console.warn('[cms] load', e); }
+}
+
+// The code default for a key (interpolated, ignoring any override).
+function _cmsDefault(key) {
+  const ed = (typeof EDITION !== 'undefined' && EDITION) ? EDITION : {};
+  const edId = ed.id || 'personal';
+  let val = (CONTENT[edId] && CONTENT[edId][key]) || (CONTENT.common && CONTENT.common[key]);
+  if (val == null) return key;
+  const ctx = { name: ed.name || 'InvestIQ', tagline: ed.tagline || '', supportEmail: ed.supportEmail || '' };
+  return String(val).replace(/\{(\w+)\}/g, (m, k) => (ctx[k] != null ? ctx[k] : m));
+}
+
+function _cmsId(k) { return 'cms_in_' + k.replace(/[^a-z0-9]/gi, '_'); }
+
+// Renders the editor into #cmsEditorBody (Admin → Content card). Edits the
+// ACTIVE edition (admins log into each edition's project separately).
+function renderCmsEditor() {
+  const body = document.getElementById('cmsEditorBody');
+  if (!body) return;
+  if (typeof _supabase === 'undefined' || !_supabase) {
+    body.innerHTML = '<div class="text-xs neutral py-3">Cloud not connected — sign in to edit content.</div>';
+    return;
+  }
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  const keys = Object.keys(CONTENT.common).sort();
+  const esc = (typeof _escape === 'function') ? _escape : (s => String(s));
+  const rows = keys.map(k => {
+    const ov = (_cmsOverrides[edId] && _cmsOverrides[edId][k]) || '';
+    return `<tr style="border-top:1px solid var(--border);">
+      <td style="padding:8px;vertical-align:top;"><code style="font-size:11px;">${esc(k)}</code>
+        <div class="neutral" style="font-size:10px;margin-top:3px;">default: ${esc(_cmsDefault(k))}</div></td>
+      <td style="padding:8px;"><textarea id="${_cmsId(k)}" rows="2" class="input" style="width:100%;min-width:220px;font-size:12px;" placeholder="(uses default)">${esc(ov)}</textarea></td>
+      <td style="padding:8px;white-space:nowrap;vertical-align:top;">
+        <button onclick="saveCmsKey('${k}')" class="btn btn-sm btn-primary" style="font-size:11px;">Save</button>
+        ${ov ? `<button onclick="resetCmsKey('${k}')" class="btn btn-sm btn-secondary" style="font-size:11px;margin-left:4px;">Reset</button>` : ''}
+      </td></tr>`;
+  }).join('');
+  body.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="text-align:left;color:var(--text-muted);font-size:11px;">
+      <th style="padding:6px 8px;">Key</th><th style="padding:6px 8px;">Override value</th><th style="padding:6px 8px;"></th>
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function saveCmsKey(key) {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  const el = document.getElementById(_cmsId(key));
+  if (!el) return;
+  const value = el.value;
+  if (!value.trim()) return resetCmsKey(key);   // blank = revert to default
+  try {
+    const { error } = await _supabase.from('cms_content').upsert({
+      edition: edId, key, value,
+      updated_by: (typeof _supaUser !== 'undefined' && _supaUser) ? _supaUser.id : null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'edition,key' });
+    if (error) throw error;
+    _cmsOverrides[edId] = _cmsOverrides[edId] || {};
+    _cmsOverrides[edId][key] = value;
+    hydrateContent();
+    renderCmsEditor();
+    if (window.toast) toast.success('Saved · ' + key);
+  } catch (e) { if (window.toast) toast.error('Save failed: ' + (e.message || e)); console.warn('[cms] save', e); }
+}
+
+async function resetCmsKey(key) {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  try {
+    const { error } = await _supabase.from('cms_content').delete().eq('edition', edId).eq('key', key);
+    if (error) throw error;
+    if (_cmsOverrides[edId]) delete _cmsOverrides[edId][key];
+    hydrateContent();
+    renderCmsEditor();
+    if (window.toast) toast.success('Reset · ' + key);
+  } catch (e) { if (window.toast) toast.error('Reset failed: ' + (e.message || e)); }
+}

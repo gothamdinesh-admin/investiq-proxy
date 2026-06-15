@@ -24,7 +24,8 @@ The app had ~220 editable strings/values scattered across HTML, JS, and CSS. Tha
 ## Phase status
 - **Phase 0a — DONE (v0.32):** registry + `cms()` + `hydrateContent()`. Migrated branding/copy leaks: onboarding welcome, signup/invite copy + per-edition `supportEmail`, "… Cloud" sync label, report footer/title/data-source, onboarding-tour welcome. Per-edition `supportEmail` added to `EDITIONS`.
 - **Phase 0b — TODO:** remaining copy — `manifest.json` + `<title>`/meta per edition (PWA name), TraderIQ "Import from …" label, PWA-install prompt strings (`85-calendar-reports.js` 545/549/571), onboarding-card icon colours, section titles + empty-state copy.
-- **Phase 1 — TODO (the actual editor):** Supabase `cms_content` table (`edition, key, value`), load into `_cmsOverrides` at startup, merge over `CONTENT`. Admin → Content editor UI to edit per edition live. Extend coverage to the other approved categories via the editor:
+- **Phase 1 — DONE (v0.33):** Supabase `cms_content` table (migration `017_cms_content.sql` — run in BOTH projects; read open, write admin-only via RLS). `loadCmsOverrides()` pulls the active edition's rows into `_cmsOverrides` at startup (before login, so gate branding reflects overrides) and re-hydrates. **Admin → Content** card (`renderCmsEditor`/`saveCmsKey`/`resetCmsKey`) edits the active edition's copy live; blank value = revert to code default. No-ops gracefully if the table isn't there yet. **Activation: run migration 017 in each project.**
+- **Phase 1+ — TODO:** extend the editor to the other approved categories:
   - **Theme colours** — surface the per-edition CSS-variable palette (currently in the `:root` / `[data-theme="light"]` / `[data-edition="harbour"]` blocks) as editable values injected as a `<style>` override.
   - **AI agent prompts & labels** — `AGENT_DEFS` (+ harbour overrides) in `70-ai.js` editable without a deploy.
   - **Feature flags & nav** — `EDITION.features`, `NAV_GROUPS`, `SECTION_LABELS/ICONS`.
