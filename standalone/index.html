@@ -1973,6 +1973,15 @@
         </div>
       </div>
 
+      <!-- WHAT CHANGED OVERNIGHT — PM daily brief (movers + concentration flags + AI review) -->
+      <div class="card p-5 mb-6" data-card="overview.overnight">
+        <div class="section-title" style="margin:0 0 12px;">
+          <i class="fas fa-sun" style="color:var(--color-amber);"></i>
+          <span data-cms="overview.briefTitle">Since yesterday</span>
+        </div>
+        <div id="overnightBrief"><div class="text-xs neutral">Add holdings to see the daily brief.</div></div>
+      </div>
+
       <!-- Charts row -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <!-- Allocation chart -->
@@ -5543,10 +5552,70 @@ function renderAll() {
   renderQuickInsights(metrics);
   renderPlatformBreakdown(metrics);
   refreshSidebarScore(metrics);
+  try { renderOvernightBrief(metrics); } catch(e) { console.warn('[brief]', e); }
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
   try { renderPortfolioSwitcher(); } catch(e) {}
+}
+
+// PM "what changed overnight" brief — day's movers + concentration/mandate
+// flags + a one-line surface of the latest AI fund review. Built from the
+// active portfolio/fund's live metrics.
+function renderOvernightBrief(metrics) {
+  const el = document.getElementById('overnightBrief');
+  if (!el) return;
+  const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
+  const holdings = (metrics.holdings || []).filter(h => h && h.symbol);
+  if (!holdings.length) { el.innerHTML = '<div class="text-xs neutral">Add holdings to see the daily brief.</div>'; return; }
+  const tv = metrics.totalValue || 1;
+
+  // 1) Day movers (fall back to all-time gain if no intraday yet)
+  const withDay = holdings.filter(h => typeof h.dayChangePct === 'number' && isFinite(h.dayChangePct) && Math.abs(h.dayChangePct) < 500);
+  const useDay = withDay.length > 0;
+  const ranked = [...(useDay ? withDay : holdings)].sort((a,b) => ((useDay?b.dayChangePct:b.gainPct)||0) - ((useDay?a.dayChangePct:a.gainPct)||0));
+  const pct = h => (useDay ? h.dayChangePct : h.gainPct) || 0;
+  const up = ranked[0], down = ranked[ranked.length - 1];
+  const bookPct = metrics.totalValue > 0 ? ((metrics.totalDayChange || 0) / metrics.totalValue) * 100 : 0;
+  const chip = (h, dir) => h ? `<span style="white-space:nowrap;"><i class="fas fa-arrow-${dir==='up'?'up':'down'}" style="color:${dir==='up'?'var(--color-green)':'var(--color-red)'};font-size:10px;"></i>
+    <b>${_escape(h.symbol)}</b> <span style="color:${pct(h)>=0?'var(--color-green)':'var(--color-red)'};">${pct(h)>=0?'+':''}${pct(h).toFixed(2)}%</span></span>` : '';
+  const moversHtml = `<div class="flex items-center gap-4 flex-wrap text-sm mb-3">
+      ${chip(up,'up')} ${chip(down,'down')}
+      <span class="neutral" style="white-space:nowrap;">Book ${useDay ? 'today' : 'all-time'}: <b style="color:${bookPct>=0?'var(--color-green)':'var(--color-red)'};">${bookPct>=0?'+':''}${fmt(bookPct)}%</b></span>
+    </div>`;
+
+  // 2) Concentration / mandate flags
+  const flags = [];
+  const byVal = [...holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  if (byVal[0] && (byVal[0].weight || 0) >= 10) flags.push(`${_escape(byVal[0].symbol)} is ${(byVal[0].weight).toFixed(0)}% of the book`);
+  const sectors = {};
+  holdings.forEach(h => { const s = h.sector || (typeof _typeFallbackSector==='function'?_typeFallbackSector(h):'Other'); sectors[s] = (sectors[s]||0) + (h.currentValue||0); });
+  const topSec = Object.entries(sectors).sort((a,b)=>b[1]-a[1])[0];
+  if (topSec && (topSec[1]/tv*100) >= 30) flags.push(`${_escape(topSec[0])} sector at ${(topSec[1]/tv*100).toFixed(0)}%`);
+  const ccy = {};
+  holdings.forEach(h => { const c = h.currency || 'NZD'; ccy[c] = (ccy[c]||0) + (h.currentValue||0); });
+  const base = state.settings.currency || 'NZD';
+  const foreign = Object.entries(ccy).filter(([c])=>c!==base).reduce((s,[,v])=>s+v,0);
+  if (foreign/tv*100 >= 50) flags.push(`${(foreign/tv*100).toFixed(0)}% in foreign currency`);
+  const flagsHtml = `<div class="flex items-center gap-2 flex-wrap mb-3">`
+    + (flags.length
+        ? flags.map(f => `<span class="text-xs" style="background:var(--color-amber-soft);color:var(--color-amber);padding:3px 9px;border-radius:9999px;"><i class="fas fa-triangle-exclamation mr-1"></i>${f}</span>`).join('')
+        : `<span class="text-xs" style="background:var(--color-green-soft);color:var(--color-green);padding:3px 9px;border-radius:9999px;"><i class="fas fa-check mr-1"></i>No concentration flags</span>`)
+    + `</div>`;
+
+  // 3) Latest AI review — surface a Critical/High action or the 30-day focus
+  let aiHtml;
+  const adv = state.agentResults && state.agentResults.advisor;
+  const stale = state.agentResults && state.agentResults.portfolioId && (typeof state.activePortfolioId !== 'undefined') && state.agentResults.portfolioId !== state.activePortfolioId;
+  if (adv && !stale) {
+    const m = adv.match(/\[(?:Critical|High)\][^\n]+/) || adv.match(/30-day focus[^\n]*\n?[^\n]+/i);
+    const line = (m ? m[0] : (adv.split('\n').find(l => l.trim().length > 24) || '')).replace(/\s+/g,' ').trim().slice(0, 160);
+    aiHtml = `<div class="text-xs neutral" style="border-top:1px solid var(--border);padding-top:10px;"><i class="fas fa-lightbulb mr-1" style="color:var(--accent);"></i><b>AI review:</b> ${_escape(line)}</div>`;
+  } else {
+    aiHtml = `<div class="text-xs" style="border-top:1px solid var(--border);padding-top:10px;"><i class="fas fa-lightbulb mr-1" style="color:var(--accent);"></i><a onclick="showSection('insights')" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Run the AI review</a> for today's read on this ${ (typeof EDITION!=='undefined'&&EDITION.id==='harbour')?'fund':'portfolio' }.</div>`;
+  }
+
+  el.innerHTML = moversHtml + flagsHtml + aiHtml;
 }
 
 // ─── Portfolio switcher (multi-portfolio v0.21) ──────────────────────────

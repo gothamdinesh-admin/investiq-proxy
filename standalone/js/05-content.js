@@ -39,7 +39,8 @@ const CONTENT = {
     'section.news.title':        'News',
     'section.dividends.title':   'Dividends',
     'section.reports.title':     'Reports',
-    'overview.emptyTitle':       'Your portfolio is empty'
+    'overview.emptyTitle':       'Your portfolio is empty',
+    'overview.briefTitle':       'Since yesterday'
   },
   personal: {},
   harbour:  {}
@@ -55,6 +56,7 @@ const CMS_SCHEMA = [
     { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
   ]},
   { id: 'layout', label: 'Dashboard layout', icon: 'fa-table-cells', fields: [
+    { key: 'layout.overview.overnight',   label: 'Overview · Daily brief',       type: 'toggle' },
     { key: 'layout.overview.kpis',        label: 'Overview · KPI cards',         type: 'toggle' },
     { key: 'layout.overview.allocation',  label: 'Overview · Allocation chart',  type: 'toggle' },
     { key: 'layout.overview.performance', label: 'Overview · Performance chart',  type: 'toggle' },
@@ -71,6 +73,7 @@ const CMS_SCHEMA = [
     { key: 'theme.loss',        label: 'Losses',                       type: 'color' }
   ]},
   { id: 'overview', label: 'Overview', icon: 'fa-gauge-high', fields: [
+    { key: 'overview.briefTitle', label: 'Daily brief heading',    type: 'text' },
     { key: 'overview.emptyTitle', label: 'Empty-portfolio heading', type: 'text' }
   ]},
   { id: 'holdings', label: 'Portfolio / Holdings', icon: 'fa-wallet', fields: [
