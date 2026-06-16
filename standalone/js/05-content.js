@@ -54,6 +54,12 @@ const CMS_SCHEMA = [
     { key: 'onboarding.welcomeTitle', label: 'Onboarding welcome heading', type: 'text' },
     { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
   ]},
+  { id: 'layout', label: 'Dashboard layout', icon: 'fa-table-cells', fields: [
+    { key: 'layout.overview.kpis',        label: 'Overview · KPI cards',         type: 'toggle' },
+    { key: 'layout.overview.allocation',  label: 'Overview · Allocation chart',  type: 'toggle' },
+    { key: 'layout.overview.performance', label: 'Overview · Performance chart',  type: 'toggle' },
+    { key: 'layout.overview.topholdings', label: 'Overview · Top holdings',       type: 'toggle' }
+  ]},
   { id: 'theme', label: 'Theme & colours', icon: 'fa-palette', fields: [
     { key: 'theme.accent',      label: 'Brand / chrome / links / CTA', type: 'color' },
     { key: 'theme.btnPrimary',  label: 'Primary button',               type: 'color' },
@@ -108,6 +114,42 @@ const CMS_THEME_VARS = {
   'theme.gain':        '--color-green',
   'theme.loss':        '--color-red'
 };
+
+// Hide cards whose layout.<id> override is 'hidden'. Cards are tagged
+// data-card="<id>" on a static wrapper, so this survives content re-renders.
+function applyCmsLayout() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  const ov = _cmsOverrides[edId] || {};
+  document.querySelectorAll('[data-card]').forEach(el => {
+    const hidden = ov['layout.' + el.getAttribute('data-card')] === 'hidden';
+    el.style.display = hidden ? 'none' : '';
+  });
+}
+
+// Toggle a card's visibility (visible=true → delete override; false → store 'hidden').
+async function setCmsToggle(key, visible) {
+  if (typeof _supabase === 'undefined' || !_supabase) { if (window.toast) toast.error('Cloud not connected'); return; }
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  try {
+    if (visible) {
+      const { error } = await _supabase.from('cms_content').delete().eq('edition', edId).eq('key', key);
+      if (error) throw error;
+      if (_cmsOverrides[edId]) delete _cmsOverrides[edId][key];
+    } else {
+      const { error } = await _supabase.from('cms_content').upsert({
+        edition: edId, key, value: 'hidden',
+        updated_by: (typeof _supaUser !== 'undefined' && _supaUser) ? _supaUser.id : null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'edition,key' });
+      if (error) throw error;
+      _cmsOverrides[edId] = _cmsOverrides[edId] || {};
+      _cmsOverrides[edId][key] = 'hidden';
+    }
+    applyCmsLayout();
+    _cmsRefreshEditors();
+    if (window.toast) toast.success('Layout updated');
+  } catch (e) { if (window.toast) toast.error('Failed: ' + (e.message || e)); console.warn('[cms] toggle', e); }
+}
 
 function applyCmsTheme() {
   const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
@@ -175,6 +217,7 @@ async function loadCmsOverrides() {
     (data || []).forEach(r => { _cmsOverrides[edId][r.key] = r.value; });
     hydrateContent();
     try { applyCmsTheme(); } catch(e) {}
+    try { applyCmsLayout(); } catch(e) {}
   } catch (e) { console.warn('[cms] load', e); }
 }
 
@@ -297,6 +340,17 @@ function renderCmsStudio() {
     <div class="text-xs neutral mb-4">Editing the <b>${esc((typeof EDITION!=='undefined'&&EDITION.name)||'')}</b> edition. Blank = built-in default.</div>` +
     group.fields.map(f => {
       const ov = (_cmsOverrides[edId] && _cmsOverrides[edId][f.key]) || '';
+      // Toggle fields → a visibility checkbox (checked = shown).
+      if (f.type === 'toggle') {
+        const hidden = ov === 'hidden';
+        return `<div class="mb-3 flex items-center gap-3" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;flex:1;">
+            <input type="checkbox" ${hidden ? '' : 'checked'} onchange="setCmsToggle('${f.key}', this.checked)" style="width:16px;height:16px;cursor:pointer;">
+            <span>${esc(f.label)}</span>
+          </label>
+          <span class="text-xs" style="color:${hidden ? 'var(--color-red)' : 'var(--color-green)'};">${hidden ? 'Hidden' : 'Shown'}</span>
+        </div>`;
+      }
       // Colour fields → a colour picker. Current = override else the live CSS var.
       if (f.type === 'color') {
         const cssVar = (typeof CMS_THEME_VARS !== 'undefined') ? CMS_THEME_VARS[f.key] : null;

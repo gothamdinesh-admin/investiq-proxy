@@ -1950,7 +1950,7 @@
       </div>
 
       <!-- Summary metrics row -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" data-card="overview.kpis">
         <div class="metric-card blue clickable fadeIn" onclick="showSection('holdings')" title="See all holdings that make up this value" role="button" tabindex="0">
           <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-sack-dollar mr-2"></i>Total Value</div>
           <div class="text-2xl font-bold mono" id="totalValue">£0.00</div>
@@ -1976,7 +1976,7 @@
       <!-- Charts row -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         <!-- Allocation chart -->
-        <div class="card p-5">
+        <div class="card p-5" data-card="overview.allocation">
           <div class="section-title mb-4">
             <i class="fas fa-chart-pie" style="color:var(--accent);"></i>
             Allocation
@@ -1994,7 +1994,7 @@
         </div>
 
         <!-- Performance chart -->
-        <div class="card p-5 lg:col-span-2">
+        <div class="card p-5 lg:col-span-2" data-card="overview.performance">
           <div class="flex items-start justify-between mb-3 flex-wrap gap-2">
             <div>
               <div class="section-title" style="margin:0;">
@@ -2027,7 +2027,7 @@
       </div>
 
       <!-- Top holdings preview — replaces the duplicate full table -->
-      <div class="card mb-6">
+      <div class="card mb-6" data-card="overview.topholdings">
         <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border, #1e2d4a);">
           <div class="section-title" style="margin:0;">
             <i class="fas fa-briefcase" style="color:var(--color-amber);"></i>
