@@ -221,7 +221,7 @@
 
     /* ── Sidebar (Harbour Blue, white content — no popups here, blanket safe) ── */
     :root[data-edition="harbour"] .sidebar {
-      background: #005A79 !important;
+      background: var(--accent) !important;   /* var-driven so the CMS colour picker recolours the chrome */
       border-right-color: #00485F !important;
       color: #FFFFFF;
     }
@@ -241,7 +241,7 @@
     :root[data-edition="harbour"] .sidebar .card2 { background: rgba(255,255,255,0.12) !important; border-color: rgba(255,255,255,0.22) !important; }
 
     /* ── Top nav (Harbour Blue) — whiten only specific toolbar elements ── */
-    :root[data-edition="harbour"] nav.glass { background: #005A79 !important; border-bottom-color: #00485F !important; }
+    :root[data-edition="harbour"] nav.glass { background: var(--accent) !important; border-bottom-color: #00485F !important; }
     :root[data-edition="harbour"] nav.glass .brand-mark span { color:#FFFFFF !important; }
     :root[data-edition="harbour"] nav.glass #navTagline { background: rgba(255,255,255,0.14) !important; color:#FFFFFF !important; }
     :root[data-edition="harbour"] nav.glass #lastUpdated { color: rgba(255,255,255,0.85) !important; }
@@ -255,7 +255,7 @@
     :root[data-edition="harbour"] nav.glass .nav-sep { background: rgba(255,255,255,0.28) !important; }
 
     /* ── Login gate (Harbour Blue page + centered white card) ── */
-    :root[data-edition="harbour"] #authGate { background:#005A79 !important; }
+    :root[data-edition="harbour"] #authGate { background:var(--accent) !important; }
     :root[data-edition="harbour"] #authGate > div { background:#FFFFFF; border-radius:16px; box-shadow:0 18px 48px rgba(0,0,0,0.28); }
 
     /* Harmonia Sans — Harbour's brand typeface (internal Monotype licence, per

@@ -54,6 +54,16 @@ const CMS_SCHEMA = [
     { key: 'onboarding.welcomeTitle', label: 'Onboarding welcome heading', type: 'text' },
     { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
   ]},
+  { id: 'theme', label: 'Theme & colours', icon: 'fa-palette', fields: [
+    { key: 'theme.accent',      label: 'Brand / chrome / links / CTA', type: 'color' },
+    { key: 'theme.btnPrimary',  label: 'Primary button',               type: 'color' },
+    { key: 'theme.bg',          label: 'Page background',              type: 'color' },
+    { key: 'theme.bgPanel',     label: 'Cards',                        type: 'color' },
+    { key: 'theme.border',      label: 'Borders',                      type: 'color' },
+    { key: 'theme.textPrimary', label: 'Primary text',                 type: 'color' },
+    { key: 'theme.gain',        label: 'Gains',                        type: 'color' },
+    { key: 'theme.loss',        label: 'Losses',                       type: 'color' }
+  ]},
   { id: 'overview', label: 'Overview', icon: 'fa-gauge-high', fields: [
     { key: 'overview.emptyTitle', label: 'Empty-portfolio heading', type: 'text' }
   ]},
@@ -84,6 +94,31 @@ const CMS_SCHEMA = [
   ]}
 ];
 let _cmsStudioGroup = 'branding';
+
+// Theme colour keys → the CSS custom property they override. Saved overrides are
+// applied as inline custom properties on <html> (beats the stylesheet), so a
+// colour edit recolours the chrome (var-driven), links, CTAs, gains/losses, etc.
+const CMS_THEME_VARS = {
+  'theme.accent':      '--accent',
+  'theme.btnPrimary':  '--btn-primary',
+  'theme.bg':          '--bg',
+  'theme.bgPanel':     '--bg-panel',
+  'theme.border':      '--border',
+  'theme.textPrimary': '--text-primary',
+  'theme.gain':        '--color-green',
+  'theme.loss':        '--color-red'
+};
+
+function applyCmsTheme() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  const ov = _cmsOverrides[edId] || {};
+  const root = document.documentElement;
+  Object.keys(CMS_THEME_VARS).forEach(key => {
+    const cssVar = CMS_THEME_VARS[key];
+    if (ov[key]) root.style.setProperty(cssVar, ov[key]);
+    else root.style.removeProperty(cssVar);
+  });
+}
 
 // Phase 1: { harbour: { key: 'override' }, ... } loaded from Supabase cms_content.
 let _cmsOverrides = {};
@@ -139,6 +174,7 @@ async function loadCmsOverrides() {
     _cmsOverrides[edId] = {};
     (data || []).forEach(r => { _cmsOverrides[edId][r.key] = r.value; });
     hydrateContent();
+    try { applyCmsTheme(); } catch(e) {}
   } catch (e) { console.warn('[cms] load', e); }
 }
 
@@ -199,6 +235,7 @@ async function saveCmsKey(key) {
     _cmsOverrides[edId] = _cmsOverrides[edId] || {};
     _cmsOverrides[edId][key] = value;
     hydrateContent();
+    try { applyCmsTheme(); } catch(e) {}
     _cmsRefreshEditors();
     if (window.toast) toast.success('Saved · ' + key);
   } catch (e) { if (window.toast) toast.error('Save failed: ' + (e.message || e)); console.warn('[cms] save', e); }
@@ -211,6 +248,7 @@ async function resetCmsKey(key) {
     if (error) throw error;
     if (_cmsOverrides[edId]) delete _cmsOverrides[edId][key];
     hydrateContent();
+    try { applyCmsTheme(); } catch(e) {}
     _cmsRefreshEditors();
     if (window.toast) toast.success('Reset · ' + key);
   } catch (e) { if (window.toast) toast.error('Reset failed: ' + (e.message || e)); }
@@ -259,6 +297,21 @@ function renderCmsStudio() {
     <div class="text-xs neutral mb-4">Editing the <b>${esc((typeof EDITION!=='undefined'&&EDITION.name)||'')}</b> edition. Blank = built-in default.</div>` +
     group.fields.map(f => {
       const ov = (_cmsOverrides[edId] && _cmsOverrides[edId][f.key]) || '';
+      // Colour fields → a colour picker. Current = override else the live CSS var.
+      if (f.type === 'color') {
+        const cssVar = (typeof CMS_THEME_VARS !== 'undefined') ? CMS_THEME_VARS[f.key] : null;
+        let cur = ov || (cssVar ? getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim() : '');
+        if (!/^#[0-9a-fA-F]{6}$/.test(cur)) cur = '#000000';
+        return `<div class="mb-4">
+          <label style="display:block;font-size:12px;margin-bottom:4px;">${esc(f.label)} <code class="neutral" style="font-size:10px;">${esc(cssVar||f.key)}</code></label>
+          <div class="flex items-center gap-2">
+            <input type="color" id="${_cmsId(f.key)}" value="${cur}" style="width:46px;height:34px;border:1px solid var(--border);border-radius:6px;cursor:pointer;background:none;padding:2px;">
+            <code class="neutral" style="font-size:11px;">${esc(cur)}</code>
+            <button onclick="saveCmsKey('${f.key}')" class="btn btn-sm btn-primary" style="font-size:11px;">Save</button>
+            ${ov ? `<button onclick="resetCmsKey('${f.key}')" class="btn btn-sm btn-secondary" style="font-size:11px;">Reset</button>` : '<span class="text-xs neutral" style="align-self:center;">(theme default)</span>'}
+          </div>
+        </div>`;
+      }
       const def = esc(_cmsDefault(f.key));
       const inp = f.type === 'multiline'
         ? `<textarea id="${_cmsId(f.key)}" rows="3" class="input" style="width:100%;font-size:13px;" placeholder="${def}">${esc(ov)}</textarea>`
