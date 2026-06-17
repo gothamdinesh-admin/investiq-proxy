@@ -56,6 +56,7 @@ const CMS_SCHEMA = [
     { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
   ]},
   { id: 'layout', label: 'Dashboard layout', icon: 'fa-table-cells', fields: [
+    { type: 'reorder', label: 'Overview block order' },
     { key: 'layout.overview.overnight',   label: 'Overview · Daily brief',       type: 'toggle' },
     { key: 'layout.overview.kpis',        label: 'Overview · KPI cards',         type: 'toggle' },
     { key: 'layout.overview.allocation',  label: 'Overview · Allocation chart',  type: 'toggle' },
@@ -117,6 +118,61 @@ const CMS_THEME_VARS = {
   'theme.gain':        '--color-green',
   'theme.loss':        '--color-red'
 };
+
+// Reorderable top-level Overview blocks (DOM siblings tagged data-block).
+// Default order matches the DOM, so no override = no change.
+const CMS_BLOCKS = [
+  { id: 'kpis',        label: 'KPI cards' },
+  { id: 'overnight',   label: 'Daily brief' },
+  { id: 'charts',      label: 'Charts (Allocation + Performance)' },
+  { id: 'topholdings', label: 'Top holdings' }
+];
+
+function _cmsOrder() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  const raw = _cmsOverrides[edId] && _cmsOverrides[edId]['layout.order'];
+  let order = [];
+  try { order = raw ? JSON.parse(raw) : []; } catch (e) {}
+  const ids = CMS_BLOCKS.map(b => b.id);
+  order = order.filter(id => ids.includes(id));
+  ids.forEach(id => { if (!order.includes(id)) order.push(id); });   // append any new blocks
+  return order;
+}
+
+// Reorder the tagged blocks among themselves (move DOM nodes before the stable
+// sibling that follows the block group). No layout rewrite needed.
+function applyCmsOrder() {
+  const order = _cmsOrder();
+  const nodes = order.map(id => document.querySelector('[data-block="' + id + '"]')).filter(Boolean);
+  if (nodes.length < 2) return;
+  const parent = nodes[0].parentNode;
+  const domBlocks = [...parent.children].filter(c => c.getAttribute && c.getAttribute('data-block'));
+  if (!domBlocks.length) return;
+  const anchor = domBlocks[domBlocks.length - 1].nextSibling;   // first non-block sibling after the group
+  nodes.forEach(n => { if (n.parentNode === parent) parent.insertBefore(n, anchor); });
+}
+
+function moveCmsBlock(id, dir) {
+  const order = _cmsOrder();
+  const i = order.indexOf(id);
+  const j = i + (dir === 'up' ? -1 : 1);
+  if (i < 0 || j < 0 || j >= order.length) return;
+  const t = order[i]; order[i] = order[j]; order[j] = t;
+  const val = JSON.stringify(order);
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  _cmsOverrides[edId] = _cmsOverrides[edId] || {};
+  _cmsOverrides[edId]['layout.order'] = val;
+  applyCmsOrder();
+  _cmsRefreshEditors();
+  // Persist (best-effort; needs migration 017)
+  if (typeof _supabase !== 'undefined' && _supabase) {
+    _supabase.from('cms_content').upsert({
+      edition: edId, key: 'layout.order', value: val,
+      updated_by: (typeof _supaUser !== 'undefined' && _supaUser) ? _supaUser.id : null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'edition,key' }).then(({ error }) => { if (error && window.toast) toast.error('Order not saved (run migration 017)'); });
+  }
+}
 
 // Hide cards whose layout.<id> override is 'hidden'. Cards are tagged
 // data-card="<id>" on a static wrapper, so this survives content re-renders.
@@ -221,6 +277,7 @@ async function loadCmsOverrides() {
     hydrateContent();
     try { applyCmsTheme(); } catch(e) {}
     try { applyCmsLayout(); } catch(e) {}
+    try { applyCmsOrder(); } catch(e) {}
   } catch (e) { console.warn('[cms] load', e); }
 }
 
@@ -343,6 +400,17 @@ function renderCmsStudio() {
     <div class="text-xs neutral mb-4">Editing the <b>${esc((typeof EDITION!=='undefined'&&EDITION.name)||'')}</b> edition. Blank = built-in default.</div>` +
     group.fields.map(f => {
       const ov = (_cmsOverrides[edId] && _cmsOverrides[edId][f.key]) || '';
+      // Reorder control — ordered list of the Overview blocks with up/down.
+      if (f.type === 'reorder') {
+        const order = _cmsOrder();
+        const labelOf = id => { const b = CMS_BLOCKS.find(x => x.id === id); return b ? b.label : id; };
+        const rows = order.map((id, idx) => `<div class="flex items-center gap-2" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:4px;">
+            <span style="flex:1;font-size:13px;">${idx + 1}. ${esc(labelOf(id))}</span>
+            <button onclick="moveCmsBlock('${id}','up')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" ${idx === 0 ? 'disabled style="opacity:.4;font-size:11px;padding:3px 8px;"' : ''}><i class="fas fa-arrow-up"></i></button>
+            <button onclick="moveCmsBlock('${id}','down')" class="btn btn-sm btn-secondary" style="font-size:11px;padding:3px 8px;" ${idx === order.length - 1 ? 'disabled style="opacity:.4;font-size:11px;padding:3px 8px;"' : ''}><i class="fas fa-arrow-down"></i></button>
+          </div>`).join('');
+        return `<div class="mb-5"><label style="display:block;font-size:12px;margin-bottom:6px;">${esc(f.label)}</label>${rows}</div>`;
+      }
       // Toggle fields → a visibility checkbox (checked = shown).
       if (f.type === 'toggle') {
         const hidden = ov === 'hidden';
