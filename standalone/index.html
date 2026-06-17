@@ -1988,7 +1988,7 @@
         <div class="card p-5" data-card="overview.allocation">
           <div class="section-title mb-4">
             <i class="fas fa-chart-pie" style="color:var(--accent);"></i>
-            Allocation
+            <span data-cms="chart.allocTitle">Allocation</span>
             <div class="flex gap-2 ml-auto">
               <span class="tab active text-xs" onclick="switchAllocTab(this,'type')">Type</span>
               <span class="tab text-xs" onclick="switchAllocTab(this,'platform')">Platform</span>
@@ -2008,7 +2008,7 @@
             <div>
               <div class="section-title" style="margin:0;">
                 <i class="fas fa-chart-area" style="color:var(--color-green);"></i>
-                Performance
+                <span data-cms="chart.perfTitle">Performance</span>
               </div>
               <div class="text-xs neutral mt-1">Your top 6 winners and 6 losers by the active metric.</div>
             </div>
@@ -13171,7 +13171,10 @@ function showSkeletons() {
 function applyEdition() {
   const ed = (typeof EDITION !== 'undefined' && EDITION) ? EDITION : null;
   if (!ed) return;
-  try { document.title = ed.name + (ed.tagline ? ' — ' + ed.tagline : ''); } catch(e) {}
+  // Effective name/tagline — a CMS brand.* override wins over the edition default.
+  const _name = (typeof cmsName === 'function') ? cmsName() : ed.name;
+  const _tag  = (typeof cmsTagline === 'function') ? cmsTagline() : ed.tagline;
+  try { document.title = _name + (_tag ? ' — ' + _tag : ''); } catch(e) {}
 
   // Wordmarks — rewrite "InvestIQ" to the edition. Skip the TraderIQ sub-brand
   // (its lead text is "Trader"). If the edition has a logo, render an image mark
@@ -13185,13 +13188,15 @@ function applyEdition() {
       // v0.34 — the top nav is Harbour Blue, so use the white sails there;
       // everywhere else (gate white card, drawer) the blue-circle sails reads.
       const logoSrc = (ed.logoOnDark && bm.closest('nav.glass')) ? ed.logoOnDark : ed.logo;
-      const accSpan = ed.wordmark.accent
-        ? `<span style="font-weight:700;letter-spacing:-0.3px;margin-left:5px;color:var(--accent);">${ed.wordmark.accent}</span>`
-        : '';
+      // If a CMS brand.name override exists, show it as the wordmark (single
+      // span); otherwise keep the designed lead + accent (e.g. "Harbour" + "IQ").
+      const overridden = _name && _name !== ed.name;
+      const wordmarkHtml = overridden
+        ? `<span style="font-weight:800;letter-spacing:-0.3px;margin-left:8px;color:var(--text-primary);">${_name}</span>`
+        : `<span style="font-weight:800;letter-spacing:-0.3px;margin-left:8px;color:var(--text-primary);">${ed.wordmark.lead}</span>`
+          + (ed.wordmark.accent ? `<span style="font-weight:700;letter-spacing:-0.3px;margin-left:5px;color:var(--accent);">${ed.wordmark.accent}</span>` : '');
       bm.innerHTML =
-        `<img src="${logoSrc}" alt="${ed.name}" style="height:1.3em;width:1.3em;flex-shrink:0;">` +
-        `<span style="font-weight:800;letter-spacing:-0.3px;margin-left:8px;color:var(--text-primary);">${ed.wordmark.lead}</span>` +
-        accSpan;
+        `<img src="${logoSrc}" alt="${_name}" style="height:1.3em;width:1.3em;flex-shrink:0;">` + wordmarkHtml;
     } else if (lead) {
       lead.textContent = ed.wordmark.lead;
       const acc = bm.querySelector('.bm-iq'); if (acc) acc.textContent = ed.wordmark.accent || '';
@@ -13227,10 +13232,10 @@ function applyEdition() {
 
   // v0.32.1 — meta/PWA branding per edition (browser tab, social cards, install).
   const setMeta = (sel, val) => { const m = document.querySelector(sel); if (m && val) m.setAttribute('content', val); };
-  setMeta('meta[name="apple-mobile-web-app-title"]', ed.name);
-  setMeta('meta[property="og:title"]', `${ed.name} — ${ed.tagline}`);
-  setMeta('meta[name="description"]', `${ed.name} — ${ed.tagline}`);
-  setMeta('meta[property="og:description"]', `${ed.name} — ${ed.tagline}`);
+  setMeta('meta[name="apple-mobile-web-app-title"]', _name);
+  setMeta('meta[property="og:title"]', `${_name} — ${_tag}`);
+  setMeta('meta[name="description"]', `${_name} — ${_tag}`);
+  setMeta('meta[property="og:description"]', `${_name} — ${_tag}`);
   if (ed.manifest) {
     const ml = document.querySelector('link[rel="manifest"]');
     if (ml) ml.setAttribute('href', ed.manifest);

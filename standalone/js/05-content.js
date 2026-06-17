@@ -41,7 +41,11 @@ const CONTENT = {
     'section.reports.title':     'Reports',
     'overview.emptyTitle':       'Your portfolio is empty',
     'overview.briefTitle':       'Since yesterday',
-    'chart.allocType':           'doughnut'
+    'chart.allocType':           'doughnut',
+    'chart.allocTitle':          'Allocation',
+    'chart.perfTitle':           'Performance',
+    'brand.name':                '{name}',
+    'brand.tagline':             '{tagline}'
   },
   personal: {},
   harbour:  {}
@@ -53,8 +57,10 @@ const CONTENT = {
 // and it becomes editable in the Studio. type: 'text' | 'multiline'.
 const CMS_SCHEMA = [
   { id: 'branding', label: 'Branding & Login', icon: 'fa-flag', fields: [
-    { key: 'onboarding.welcomeTitle', label: 'Onboarding welcome heading', type: 'text' },
-    { key: 'signup.inviteBody',       label: 'Signup / invite message',     type: 'multiline' }
+    { key: 'brand.name',              label: 'App name',                     type: 'text' },
+    { key: 'brand.tagline',           label: 'Tagline',                      type: 'text' },
+    { key: 'onboarding.welcomeTitle', label: 'Onboarding welcome heading',   type: 'text' },
+    { key: 'signup.inviteBody',       label: 'Signup / invite message',      type: 'multiline' }
   ]},
   { id: 'layout', label: 'Dashboard layout', icon: 'fa-table-cells', fields: [
     { type: 'reorder', label: 'Overview block order' },
@@ -65,7 +71,9 @@ const CMS_SCHEMA = [
     { key: 'layout.overview.topholdings', label: 'Overview · Top holdings',       type: 'toggle' }
   ]},
   { id: 'charts', label: 'Charts', icon: 'fa-chart-pie', fields: [
-    { key: 'chart.allocType', label: 'Allocation chart type', type: 'select', options: ['doughnut', 'pie', 'bar'] }
+    { key: 'chart.allocTitle', label: 'Allocation chart title',  type: 'text' },
+    { key: 'chart.allocType',  label: 'Allocation chart type',   type: 'select', options: ['doughnut', 'pie', 'bar'] },
+    { key: 'chart.perfTitle',  label: 'Performance chart title', type: 'text' }
   ]},
   { id: 'theme', label: 'Theme & colours', icon: 'fa-palette', fields: [
     { key: 'theme.accent',      label: 'Brand / chrome / links / CTA', type: 'color' },
@@ -228,6 +236,18 @@ function applyCmsTheme() {
 // Phase 1: { harbour: { key: 'override' }, ... } loaded from Supabase cms_content.
 let _cmsOverrides = {};
 
+// Effective app name / tagline — a CMS override (brand.name/brand.tagline) wins
+// over the edition default. Read overrides DIRECTLY (not via cms()) to avoid
+// recursion, since cms() interpolates {name}/{tagline} from these.
+function cmsName() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION && EDITION.id) ? EDITION.id : 'personal';
+  return (_cmsOverrides[edId] && _cmsOverrides[edId]['brand.name']) || (typeof EDITION !== 'undefined' && EDITION.name) || 'InvestIQ';
+}
+function cmsTagline() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION && EDITION.id) ? EDITION.id : 'personal';
+  return (_cmsOverrides[edId] && _cmsOverrides[edId]['brand.tagline']) || (typeof EDITION !== 'undefined' && EDITION.tagline) || '';
+}
+
 function cms(key, vars) {
   const edId = (typeof EDITION !== 'undefined' && EDITION && EDITION.id) ? EDITION.id : 'personal';
   let val = (_cmsOverrides[edId] && _cmsOverrides[edId][key])
@@ -236,8 +256,8 @@ function cms(key, vars) {
   if (val == null) return key;   // missing key stays visible (not silent)
   const ed = (typeof EDITION !== 'undefined' && EDITION) ? EDITION : {};
   const ctx = Object.assign({
-    name:         ed.name || 'InvestIQ',
-    tagline:      ed.tagline || '',
+    name:         cmsName(),
+    tagline:      cmsTagline(),
     supportEmail: ed.supportEmail || ''
   }, vars || {});
   return String(val).replace(/\{(\w+)\}/g, (m, k) => (ctx[k] != null ? ctx[k] : m));
@@ -250,7 +270,7 @@ function hydrateContent() {
     el.textContent = cms(el.getAttribute('data-cms'));
   });
   document.querySelectorAll('.edition-name').forEach(el => {
-    el.textContent = ed.name || 'InvestIQ';
+    el.textContent = cmsName();
   });
   document.querySelectorAll('.support-email').forEach(el => {
     if (ed.supportEmail) el.textContent = ed.supportEmail;
@@ -346,6 +366,7 @@ async function saveCmsKey(key) {
     hydrateContent();
     try { applyCmsTheme(); } catch(e) {}
     if (key.indexOf('chart.') === 0 && typeof renderAll === 'function') { try { renderAll(); } catch(e) {} }
+    if (key.indexOf('brand.') === 0 && typeof applyEdition === 'function') { try { applyEdition(); } catch(e) {} }
     _cmsRefreshEditors();
     if (window.toast) toast.success('Saved · ' + key);
   } catch (e) { if (window.toast) toast.error('Save failed: ' + (e.message || e)); console.warn('[cms] save', e); }
@@ -359,6 +380,8 @@ async function resetCmsKey(key) {
     if (_cmsOverrides[edId]) delete _cmsOverrides[edId][key];
     hydrateContent();
     try { applyCmsTheme(); } catch(e) {}
+    if (key.indexOf('chart.') === 0 && typeof renderAll === 'function') { try { renderAll(); } catch(e) {} }
+    if (key.indexOf('brand.') === 0 && typeof applyEdition === 'function') { try { applyEdition(); } catch(e) {} }
     _cmsRefreshEditors();
     if (window.toast) toast.success('Reset · ' + key);
   } catch (e) { if (window.toast) toast.error('Reset failed: ' + (e.message || e)); }
