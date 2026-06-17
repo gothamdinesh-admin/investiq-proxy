@@ -40,7 +40,8 @@ const CONTENT = {
     'section.dividends.title':   'Dividends',
     'section.reports.title':     'Reports',
     'overview.emptyTitle':       'Your portfolio is empty',
-    'overview.briefTitle':       'Since yesterday'
+    'overview.briefTitle':       'Since yesterday',
+    'chart.allocType':           'doughnut'
   },
   personal: {},
   harbour:  {}
@@ -62,6 +63,9 @@ const CMS_SCHEMA = [
     { key: 'layout.overview.allocation',  label: 'Overview · Allocation chart',  type: 'toggle' },
     { key: 'layout.overview.performance', label: 'Overview · Performance chart',  type: 'toggle' },
     { key: 'layout.overview.topholdings', label: 'Overview · Top holdings',       type: 'toggle' }
+  ]},
+  { id: 'charts', label: 'Charts', icon: 'fa-chart-pie', fields: [
+    { key: 'chart.allocType', label: 'Allocation chart type', type: 'select', options: ['doughnut', 'pie', 'bar'] }
   ]},
   { id: 'theme', label: 'Theme & colours', icon: 'fa-palette', fields: [
     { key: 'theme.accent',      label: 'Brand / chrome / links / CTA', type: 'color' },
@@ -278,6 +282,8 @@ async function loadCmsOverrides() {
     try { applyCmsTheme(); } catch(e) {}
     try { applyCmsLayout(); } catch(e) {}
     try { applyCmsOrder(); } catch(e) {}
+    // If any chart override is set, re-render so charts pick up the config.
+    if (Object.keys(_cmsOverrides[edId] || {}).some(k => k.indexOf('chart.') === 0) && typeof renderAll === 'function') { try { renderAll(); } catch(e) {} }
   } catch (e) { console.warn('[cms] load', e); }
 }
 
@@ -339,6 +345,7 @@ async function saveCmsKey(key) {
     _cmsOverrides[edId][key] = value;
     hydrateContent();
     try { applyCmsTheme(); } catch(e) {}
+    if (key.indexOf('chart.') === 0 && typeof renderAll === 'function') { try { renderAll(); } catch(e) {} }
     _cmsRefreshEditors();
     if (window.toast) toast.success('Saved · ' + key);
   } catch (e) { if (window.toast) toast.error('Save failed: ' + (e.message || e)); console.warn('[cms] save', e); }
@@ -438,6 +445,20 @@ function renderCmsStudio() {
         </div>`;
       }
       const def = esc(_cmsDefault(f.key));
+      // Select fields → a dropdown (Save applies immediately).
+      if (f.type === 'select') {
+        const cur = ov || _cmsDefault(f.key);
+        const opts = (f.options || []).map(o => `<option value="${esc(o)}" ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('');
+        return `<div class="mb-4">
+          <label style="display:block;font-size:12px;margin-bottom:4px;">${esc(f.label)} <code class="neutral" style="font-size:10px;">${esc(f.key)}</code></label>
+          <div class="flex gap-2 items-center">
+            <select id="${_cmsId(f.key)}" class="input" style="width:auto;font-size:13px;">${opts}</select>
+            <button onclick="saveCmsKey('${f.key}')" class="btn btn-sm btn-primary" style="font-size:11px;">Save</button>
+            ${ov ? `<button onclick="resetCmsKey('${f.key}')" class="btn btn-sm btn-secondary" style="font-size:11px;">Reset</button>` : ''}
+            <span class="text-xs neutral">default: ${def}</span>
+          </div>
+        </div>`;
+      }
       const inp = f.type === 'multiline'
         ? `<textarea id="${_cmsId(f.key)}" rows="3" class="input" style="width:100%;font-size:13px;" placeholder="${def}">${esc(ov)}</textarea>`
         : `<input id="${_cmsId(f.key)}" type="text" class="input" style="width:100%;font-size:13px;" placeholder="${def}" value="${esc(ov)}">`;

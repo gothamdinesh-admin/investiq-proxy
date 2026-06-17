@@ -6148,11 +6148,21 @@ function renderAllocChart(metrics) {
   if (charts.alloc) charts.alloc.destroy();
   if (!isEmpty) {
     const ctx = document.getElementById('allocChart').getContext('2d');
+    // v0.40 — chart type is CMS-configurable (Content Studio → Charts).
+    // Chart.js draws on canvas, so CSS vars must be resolved to real colours.
+    const _css = getComputedStyle(document.documentElement);
+    const cardBg = _css.getPropertyValue('--bg-panel').trim() || '#0f1729';
+    const gridC  = _css.getPropertyValue('--chart-grid').trim() || 'rgba(148,163,184,0.2)';
+    const textC  = _css.getPropertyValue('--chart-text').trim() || '#64748b';
+    const allocType = (typeof cms === 'function') ? cms('chart.allocType') : 'doughnut';
+    const isBar = allocType === 'bar';
     charts.alloc = new Chart(ctx, {
-      type: 'doughnut',
-      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: '#0f1729', borderWidth: 3 }] },
+      type: isBar ? 'bar' : (allocType === 'pie' ? 'pie' : 'doughnut'),
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderColor: isBar ? 'transparent' : cardBg, borderWidth: isBar ? 0 : 3, borderRadius: isBar ? 4 : 0 }] },
       options: {
-        cutout: '68%', responsive: true, maintainAspectRatio: false,
+        cutout: (isBar || allocType === 'pie') ? 0 : '68%',
+        responsive: true, maintainAspectRatio: false,
+        scales: isBar ? { x: { display: false }, y: { ticks: { color: textC }, grid: { color: gridC } } } : {},
         plugins: { legend: { display: false }, tooltip: {
           callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); return ` ${lbl}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)`; } }
         }}
