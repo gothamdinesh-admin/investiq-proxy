@@ -70,6 +70,26 @@ const CMS_SCHEMA = [
     { key: 'layout.overview.performance', label: 'Overview · Performance chart',  type: 'toggle' },
     { key: 'layout.overview.topholdings', label: 'Overview · Top holdings',       type: 'toggle' }
   ]},
+  { id: 'navigation', label: 'Navigation & sections', icon: 'fa-bars', fields: [
+    // Whole sidebar groups. Off → the group's nav entry + all its sections hide.
+    { key: 'nav.group.portfolio',    label: 'Portfolio — whole group',    type: 'toggle' },
+    { key: 'nav.group.intelligence', label: 'Intelligence — whole group', type: 'toggle' },
+    { key: 'nav.group.planning',     label: 'Planning — whole group',     type: 'toggle' },
+    { key: 'nav.group.watchlist',    label: 'Watchlist — whole group',    type: 'toggle' },
+    { key: 'nav.group.trader',       label: 'TraderIQ — whole group',     type: 'toggle' },
+    // Individual sections within those groups.
+    { key: 'nav.section.holdings',    label: '› Holdings',     type: 'toggle' },
+    { key: 'nav.section.performance', label: '› Performance',  type: 'toggle' },
+    { key: 'nav.section.dividends',   label: '› Dividends',    type: 'toggle' },
+    { key: 'nav.section.insights',    label: '› AI Insights',  type: 'toggle' },
+    { key: 'nav.section.askiq',       label: '› Ask IQ',       type: 'toggle' },
+    { key: 'nav.section.market',      label: '› Market',       type: 'toggle' },
+    { key: 'nav.section.news',        label: '› News',         type: 'toggle' },
+    { key: 'nav.section.goals',       label: '› Goals',        type: 'toggle' },
+    { key: 'nav.section.calendar',    label: '› Calendar',     type: 'toggle' },
+    { key: 'nav.section.tax',         label: '› NZ Tax (FIF)', type: 'toggle' },
+    { key: 'nav.section.reports',     label: '› Reports',      type: 'toggle' }
+  ]},
   { id: 'charts', label: 'Charts', icon: 'fa-chart-pie', fields: [
     { key: 'chart.allocTitle', label: 'Allocation chart title',  type: 'text' },
     { key: 'chart.allocType',  label: 'Allocation chart type',   type: 'select', options: ['doughnut', 'pie', 'bar'] },
@@ -197,6 +217,64 @@ function applyCmsLayout() {
   });
 }
 
+// ── Navigation visibility (nav.group.* / nav.section.*) ────────────────
+// A section is hidden if its own nav.section override is 'hidden' OR its
+// parent sidebar group is hidden. A group is hidden if its nav.group override
+// is 'hidden' OR every one of its child sections is individually hidden.
+function _cmsNavOv() {
+  const edId = (typeof EDITION !== 'undefined' && EDITION.id) ? EDITION.id : 'personal';
+  return _cmsOverrides[edId] || {};
+}
+function isCmsSectionHidden(section) {
+  const ov = _cmsNavOv();
+  if (ov['nav.section.' + section] === 'hidden') return true;
+  const g = (typeof _groupOf === 'function') ? _groupOf(section) : section;
+  return ov['nav.group.' + g] === 'hidden';
+}
+function isCmsGroupHidden(groupId) {
+  const ov = _cmsNavOv();
+  if (ov['nav.group.' + groupId] === 'hidden') return true;
+  // All children hidden ⇒ the group is effectively empty, so hide it too.
+  const def = (typeof NAV_GROUPS !== 'undefined') ? NAV_GROUPS.find(g => g.id === groupId) : null;
+  if (def && def.children.length && def.children.every(c => ov['nav.section.' + c] === 'hidden')) return true;
+  return false;
+}
+
+// Hide/show sidebar groups, mobile drawer items and bottom tabs per nav.*
+// overrides. overview/admin/family are not CMS-controlled (always-on or
+// role-gated). Re-renders the active group's pill bar so hidden children drop.
+function applyCmsNav() {
+  const FIXED = new Set(['overview', 'admin', 'family']);
+  // Sidebar primary groups.
+  document.querySelectorAll('#primaryNav .nav-link[data-group]').forEach(el => {
+    const g = el.getAttribute('data-group');
+    if (FIXED.has(g)) return;
+    el.style.display = isCmsGroupHidden(g) ? 'none' : '';
+  });
+  // Mobile drawer items (per-section onclick="showSection('x')").
+  document.querySelectorAll('.drawer-item').forEach(el => {
+    const m = /showSection\('([^']+)'/.exec(el.getAttribute('onclick') || '');
+    if (!m) return;
+    const s = m[1];
+    if (FIXED.has(s)) return;
+    el.style.display = isCmsSectionHidden(s) ? 'none' : '';
+  });
+  // Mobile bottom tabs (data-section).
+  document.querySelectorAll('.mob-tab[data-section]').forEach(el => {
+    const s = el.dataset.section;
+    if (FIXED.has(s)) return;
+    el.style.display = isCmsSectionHidden(s) ? 'none' : '';
+  });
+  // Re-render the sub-nav pills for the current section (drops hidden children),
+  // and if the section we're on just got hidden, bounce to Overview.
+  try {
+    if (typeof currentSection !== 'undefined') {
+      if (isCmsSectionHidden(currentSection) && typeof showSection === 'function') showSection('overview', null);
+      else if (typeof renderGroupSubNav === 'function') renderGroupSubNav(currentSection);
+    }
+  } catch (e) {}
+}
+
 // Toggle a card's visibility (visible=true → delete override; false → store 'hidden').
 async function setCmsToggle(key, visible) {
   if (typeof _supabase === 'undefined' || !_supabase) { if (window.toast) toast.error('Cloud not connected'); return; }
@@ -216,9 +294,10 @@ async function setCmsToggle(key, visible) {
       _cmsOverrides[edId] = _cmsOverrides[edId] || {};
       _cmsOverrides[edId][key] = 'hidden';
     }
-    applyCmsLayout();
+    if (key.indexOf('nav.') === 0) { try { applyCmsNav(); } catch(e) {} }
+    else applyCmsLayout();
     _cmsRefreshEditors();
-    if (window.toast) toast.success('Layout updated');
+    if (window.toast) toast.success(key.indexOf('nav.') === 0 ? 'Navigation updated' : 'Layout updated');
   } catch (e) { if (window.toast) toast.error('Failed: ' + (e.message || e)); console.warn('[cms] toggle', e); }
 }
 
@@ -302,6 +381,7 @@ async function loadCmsOverrides() {
     try { applyCmsTheme(); } catch(e) {}
     try { applyCmsLayout(); } catch(e) {}
     try { applyCmsOrder(); } catch(e) {}
+    try { applyCmsNav(); } catch(e) {}
     // If any chart override is set, re-render so charts pick up the config.
     if (Object.keys(_cmsOverrides[edId] || {}).some(k => k.indexOf('chart.') === 0) && typeof renderAll === 'function') { try { renderAll(); } catch(e) {} }
   } catch (e) { console.warn('[cms] load', e); }

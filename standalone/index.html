@@ -9802,6 +9802,8 @@ async function clearAllData() {
 
 // ===== NAVIGATION =====
 function _showSectionCore(name, el) {
+  // CMS nav: a section hidden via Content Studio is unreachable — bounce to Overview.
+  if (name !== 'overview' && typeof isCmsSectionHidden === 'function' && isCmsSectionHidden(name)) name = 'overview';
   ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
@@ -13464,7 +13466,11 @@ function _groupDef(groupId) { return NAV_GROUPS.find(g => g.id === groupId); }
 function showGroup(groupId, el) {
   const g = _groupDef(groupId);
   if (!g) return;
-  showSection(_groupLastChild[groupId] || g.children[0], null);
+  // Land on the remembered child if it's still visible, else the first visible one.
+  const visible = g.children.filter(c => typeof isCmsSectionHidden !== 'function' || !isCmsSectionHidden(c));
+  const last = _groupLastChild[groupId];
+  const target = (last && visible.includes(last)) ? last : visible[0];
+  if (target) showSection(target, null);
 }
 
 // Render the segmented pill bar for the active section's group.
@@ -13473,8 +13479,10 @@ function renderGroupSubNav(section) {
   const bar = document.getElementById('groupSubNav');
   if (!bar) return;
   const g = _groupDef(_groupOf(section));
-  if (!g || g.children.length <= 1) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
-  const pills = g.children.map(c => {
+  // Drop any children hidden via the CMS nav toggles.
+  const kids = g ? g.children.filter(c => typeof isCmsSectionHidden !== 'function' || !isCmsSectionHidden(c)) : [];
+  if (!g || kids.length <= 1) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const pills = kids.map(c => {
     const active = c === section ? ' active' : '';
     const icon = SECTION_ICONS[c] ? `<i class="fas ${SECTION_ICONS[c]} mr-2"></i>` : '';
     return `<button class="seg-btn${active}" onclick="showSection('${c}',null)">${icon}${SECTION_LABELS[c] || c}</button>`;
