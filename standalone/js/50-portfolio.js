@@ -393,15 +393,17 @@ async function refreshPortfolioPrices() {
   // Skip types Yahoo doesn't track: cash, NZ managed funds, KiwiSaver,
   // real estate. These keep their manually-entered currentPrice.
   const MANUAL_TYPES = new Set(['cash', 'fund', 'kiwisaver', 'realestate']);
+  // h.manualPrice flags weight-based holdings (e.g. Disclose fund imports)
+  // whose "symbol" is an asset name, not a Yahoo-resolvable ticker.
   const symbols = state.portfolio
-    .filter(h => h.symbol && !MANUAL_TYPES.has(h.type))
+    .filter(h => h.symbol && !MANUAL_TYPES.has(h.type) && !h.manualPrice)
     .map(h => h.symbol);
   if (!symbols.length) return;
   try {
     const quotes = await fetchYahooQuotes([...new Set(symbols)]);
     state.portfolio.forEach(h => {
-      // Don't overwrite manual prices on fund/kiwisaver/etc
-      if (MANUAL_TYPES.has(h.type)) return;
+      // Don't overwrite manual prices on fund/kiwisaver/etc or weight-based imports
+      if (MANUAL_TYPES.has(h.type) || h.manualPrice) return;
       const q = quotes[h.symbol];
       if (q) {
         h.currentPrice = q.price;

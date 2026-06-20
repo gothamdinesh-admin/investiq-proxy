@@ -119,6 +119,137 @@ function parseCSVLine(line) {
   return result;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// NZ DISCLOSE REGISTER — Full Portfolio Holdings importer
+// ───────────────────────────────────────────────────────────────────────
+// Handles the regulatory "Full Portfolio Holdings" CSV (the format Harbour's
+// fund holdings export uses). It is WEIGHTS-based, not value-based:
+//   row 1-4   metadata (DISCLOSE REGISTER header, Offer/Fund name, Period)
+//   row 5     "Asset name,% of fund net assets,Security code,"
+//   row 6..N  "<name>,<X.XX%>,<ISIN-or-blank>,"  — sorted by weight desc,
+//             ending in negative-weight derivatives (FX forwards + IRS legs).
+// No units, no prices. We import each holding's WEIGHT as its value (×1), so
+// the app's allocation / concentration / weight maths reproduce the % of fund.
+// Per the agreed design: securities ≥0.10% individually; the long tail rolled
+// up per asset-type; derivatives netted into two "overlay" summary lines.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Detect the Disclose format from the raw file text (before column parsing).
+function isDiscloseFormat(text) {
+  return /disclose register/i.test(text)
+      || /^\s*asset name\s*,\s*% of fund net assets/im.test(text);
+}
+
+// Classify a Disclose row into the app's asset types + flag derivatives.
+function _discloseClassify(name, code) {
+  const n = (name || '').toUpperCase();
+  if (/\bIRS\b|PAYABLE LEG|RECEIVABLE LEG|\bSWAP\b/.test(n)) return { type: 'other', kind: 'rates' };
+  if (/:BUY |:SELL |^(SELL|BUY) .+:|\bFORWARD\b|\bFWD\b/.test(n)) return { type: 'other', kind: 'fx' };
+  if (/\bDOLLAR\b|^CASH\b|\bCASH$/.test(n)) return { type: 'cash' };
+  if (/GOVERNMENT STOCK|SOVEREIGN|TREASURY|\bBOND\b|\bNOTE\b|\bBILL\b|\bGOVT\b|\bIN \d|\d{2}\/\d{2}\/\d{2,4}/.test(n)
+      || (code && /GOVDT|GOVT/i.test(code))) return { type: 'bond' };
+  if (/\bFUND\b|\bPIE\b|\bTRUST\b|\bETF\b/.test(n)) return { type: 'fund' };
+  return { type: 'stock' };
+}
+// ISIN prefix → country / currency (best-effort; blank ISIN ⇒ NZ default).
+const _ISIN_COUNTRY = { NZ:'New Zealand', AU:'Australia', US:'United States', GB:'United Kingdom', IE:'Ireland', DE:'Germany', FR:'France', NL:'Netherlands', CH:'Switzerland', JP:'Japan', CA:'Canada', HK:'Hong Kong', SG:'Singapore', KY:'Cayman Islands', LU:'Luxembourg', BM:'Bermuda' };
+const _ISIN_CCY     = { NZ:'NZD', AU:'AUD', US:'USD', GB:'GBP', IE:'EUR', DE:'EUR', FR:'EUR', NL:'EUR', LU:'EUR', CH:'CHF', JP:'JPY', CA:'CAD', HK:'HKD', SG:'SGD' };
+function _isinCountry(code){ return _ISIN_COUNTRY[(code||'').slice(0,2).toUpperCase()] || ''; }
+function _isinCcy(code){ return _ISIN_CCY[(code||'').slice(0,2).toUpperCase()] || 'NZD'; }
+const _DISCLOSE_SECTOR = { stock:'Equity', bond:'Fixed income', fund:'Managed fund', cash:'Cash', other:'Derivative/overlay' };
+const _DISCLOSE_TAIL_LABEL = { stock:'equities', bond:'bonds', fund:'funds', cash:'cash holdings', other:'other' };
+
+// Build a weight-based holding object the rest of the app understands.
+// value = weight × 1 (currentPrice 1, quantity = weight). manualPrice flags it
+// so the price refresh skips it (these have no Yahoo-resolvable ticker).
+function _discloseHolding({ symbol, name, type, weight, code }) {
+  return {
+    id: uuid(), symbol, name, type,
+    platform: 'Fund holdings',
+    // Weights are already NZD-based % of fund, so value must NOT be FX-converted.
+    // currency stays NZD (getMetrics multiplies by getFxRate(currency, base)).
+    // nativeCurrency keeps the issue currency for future FX-exposure analysis.
+    currency: 'NZD',
+    nativeCurrency: _isinCcy(code),
+    sector: _DISCLOSE_SECTOR[type] || 'Other',
+    country: _isinCountry(code),
+    securityCode: code || '',
+    notes: code ? `ISIN ${code}` : '',
+    currentPrice: 1, dayChange: null, dayChangePct: null,
+    manualPrice: true, source: 'disclose',
+    lots: [{ quantity: weight, price: 1, date: '', note: 'Disclose import (weight basis)' }]
+  };
+}
+
+// Parse a Disclose CSV into { fundName, holdings, stats }. Pure — no side effects.
+function parseDiscloseCSV(text) {
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  let fundName = '', headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^fund name\s*,/i.test(lines[i])) {
+      const c = parseCSVLine(lines[i]); fundName = (c[1] || '').trim();
+    }
+    if (/^\s*asset name\s*,\s*% of fund net assets/i.test(lines[i])) { headerIdx = i; break; }
+  }
+  if (headerIdx === -1) return { fundName, holdings: [], stats: null };
+
+  const TH = 0.10; // weight % threshold for an individual line
+  const individual = [];
+  const tail = {};            // type → { w, n }
+  let fxNet = 0, ratesNet = 0, fxCount = 0, ratesCount = 0, rows = 0;
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cells = parseCSVLine(lines[i]);
+    if (cells.length < 2) continue;
+    const name = (cells[0] || '').trim();
+    const weight = parseFloat((cells[1] || '').replace('%', '').replace(/[^0-9.\-]/g, ''));
+    const code = (cells[2] || '').trim();
+    if (!name || isNaN(weight)) continue;
+    rows++;
+    const c = _discloseClassify(name, code);
+    if (c.kind === 'fx')    { fxNet += weight;    fxCount++;    continue; }
+    if (c.kind === 'rates') { ratesNet += weight; ratesCount++; continue; }
+    if (Math.abs(weight) >= TH) {
+      individual.push(_discloseHolding({ symbol: name.slice(0, 60), name, type: c.type, weight, code }));
+    } else {
+      (tail[c.type] = tail[c.type] || { w: 0, n: 0 });
+      tail[c.type].w += weight; tail[c.type].n++;
+    }
+  }
+
+  const holdings = [...individual];
+  // Aggregated long tail — one line per asset type.
+  Object.entries(tail).forEach(([type, o]) => {
+    if (o.n === 0 || Math.abs(o.w) < 0.005) return;
+    const label = _DISCLOSE_TAIL_LABEL[type] || type;
+    holdings.push(_discloseHolding({
+      symbol: `OTHER-${type.toUpperCase()}`,
+      name: `Other ${label} (${o.n} holding${o.n === 1 ? '' : 's'} <0.10%)`,
+      type, weight: o.w, code: ''
+    }));
+  });
+  // Derivative overlay — two info lines (value 0; net % carried in the name).
+  const overlay = (sym, label, net, count) => {
+    const h = _discloseHolding({ symbol: sym, name: `${label} · net ${net >= 0 ? '+' : ''}${net.toFixed(2)}% of NAV (${count} contracts)`, type: 'other', weight: 0, code: '' });
+    h.lots = [{ quantity: 0, price: 0, date: '', note: 'overlay summary' }];
+    h.sector = 'Derivative/overlay'; h.overlayNet = net;
+    return h;
+  };
+  if (fxCount)    holdings.push(overlay('FX-HEDGES', 'FX hedges', fxNet, fxCount));
+  if (ratesCount) holdings.push(overlay('RATES-OVERLAY', 'Rates / IRS overlay', ratesNet, ratesCount));
+
+  return {
+    fundName,
+    holdings,
+    stats: {
+      rows, individual: individual.length,
+      aggregated: Object.values(tail).reduce((s, o) => s + o.n, 0),
+      tailLines: Object.keys(tail).length,
+      fxNet, ratesNet, fxCount, ratesCount
+    }
+  };
+}
+
 // Normalise common ticker aliases so Yahoo Finance can find them.
 // Without this, BTC/ETH/etc. return bogus prices (Yahoo has different symbols).
 const CRYPTO_ALIAS = {
@@ -213,6 +344,14 @@ async function _importCSVImpl(event) {
 
   // Strip BOM, normalise line endings
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // ── NZ Disclose Register (fund full-holdings) takes a dedicated path ──
+  // It's weights-based with metadata header rows, so the column parser below
+  // doesn't apply. importDiscloseHoldings handles parse + replace + rename.
+  if (isDiscloseFormat(text)) {
+    await importDiscloseHoldings(text);
+    return;
+  }
+
   const lines = text.trim().split('\n').filter(l => l.trim());
   if (lines.length < 2) { toast.error('CSV is empty or has only a header row.'); return; }
 
@@ -367,6 +506,53 @@ async function _importCSVImpl(event) {
       renderAll(); updateTicker();
       recordDailySnapshot({ date: snapshotDate, force: true, source: 'csv-import' });
     });
+}
+
+// Import an NZ Disclose Register holdings file into the ACTIVE portfolio.
+// A fund's full holdings are a complete set, so this REPLACES (not merges)
+// and renames the portfolio to the fund. Weight-based: no price fetch.
+async function importDiscloseHoldings(text) {
+  const { fundName, holdings, stats } = parseDiscloseCSV(text);
+  if (!holdings.length) {
+    toast.error({ title: 'No holdings found', message: 'This looks like a Disclose file but no asset rows parsed. Check the "Asset name,% of fund net assets,Security code" header is present.' });
+    return;
+  }
+
+  const active = getActivePortfolio();
+  const existing = (active.holdings || []).length;
+  const ok = await showFormModal({
+    title: 'Import fund holdings',
+    icon: 'fa-building-columns',
+    description: `Import <b>${holdings.length}</b> lines from <b>${fundName || 'this fund'}</b> into "<b>${active.name}</b>"?` +
+      (existing ? `<br><br>This <b>replaces</b> the ${existing} holdings currently in this portfolio.` : '') +
+      `<br><br><span style="color:#94a3b8;font-size:12px;">${stats.individual} securities ≥0.10% · ${stats.aggregated} smaller positions rolled into ${stats.tailLines} "Other …" lines · derivatives netted into overlay summaries. Figures are <b>% of fund (weight basis)</b> — no prices.</span>`,
+    submitLabel: existing ? 'Import & replace' : 'Import',
+    submitVariant: existing ? 'danger' : 'primary'
+  });
+  if (!ok) { toast.info('Import cancelled.'); return; }
+
+  // Replace the active portfolio's holdings + rename it to the fund.
+  state.portfolio = holdings;
+  if (fundName) renamePortfolio(active.id, fundName);
+
+  saveState();
+  if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
+  renderAll();
+
+  const overlayBits = [];
+  if (stats.fxCount)    overlayBits.push(`FX hedges net ${stats.fxNet >= 0 ? '+' : ''}${stats.fxNet.toFixed(1)}%`);
+  if (stats.ratesCount) overlayBits.push(`rates net ${stats.ratesNet >= 0 ? '+' : ''}${stats.ratesNet.toFixed(1)}%`);
+  toast.success({
+    title: `${fundName || 'Fund'} imported`,
+    message: `${stats.individual} holdings + ${stats.tailLines} aggregated tail line(s) from ${stats.rows} disclosed positions.` +
+      (overlayBits.length ? `\nOverlay: ${overlayBits.join(' · ')}.` : '') +
+      `\nWeight basis (% of fund) — no live prices fetched.`,
+    duration: 8000
+  });
+  logActivity('disclose_import', {
+    fundName, total: holdings.length, individual: stats.individual,
+    aggregated: stats.aggregated, fxNet: stats.fxNet, ratesNet: stats.ratesNet
+  });
 }
 
 function downloadCSVTemplate() {
