@@ -1952,12 +1952,12 @@
       <!-- Summary metrics row -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6" data-card="overview.kpis" data-block="kpis">
         <div class="metric-card blue clickable fadeIn" onclick="showSection('holdings')" title="See all holdings that make up this value" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-sack-dollar mr-2"></i>Total Value</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;" id="kpiTotalValueLabel"><i class="fas fa-sack-dollar mr-2"></i>Total Value</div>
           <div class="text-2xl font-bold mono" id="totalValue">£0.00</div>
           <div class="text-xs mt-2" id="totalCost" style="color:var(--text-muted);">Cost: £0.00</div>
         </div>
         <div class="metric-card green clickable fadeIn" onclick="showSection('performance')" title="View performance history" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-money-bill-trend-up mr-2"></i>Total Return</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;" id="kpiTotalReturnLabel"><i class="fas fa-money-bill-trend-up mr-2"></i>Total Return</div>
           <div class="text-2xl font-bold mono" id="totalReturn">+£0.00</div>
           <div class="text-xs mt-2" id="totalReturnPct" style="color:var(--color-green);">+0.00%</div>
         </div>
@@ -5579,15 +5579,25 @@ function renderOvernightBrief(metrics) {
   const bookPct = metrics.totalValue > 0 ? ((metrics.totalDayChange || 0) / metrics.totalValue) * 100 : 0;
   const chip = (h, dir) => h ? `<span style="white-space:nowrap;"><i class="fas fa-arrow-${dir==='up'?'up':'down'}" style="color:${dir==='up'?'var(--color-green)':'var(--color-red)'};font-size:10px;"></i>
     <b>${_escape(h.symbol)}</b> <span style="color:${pct(h)>=0?'var(--color-green)':'var(--color-red)'};">${pct(h)>=0?'+':''}${pct(h).toFixed(2)}%</span></span>` : '';
-  const moversHtml = `<div class="flex items-center gap-4 flex-wrap text-sm mb-3">
+  let moversHtml = `<div class="flex items-center gap-4 flex-wrap text-sm mb-3">
       ${chip(up,'up')} ${chip(down,'down')}
       <span class="neutral" style="white-space:nowrap;">Book ${useDay ? 'today' : 'all-time'}: <b style="color:${bookPct>=0?'var(--color-green)':'var(--color-red)'};">${bookPct>=0?'+':''}${fmt(bookPct)}%</b></span>
     </div>`;
+  // Weight-based fund book: prices don't move, so show the largest weights.
+  if (_isFundWeightView()) {
+    const real = holdings.filter(h => !_isSyntheticFundRow(h));
+    const topW = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 3);
+    moversHtml = `<div class="flex items-center gap-4 flex-wrap text-sm mb-3"><span class="neutral" style="white-space:nowrap;">Top weights:</span>`
+      + topW.map(h => `<span style="white-space:nowrap;"><b>${_escape(_fundLabel(h))}</b> <span style="color:var(--accent);">${fmt(h.currentValue)}%</span></span>`).join(' ')
+      + `</div>`;
+  }
 
   // 2) Concentration / mandate flags
   const flags = [];
-  const byVal = [...holdings].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
-  if (byVal[0] && (byVal[0].weight || 0) >= 10) flags.push(`${_escape(byVal[0].symbol)} is ${(byVal[0].weight).toFixed(0)}% of the book`);
+  // Exclude aggregated-tail + overlay rows — a flag on "Other equities" is noise.
+  const byVal = [...holdings].filter(h => !_isSyntheticFundRow(h)).sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  const topW0 = byVal[0] ? (byVal[0].weight != null ? byVal[0].weight : (byVal[0].currentValue||0)/tv*100) : 0;
+  if (byVal[0] && topW0 >= 10) flags.push(`${_escape(_fundLabel(byVal[0]))} is ${topW0.toFixed(0)}% of the book`);
   const sectors = {};
   holdings.forEach(h => { const s = h.sector || (typeof _typeFallbackSector==='function'?_typeFallbackSector(h):'Other'); sectors[s] = (sectors[s]||0) + (h.currentValue||0); });
   const topSec = Object.entries(sectors).sort((a,b)=>b[1]-a[1])[0];
@@ -5969,6 +5979,25 @@ function renderSidebar(metrics) {
   try { showFab(); } catch(e) {}
 }
 
+// A portfolio imported from a Disclose fund file is WEIGHT-based (% of fund
+// net assets, no unit prices). In that case the dollar/cost/P&L columns are
+// meaningless, so the UI switches to a weight view. Gated tightly so normal
+// portfolios are never affected (a Disclose import replaces the whole book).
+function _isFundWeightView() {
+  const hs = (typeof state !== 'undefined' && state.portfolio) ? state.portfolio : [];
+  if (!hs.length) return false;
+  return hs.filter(h => h && h.source === 'disclose').length >= hs.length * 0.8;
+}
+// Aggregated-tail ("OTHER-…") and derivative-overlay rows read better by name.
+function _fundLabel(h) {
+  if (!h) return '';
+  if (/^OTHER-/.test(h.symbol || '') || h.overlayNet != null) return h.name || h.symbol;
+  return h.symbol;
+}
+function _isSyntheticFundRow(h) {
+  return !!h && (/^OTHER-/.test(h.symbol || '') || h.overlayNet != null);
+}
+
 function renderSummaryCards(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
   document.getElementById('totalValue').textContent = sym + fmt(metrics.totalValue);
@@ -6000,6 +6029,26 @@ function renderSummaryCards(metrics) {
     divEl.textContent = divScore + '/100';
     divEl.className = 'text-2xl font-bold mono ' + (divScore >= 70 ? 'pos' : divScore >= 40 ? '' : 'neg');
     document.getElementById('divHint').textContent = divScore >= 70 ? 'Well diversified' : divScore >= 40 ? 'Moderate diversification' : 'Needs diversification';
+  }
+
+  // ── Weight-based fund view: relabel/repurpose the value + return cards ──
+  const vlab = document.getElementById('kpiTotalValueLabel');
+  const rlab = document.getElementById('kpiTotalReturnLabel');
+  if (_isFundWeightView()) {
+    if (vlab) vlab.innerHTML = '<i class="fas fa-scale-balanced mr-2"></i>Disclosed Weight';
+    document.getElementById('totalValue').textContent = fmt(metrics.totalValue) + '%';
+    document.getElementById('totalCost').innerHTML = `${metrics.holdings.length} positions · % of fund net assets`;
+    if (rlab) rlab.innerHTML = '<i class="fas fa-circle-info mr-2"></i>Basis';
+    const retEl2 = document.getElementById('totalReturn');
+    retEl2.className = 'text-2xl font-bold mono'; retEl2.style.color = 'var(--text-muted)';
+    retEl2.textContent = 'Weights';
+    const pctEl2 = document.getElementById('totalReturnPct');
+    pctEl2.className = 'text-xs mt-2 neutral'; pctEl2.textContent = 'No prices in disclosure';
+  } else {
+    // Restore defaults (in case the session previously viewed a fund book).
+    if (vlab) vlab.innerHTML = '<i class="fas fa-sack-dollar mr-2"></i>Total Value';
+    if (rlab) rlab.innerHTML = '<i class="fas fa-money-bill-trend-up mr-2"></i>Total Return';
+    document.getElementById('totalReturn').style.color = '';
   }
 }
 
@@ -10397,7 +10446,56 @@ function renderDetailedHoldings(holdings, totalValue) {
       : renderEmptyHoldings();
     return;
   }
+  // Fund-weight view swaps the dollar/cost/P&L columns for weight semantics.
+  const weightMode = _isFundWeightView();
+  const hdr = document.getElementById('holdingsDetailedHeader');
+  if (hdr) {
+    if (weightMode) {
+      if (!hdr.dataset.origHtml) hdr.dataset.origHtml = hdr.innerHTML;
+      hdr.innerHTML = `
+        <span class="sortable" onclick="sortHoldings('symbol')">Asset <i class="fas fa-sort sort-icon" data-col="symbol"></i></span>
+        <span class="text-right sortable" onclick="sortHoldings('currentValue')">Weight <i class="fas fa-sort sort-icon" data-col="currentValue"></i></span>
+        <span class="text-right">Type</span>
+        <span class="text-right">Country</span>
+        <span class="text-right">Currency</span>
+        <span class="text-right">ISIN</span>
+        <span class="text-right">Sector</span>
+        <span class="text-right">Actions</span>`;
+    } else if (hdr.dataset.origHtml) {
+      hdr.innerHTML = hdr.dataset.origHtml;
+      delete hdr.dataset.origHtml;
+    }
+  }
   el.innerHTML = holdings.map(h => {
+    if (weightMode) {
+      const rowOpacity = h.ignored ? 'opacity:0.5;' : '';
+      const wt = fmt(h.currentValue);
+      const ccy = h.nativeCurrency || h.currency || '—';
+      const isin = h.securityCode || '—';
+      const ctry = h.country || '—';
+      const sect = h.sector || '—';
+      const tip = `${(h.name||h.symbol)} — ${_assetTypeLabel(h.type)}\nWeight: ${wt}% of fund net assets${isin!=='—'?'\nISIN: '+isin:''}${ctry!=='—'?'\n'+ctry:''}`;
+      return `
+      <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr 140px;display:grid;border-left:3px solid var(--border);${rowOpacity}" onclick="viewHolding('${h.id}')" title="${tip.replace(/"/g,'&quot;')}">
+        <div class="flex items-center gap-3" style="min-width:0;">
+          <div style="width:32px;height:32px;border-radius:8px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">${(h.symbol||'?').slice(0,3)}</div>
+          <div style="min-width:0;overflow:hidden;">
+            <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.name||h.symbol)}</div>
+            <div class="text-xs neutral">${_escape(h.platform||'')}</div>
+          </div>
+        </div>
+        <div class="text-right mono text-sm font-semibold">${wt}%</div>
+        <div class="text-right text-sm" style="color:var(--text-muted);">${_assetTypeLabel(h.type)}</div>
+        <div class="text-right text-sm" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(ctry)}</div>
+        <div class="text-right mono text-sm" style="color:var(--text-muted);">${_escape(ccy)}</div>
+        <div class="text-right mono" style="font-size:10px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(isin)}</div>
+        <div class="text-right text-sm" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(sect)}</div>
+        <div class="text-right" onclick="event.stopPropagation()">
+          <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button>
+          <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>`;
+    }
     const haslive = h.dayChangePct != null;
     const dayPct  = h.dayChangePct || 0;
     const dayAmt  = h.dayChange || 0;
