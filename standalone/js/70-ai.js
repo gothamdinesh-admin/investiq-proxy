@@ -777,6 +777,8 @@ async function runAgents() {
   const topHoldings = sorted.slice(0, TOP_N).map(h => ({
     symbol: h.symbol, name: h.name || h.symbol, type: h.type,
     platform: h.platform, sector: h.sector || 'unknown',
+    country: h.country || h.region || '',
+    currency: h.nativeCurrency || h.currency || '',
     value: sym + fmt(h.currentValue),
     weight: fmt(h.weight) + '%',
     return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'
@@ -808,6 +810,28 @@ async function runAgents() {
     topHoldings,
     ...(tailAggregates.length ? { tailAggregates, tailNote: `${tail.length} smaller holdings aggregated by type+sector to keep prompt size within rate limits` } : {})
   };
+
+  // ── Fund (weight-based) enrichment ──────────────────────────────────────
+  // For a Disclose-imported fund there are no prices/NAV — figures are % of
+  // fund net assets. Give the analysts the FX + region exposure, the hedge
+  // overlay, and the as-at date so the risk/macro reads are grounded.
+  if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
+    const tv = metrics.totalValue || 1;
+    const aggW = (keyFn) => {
+      const o = {};
+      metrics.holdings.forEach(h => { const k = keyFn(h) || 'Unknown'; o[k] = (o[k] || 0) + (h.currentValue || 0); });
+      return Object.entries(o).sort((a,b) => b[1]-a[1]).slice(0, 8)
+        .map(([k,v]) => `${k}: ${fmt(v / tv * 100)}%`);
+    };
+    const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+    const overlays = metrics.holdings.filter(h => h.overlayNet != null)
+      .map(h => `${h.name} (${h.overlayNet >= 0 ? '+' : ''}${fmt(h.overlayNet)}% of NAV)`);
+    portfolioSummary.basis = 'WEIGHTS — every figure is % of fund net assets (no prices/NAV). "value"/"totalValue" are weights, "return" is not meaningful for a disclosed fund.';
+    if (fund && fund.asAt) portfolioSummary.asAt = fund.asAt;
+    portfolioSummary.currencyExposure = aggW(h => h.nativeCurrency || h.currency || 'NZD');
+    portfolioSummary.regionExposure   = aggW(h => h.country || h.region || 'Unknown');
+    if (overlays.length) portfolioSummary.derivativeOverlays = overlays;
+  }
 
   const marketSummary = {
     indices: state.marketData.indices,
@@ -916,6 +940,8 @@ async function runSingleAgent(agentKey) {
   const topHoldings = sorted.slice(0, TOP_N).map(h => ({
     symbol: h.symbol, name: h.name || h.symbol, type: h.type,
     platform: h.platform, sector: h.sector || 'unknown',
+    country: h.country || h.region || '',
+    currency: h.nativeCurrency || h.currency || '',
     value: sym + fmt(h.currentValue),
     weight: fmt(h.weight) + '%',
     return: (h.gainPct >= 0 ? '+' : '') + fmt(h.gainPct) + '%'

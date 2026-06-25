@@ -2036,6 +2036,17 @@
       </div>
 
       <!-- Top holdings preview — replaces the duplicate full table -->
+      <!-- FUND EXPOSURE — weight-based books only (currency / region / class / overlay) -->
+      <div id="fundExposureCard" class="card p-5 mb-6" style="display:none;">
+        <div class="section-title" style="margin:0 0 14px;"><i class="fas fa-earth-oceania" style="color:var(--accent);"></i> Fund exposure</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-4">
+          <div><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">By asset class</div><div id="fundExpClass"></div></div>
+          <div><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">By currency</div><div id="fundExpCcy"></div></div>
+          <div><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">By region</div><div id="fundExpRegion"></div></div>
+          <div><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">Derivative overlay</div><div id="fundExpOverlay"></div></div>
+        </div>
+      </div>
+
       <div class="card mb-6" data-card="overview.topholdings" data-block="topholdings">
         <div class="flex items-center justify-between px-5 py-4" style="border-bottom:1px solid var(--border, #1e2d4a);">
           <div class="section-title" style="margin:0;">
@@ -5553,6 +5564,7 @@ function renderAll() {
   renderPlatformBreakdown(metrics);
   refreshSidebarScore(metrics);
   try { renderOvernightBrief(metrics); } catch(e) { console.warn('[brief]', e); }
+  try { renderFundExposure(metrics); } catch(e) { console.warn('[fund-exposure]', e); }
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
@@ -5626,6 +5638,44 @@ function renderOvernightBrief(metrics) {
   }
 
   el.innerHTML = moversHtml + flagsHtml + aiHtml;
+}
+
+// Fund exposure card — currency / region / asset-class / overlay breakdown.
+// Weight-based books only; hidden otherwise. Pure HTML bars (no Chart.js),
+// every figure a % of fund net assets — no NAV assumed.
+function renderFundExposure(metrics) {
+  const card = document.getElementById('fundExposureCard');
+  if (!card) return;
+  if (!_isFundWeightView()) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const tv = metrics.totalValue || 1;
+  const booked = (metrics.holdings || []).filter(h => h.overlayNet == null);
+  const CLASS = { stock:'Equity', etf:'Equity', bond:'Fixed income', cash:'Cash', fund:'Alternatives', mutualfund:'Alternatives', other:'Other' };
+  const CLASS_TYPE = { 'Equity':'stock', 'Fixed income':'bond', 'Cash':'cash', 'Alternatives':'fund' };
+  const bars = (rows) => rows.length ? rows.map(r => `
+      <div style="margin-bottom:9px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+          <span style="color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:72%;">${_escape(r.label)}</span>
+          <span class="mono neutral">${fmt(r.pct)}%</span>
+        </div>
+        <div style="height:7px;border-radius:4px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(r.pct,100).toFixed(1)}%;background:${r.color || 'var(--accent)'};border-radius:4px;"></div></div>
+      </div>`).join('') : '<div class="text-xs neutral">—</div>';
+  const agg = (keyFn) => {
+    const o = {};
+    booked.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k] || 0) + (h.currentValue || 0); });
+    return Object.entries(o).map(([k,v]) => ({ label: k, pct: v / tv * 100 })).sort((a,b) => b.pct - a.pct);
+  };
+  const classRows = agg(h => CLASS[h.type] || 'Other').map(r => ({ ...r, color: ASSET_COLORS[CLASS_TYPE[r.label]] || 'var(--accent)' }));
+  document.getElementById('fundExpClass').innerHTML  = bars(classRows);
+  document.getElementById('fundExpCcy').innerHTML    = bars(agg(h => h.nativeCurrency || h.currency || 'NZD').slice(0, 8));
+  document.getElementById('fundExpRegion').innerHTML = bars(agg(h => h.country || 'Unlisted / cash').slice(0, 8));
+  const ov = (metrics.holdings || []).filter(h => h.overlayNet != null);
+  document.getElementById('fundExpOverlay').innerHTML = ov.length
+    ? ov.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--border);">
+        <span>${_escape((h.name || '').split('·')[0].trim())}</span>
+        <span class="mono" style="color:${h.overlayNet >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${h.overlayNet >= 0 ? '+' : ''}${fmt(h.overlayNet)}% of NAV</span>
+      </div>`).join('')
+    : '<div class="text-xs neutral">No derivative overlay disclosed.</div>';
 }
 
 // ─── Portfolio switcher (multi-portfolio v0.21) ──────────────────────────
@@ -7177,15 +7227,46 @@ function viewHolding(id) {
   const gainPct = avgBuy > 0 ? ((cur - avgBuy) / avgBuy) * 100 : 0;
   const signT = gain >= 0 ? '+' : '';
 
+  // Weight-based fund line-item: no price/cost/P&L — show disclosed metadata.
+  const fundMode = h.source === 'disclose';
+
   // ── Title + subtitle
-  document.getElementById('viewModalTitle').textContent = h.symbol + (h.name && h.name !== h.symbol ? ' · ' + h.name : '');
-  document.getElementById('viewModalSubtitle').innerHTML =
-    `<span class="${getTagClass(h.type)}">${h.type}</span> · ${h.platform} · ${h.currency || 'USD'}` +
-    (h.sector ? ' · ' + h.sector : '') +
-    (h.country ? ' · ' + h.country : '');
+  document.getElementById('viewModalTitle').textContent = fundMode ? (h.name || h.symbol) : (h.symbol + (h.name && h.name !== h.symbol ? ' · ' + h.name : ''));
+  document.getElementById('viewModalSubtitle').innerHTML = fundMode
+    ? `<span class="${getTagClass(h.type)}">${_assetTypeLabel(h.type)}</span>` +
+      (h.sector ? ' · ' + _escape(h.sector) : '') +
+      (h.country ? ' · ' + _escape(h.country) : '') +
+      ' · ' + _escape(h.nativeCurrency || h.currency || 'NZD')
+    : `<span class="${getTagClass(h.type)}">${h.type}</span> · ${h.platform} · ${h.currency || 'USD'}` +
+      (h.sector ? ' · ' + h.sector : '') +
+      (h.country ? ' · ' + h.country : '');
 
   // ── Headline stats (4 cards)
-  document.getElementById('viewModalStats').innerHTML = `
+  if (fundMode) {
+    const wt = (h.overlayNet != null) ? `${h.overlayNet >= 0 ? '+' : ''}${fmt(h.overlayNet)}%` : `${fmt(quantity)}%`;
+    document.getElementById('viewModalStats').innerHTML = `
+      <div class="metric-card" style="padding:12px;">
+        <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Weight</div>
+        <div class="font-bold mono mt-1" style="font-size:18px;color:var(--accent);">${wt}</div>
+        <div class="text-xs neutral mt-1">${h.overlayNet != null ? 'of NAV (overlay)' : 'of fund net assets'}</div>
+      </div>
+      <div class="metric-card" style="padding:12px;">
+        <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Asset class</div>
+        <div class="font-bold mt-1" style="font-size:16px;color:#c8d6ef;">${_assetTypeLabel(h.type)}</div>
+        <div class="text-xs neutral mt-1">${_escape(h.sector || '—')}</div>
+      </div>
+      <div class="metric-card" style="padding:12px;">
+        <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Region</div>
+        <div class="font-bold mt-1" style="font-size:16px;color:#c8d6ef;">${_escape(h.country || '—')}</div>
+        <div class="text-xs neutral mt-1">${_escape(h.nativeCurrency || h.currency || 'NZD')} issue currency</div>
+      </div>
+      <div class="metric-card" style="padding:12px;">
+        <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Security code</div>
+        <div class="font-bold mono mt-1" style="font-size:14px;color:#818cf8;word-break:break-all;">${_escape(h.securityCode || '—')}</div>
+        <div class="text-xs neutral mt-1">${h.securityCode ? 'ISIN' : 'unlisted / cash'}</div>
+      </div>`;
+  } else {
+    document.getElementById('viewModalStats').innerHTML = `
     <div class="metric-card" style="padding:12px;">
       <div class="text-xs neutral" style="text-transform:uppercase;letter-spacing:0.4px;">Market value</div>
       <div class="font-bold mono mt-1" style="font-size:18px;color:#c8d6ef;">${sym}${fmt(curVal)}</div>
@@ -7206,9 +7287,14 @@ function viewHolding(id) {
       <div class="font-bold mono mt-1 ${h.dayChangePct >= 0 ? 'pos' : 'neg'}" style="font-size:18px;">${h.dayChangePct != null ? (h.dayChangePct >= 0 ? '+' : '') + fmt(h.dayChangePct) + '%' : '–'}</div>
       <div class="text-xs neutral mt-1">${h.currentPrice ? sym + fmt(cur) + '/share' : 'refresh to load'}</div>
     </div>`;
+  }
 
-  // ── Per-lot table with P&L per lot
-  renderHoldingLots(h, basis, fx, sym, rawSym);
+  // ── Per-lot table with P&L per lot (price-based — skip for fund line-items)
+  if (fundMode) {
+    document.getElementById('holdingLotsTable').innerHTML = `<div class="text-xs neutral text-center py-3"><i class="fas fa-circle-info mr-1"></i>Disclosed fund holding — weight only, no purchase lots or prices.</div>`;
+  } else {
+    renderHoldingLots(h, basis, fx, sym, rawSym);
+  }
 
   // ── Reset AI + news panels (lazy-load on open)
   document.getElementById('holdingAiContent').innerHTML = 'Click <b>Analyse</b> for a Claude review of this holding: thesis check, recent price action, news context, and a hold/watch suggestion.';
@@ -7227,9 +7313,18 @@ function viewHolding(id) {
 
   openModal('viewModal');
 
-  // ── Lazy-load the heavy bits AFTER modal opens
-  setHoldingChartRange('1y');
-  loadHoldingNews(h.symbol);
+  // ── Lazy-load the heavy bits AFTER modal opens. Fund line-items have no
+  // Yahoo-resolvable ticker, so a price chart / news lookup would just error —
+  // show a note instead.
+  if (fundMode) {
+    const news = document.getElementById('holdingNewsContent');
+    if (news) news.innerHTML = '<div class="text-xs neutral py-3">News lookup isn\'t available for fund line-items (no listed ticker).</div>';
+    const ai = document.getElementById('holdingAiContent');
+    if (ai) ai.innerHTML = 'Click <b>Analyse</b> for a Claude read on this holding’s role in the fund.';
+  } else {
+    setHoldingChartRange('1y');
+    loadHoldingNews(h.symbol);
+  }
 }
 
 // Render the per-lot P&L table inside the holding detail modal.
