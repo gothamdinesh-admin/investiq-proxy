@@ -1962,12 +1962,12 @@
           <div class="text-xs mt-2" id="totalReturnPct" style="color:var(--color-green);">+0.00%</div>
         </div>
         <div class="metric-card purple clickable fadeIn" onclick="showSection('performance')" title="View today's chart + history" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-bolt mr-2"></i>Day Change</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;" id="kpiDayLabel"><i class="fas fa-bolt mr-2"></i>Day Change</div>
           <div class="text-2xl font-bold mono" id="dayChange">–</div>
-          <div class="text-xs mt-2 neutral">Live market data</div>
+          <div class="text-xs mt-2 neutral" id="kpiDayHint">Live market data</div>
         </div>
         <div class="metric-card yellow clickable fadeIn" onclick="showSection('insights')" title="Diversification breakdown + AI insights" role="button" tabindex="0">
-          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;"><i class="fas fa-shapes mr-2"></i>Diversification</div>
+          <div class="text-xs neutral mb-2 uppercase font-semibold" style="letter-spacing:0.5px;" id="kpiDivLabel"><i class="fas fa-shapes mr-2"></i>Diversification</div>
           <div class="text-2xl font-bold mono" id="divScore">–</div>
           <div class="text-xs mt-2 neutral" id="divHint">Add holdings to calculate</div>
         </div>
@@ -5836,11 +5836,16 @@ function renderOverviewGreeting(metrics) {
   storyParts.push(`<span style="color:${metrics.totalGain >= 0 ? '#34d399' : '#f87171'};">${totalSign} ${fmt(Math.abs(metrics.totalGainPct))}%</span> all-time`);
   sub.innerHTML = `Your portfolio is ${storyParts.join(' · ')}`;
 
-  // Right-side badges: holdings count + date
-  const today = new Date().toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
+  // Right-side badges: holdings count + date. For a weight-based fund book the
+  // figures are "as at" the disclosure date, not today — show that instead so
+  // nobody reads it as live.
+  const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const dateBadge = (fund && fund.asAt)
+    ? `<i class="fas fa-calendar-day mr-1"></i>as at ${_escape(fund.asAt)}`
+    : `<i class="far fa-calendar mr-1"></i>${new Date().toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' })}`;
   badges.innerHTML = `
     <span class="text-xs neutral" style="padding:4px 10px;border-radius:9999px;background:rgba(129,140,248,0.1);color:#818cf8;border:1px solid rgba(129,140,248,0.25);"><i class="fas fa-briefcase mr-1"></i>${metrics.holdings.length} holdings</span>
-    <span class="text-xs neutral" style="padding:4px 10px;border-radius:9999px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);"><i class="far fa-calendar mr-1"></i>${today}</span>
+    <span class="text-xs neutral" style="padding:4px 10px;border-radius:9999px;background:rgba(148,163,184,0.1);border:1px solid rgba(148,163,184,0.25);">${dateBadge}</span>
   `;
 }
 
@@ -5997,6 +6002,34 @@ function _fundLabel(h) {
 function _isSyntheticFundRow(h) {
   return !!h && (/^OTHER-/.test(h.symbol || '') || h.overlayNet != null);
 }
+// Fund metadata stamped on the active portfolio at Disclose import.
+function _activeFund() {
+  const p = (typeof getActivePortfolio === 'function') ? getActivePortfolio() : null;
+  return (p && p.fund) ? p.fund : null;
+}
+// Derive fund-level headline numbers from the weight-based holdings. All as a
+// % of the disclosed book (no NAV assumed — there are no dollar figures).
+function _fundMetrics(metrics) {
+  const all = (metrics.holdings || []);
+  const tv = metrics.totalValue || 0;
+  const real = all.filter(h => !_isSyntheticFundRow(h));                 // single named positions
+  const booked = all.filter(h => h.overlayNet == null);                 // real + aggregated tail (exclude overlay)
+  const positions = booked.length;
+  // Top-10 concentration among single named positions.
+  const top10 = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 10)
+    .reduce((s,h) => s + (h.currentValue||0), 0);
+  const top10Pct = tv > 0 ? top10 / tv * 100 : 0;
+  // Asset-class mix (Equity / Fixed income / Cash / Alternatives).
+  const CLASS = { stock:'Equity', etf:'Equity', bond:'Fixed income', cash:'Cash', fund:'Alternatives', mutualfund:'Alternatives', other:'Overlay' };
+  const mix = {};
+  booked.forEach(h => { const k = CLASS[h.type] || 'Other'; mix[k] = (mix[k]||0) + (h.currentValue||0); });
+  const mixPct = Object.entries(mix).map(([k,v]) => [k, tv>0 ? v/tv*100 : 0]).sort((a,b)=>b[1]-a[1]);
+  // Offshore = non-NZD issue currency.
+  const offshore = booked.filter(h => (h.nativeCurrency || h.currency || 'NZD') !== 'NZD')
+    .reduce((s,h) => s + (h.currentValue||0), 0);
+  const offshorePct = tv > 0 ? offshore / tv * 100 : 0;
+  return { positions, top10Pct, mixPct, offshorePct };
+}
 
 function renderSummaryCards(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || '£';
@@ -6031,23 +6064,48 @@ function renderSummaryCards(metrics) {
     document.getElementById('divHint').textContent = divScore >= 70 ? 'Well diversified' : divScore >= 40 ? 'Moderate diversification' : 'Needs diversification';
   }
 
-  // ── Weight-based fund view: relabel/repurpose the value + return cards ──
+  // ── Weight-based fund view: repurpose all four KPI cards for fund metrics ──
   const vlab = document.getElementById('kpiTotalValueLabel');
   const rlab = document.getElementById('kpiTotalReturnLabel');
+  const dlab = document.getElementById('kpiDayLabel');
+  const glab = document.getElementById('kpiDivLabel');
+  const setLab = (el, html) => { if (el) el.innerHTML = html; };
   if (_isFundWeightView()) {
-    if (vlab) vlab.innerHTML = '<i class="fas fa-scale-balanced mr-2"></i>Disclosed Weight';
-    document.getElementById('totalValue').textContent = fmt(metrics.totalValue) + '%';
-    document.getElementById('totalCost').innerHTML = `${metrics.holdings.length} positions · % of fund net assets`;
-    if (rlab) rlab.innerHTML = '<i class="fas fa-circle-info mr-2"></i>Basis';
+    const f = _fundMetrics(metrics);
+    const fund = _activeFund();
+    // Card 1 — Holdings (count + as-at). No NAV: this is a count, not a value.
+    setLab(vlab, '<i class="fas fa-layer-group mr-2"></i>Holdings');
+    document.getElementById('totalValue').textContent = String(f.positions);
+    document.getElementById('totalCost').innerHTML = (fund && fund.asAt)
+      ? `<i class="fas fa-calendar-day mr-1"></i>as at ${_escape(fund.asAt)}`
+      : 'disclosed positions';
+    // Card 2 — Top-10 concentration.
+    setLab(rlab, '<i class="fas fa-arrow-down-wide-short mr-2"></i>Top 10');
     const retEl2 = document.getElementById('totalReturn');
-    retEl2.className = 'text-2xl font-bold mono'; retEl2.style.color = 'var(--text-muted)';
-    retEl2.textContent = 'Weights';
+    retEl2.className = 'text-2xl font-bold mono'; retEl2.style.color = '';
+    retEl2.textContent = fmt(f.top10Pct) + '%';
     const pctEl2 = document.getElementById('totalReturnPct');
-    pctEl2.className = 'text-xs mt-2 neutral'; pctEl2.textContent = 'No prices in disclosure';
-  } else {
-    // Restore defaults (in case the session previously viewed a fund book).
-    if (vlab) vlab.innerHTML = '<i class="fas fa-sack-dollar mr-2"></i>Total Value';
-    if (rlab) rlab.innerHTML = '<i class="fas fa-money-bill-trend-up mr-2"></i>Total Return';
+    pctEl2.className = 'text-xs mt-2 neutral'; pctEl2.textContent = 'largest 10 holdings';
+    // Card 3 — Asset mix (biggest class headline + the split beneath).
+    setLab(dlab, '<i class="fas fa-chart-pie mr-2"></i>Asset Mix');
+    const dayEl2 = document.getElementById('dayChange');
+    dayEl2.className = 'text-2xl font-bold mono'; dayEl2.style.color = '';
+    const top = f.mixPct[0] || ['—', 0];
+    dayEl2.textContent = `${fmt(top[1])}% ${top[0]}`;
+    document.getElementById('kpiDayHint').textContent = f.mixPct.slice(1, 4).map(([k,v]) => `${k} ${fmt(v)}%`).join(' · ') || '—';
+    // Card 4 — Offshore (FX) exposure.
+    setLab(glab, '<i class="fas fa-earth-oceania mr-2"></i>Offshore');
+    const divEl2 = document.getElementById('divScore');
+    divEl2.className = 'text-2xl font-bold mono'; divEl2.style.color = '';
+    divEl2.textContent = fmt(f.offshorePct) + '%';
+    document.getElementById('divHint').textContent = 'non-NZD currency';
+  } else if (vlab && vlab.innerHTML.indexOf('Holdings') >= 0) {
+    // Restore defaults only if we previously switched to fund mode this session.
+    setLab(vlab, '<i class="fas fa-sack-dollar mr-2"></i>Total Value');
+    setLab(rlab, '<i class="fas fa-money-bill-trend-up mr-2"></i>Total Return');
+    setLab(dlab, '<i class="fas fa-bolt mr-2"></i>Day Change');
+    setLab(glab, '<i class="fas fa-shapes mr-2"></i>Diversification');
+    document.getElementById('kpiDayHint').textContent = 'Live market data';
     document.getElementById('totalReturn').style.color = '';
   }
 }
@@ -10448,6 +10506,7 @@ function renderDetailedHoldings(holdings, totalValue) {
   }
   // Fund-weight view swaps the dollar/cost/P&L columns for weight semantics.
   const weightMode = _isFundWeightView();
+  const maxW = weightMode ? holdings.reduce((m,h) => Math.max(m, Math.abs(h.currentValue)||0), 0.01) : 1;
   const hdr = document.getElementById('holdingsDetailedHeader');
   if (hdr) {
     if (weightMode) {
@@ -10484,7 +10543,10 @@ function renderDetailedHoldings(holdings, totalValue) {
             <div class="text-xs neutral">${_escape(h.platform||'')}</div>
           </div>
         </div>
-        <div class="text-right mono text-sm font-semibold">${wt}%</div>
+        <div class="text-right">
+          <div class="mono text-sm font-semibold">${wt}%</div>
+          <div style="height:4px;border-radius:2px;background:var(--border);margin-top:4px;overflow:hidden;"><div style="height:100%;width:${Math.min((Math.abs(h.currentValue)/maxW)*100,100).toFixed(1)}%;background:${ASSET_COLORS[h.type]||'var(--accent)'};border-radius:2px;"></div></div>
+        </div>
         <div class="text-right text-sm" style="color:var(--text-muted);">${_assetTypeLabel(h.type)}</div>
         <div class="text-right text-sm" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(ctry)}</div>
         <div class="text-right mono text-sm" style="color:var(--text-muted);">${_escape(ccy)}</div>
@@ -10592,6 +10654,7 @@ function renderHoldingsGrouped(holdings, totalValue, groupKey) {
   const def = HOLDINGS_GROUP_DEFS[groupKey] || HOLDINGS_GROUP_DEFS.platform;
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+  const weightMode = _isFundWeightView();   // weight-based fund book → % not $
   const el = document.getElementById('holdingsDetailed');
   if (!holdings.length) { el.innerHTML = renderEmptyHoldings(); return; }
 
@@ -10628,9 +10691,11 @@ function renderHoldingsGrouped(holdings, totalValue, groupKey) {
             <span class="text-xs neutral">${hs.length} holding${hs.length!==1?'s':''}</span>
           </div>
           <div class="flex items-center gap-4 text-sm">
-            <span class="mono font-semibold">${sym}${fmt(platVal)}</span>
-            <span class="mono" style="color:${color};">${sign}${sym}${fmt(Math.abs(platGain))} (${sign}${fmt(Math.abs(platPct))}%)</span>
-            <span class="text-xs neutral">${fmt(platWeight)}% of portfolio</span>
+            ${weightMode
+              ? `<span class="mono font-semibold" style="color:var(--accent);">${fmt(platWeight)}%</span><span class="text-xs neutral">of fund</span>`
+              : `<span class="mono font-semibold">${sym}${fmt(platVal)}</span>
+                 <span class="mono" style="color:${color};">${sign}${sym}${fmt(Math.abs(platGain))} (${sign}${fmt(Math.abs(platPct))}%)</span>
+                 <span class="text-xs neutral">${fmt(platWeight)}% of portfolio</span>`}
           </div>
         </div>
         <div style="border:1px solid #1e2d4a;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
@@ -10639,6 +10704,25 @@ function renderHoldingsGrouped(holdings, totalValue, groupKey) {
             const dayPct  = h.dayChangePct || 0;
             const dayColor= dayPct >= 0 ? '#34d399' : '#f87171';
             const daySign = dayPct >= 0 ? '+' : '';
+            if (weightMode) {
+              return `
+              <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid #1e2d4a;" onclick="viewHolding('${h.id}')">
+                <div class="flex items-center gap-3" style="min-width:0;">
+                  <div style="width:30px;height:30px;border-radius:6px;background:${ASSET_COLORS[h.type]||'#818cf8'}22;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:${ASSET_COLORS[h.type]||'#818cf8'};flex-shrink:0;">${(h.symbol||'?').slice(0,3)}</div>
+                  <div style="min-width:0;overflow:hidden;">
+                    <div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.name||h.symbol)}</div>
+                  </div>
+                </div>
+                <div class="text-right mono text-sm font-semibold">${fmt(h.currentValue)}%</div>
+                <div class="text-right text-sm" style="color:var(--text-muted);">${_assetTypeLabel(h.type)}</div>
+                <div class="text-right text-sm" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(h.country||'—')}</div>
+                <div class="text-right mono text-sm" style="color:var(--text-muted);">${_escape(h.nativeCurrency||h.currency||'—')}</div>
+                <div class="text-right" onclick="event.stopPropagation()">
+                  <button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1"><i class="fas fa-edit"></i></button>
+                  <button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
+                </div>
+              </div>`;
+            }
             return `
             <div class="table-row" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 100px;display:grid;border-left:3px solid ${haslive?dayColor:'#1e2d4a'};" onclick="viewHolding('${h.id}')">
               <div class="flex items-center gap-3" style="min-width:0;">

@@ -184,14 +184,24 @@ function _discloseHolding({ symbol, name, type, weight, code }) {
 // Parse a Disclose CSV into { fundName, holdings, stats }. Pure — no side effects.
 function parseDiscloseCSV(text) {
   const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  let fundName = '', headerIdx = -1;
+  let fundName = '', headerIdx = -1, asAt = '', asAtISO = '';
   for (let i = 0; i < lines.length; i++) {
     if (/^fund name\s*,/i.test(lines[i])) {
       const c = parseCSVLine(lines[i]); fundName = (c[1] || '').trim();
     }
+    if (/^period disclosure applies/i.test(lines[i])) {
+      const c = parseCSVLine(lines[i]);
+      const raw = (c[1] || '').trim();
+      const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(raw);   // dd/mm/yyyy
+      if (m) {
+        const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        asAt = `${(+m[1])} ${MON[(+m[2]) - 1] || ''} ${m[3]}`.trim();
+        asAtISO = `${m[3]}-${String(+m[2]).padStart(2,'0')}-${String(+m[1]).padStart(2,'0')}`;
+      } else if (raw) { asAt = raw; }
+    }
     if (/^\s*asset name\s*,\s*% of fund net assets/i.test(lines[i])) { headerIdx = i; break; }
   }
-  if (headerIdx === -1) return { fundName, holdings: [], stats: null };
+  if (headerIdx === -1) return { fundName, asAt, asAtISO, holdings: [], stats: null };
 
   const TH = 0.10; // weight % threshold for an individual line
   const individual = [];
@@ -239,7 +249,7 @@ function parseDiscloseCSV(text) {
   if (ratesCount) holdings.push(overlay('RATES-OVERLAY', 'Rates / IRS overlay', ratesNet, ratesCount));
 
   return {
-    fundName,
+    fundName, asAt, asAtISO,
     holdings,
     stats: {
       rows, individual: individual.length,
@@ -512,7 +522,7 @@ async function _importCSVImpl(event) {
 // A fund's full holdings are a complete set, so this REPLACES (not merges)
 // and renames the portfolio to the fund. Weight-based: no price fetch.
 async function importDiscloseHoldings(text) {
-  const { fundName, holdings, stats } = parseDiscloseCSV(text);
+  const { fundName, asAt, asAtISO, holdings, stats } = parseDiscloseCSV(text);
   if (!holdings.length) {
     toast.error({ title: 'No holdings found', message: 'This looks like a Disclose file but no asset rows parsed. Check the "Asset name,% of fund net assets,Security code" header is present.' });
     return;
@@ -534,6 +544,8 @@ async function importDiscloseHoldings(text) {
   // Replace the active portfolio's holdings + rename it to the fund.
   state.portfolio = holdings;
   if (fundName) renamePortfolio(active.id, fundName);
+  // Stamp fund metadata on the portfolio (drives the "as at" badge + weight view).
+  active.fund = { name: fundName || active.name, asAt: asAt || '', asAtISO: asAtISO || '', importedRows: stats.rows };
 
   saveState();
   if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
