@@ -254,6 +254,15 @@
     :root[data-edition="harbour"] nav.glass [style*="99,102,241"] i { color:#FFFFFF !important; }
     :root[data-edition="harbour"] nav.glass .nav-sep { background: rgba(255,255,255,0.28) !important; }
 
+    /* Native <select> dropdown options were globally near-black (#141e33) —
+       that reads as a "black highlight" on the light/Harbour theme. Make the
+       option list match the panel on light themes. */
+    [data-theme="light"] select.input option,
+    :root[data-edition="harbour"] select.input option { background:#FFFFFF; color:#243B53; }
+    /* Branded text-selection highlight (was the browser default). */
+    ::selection { background: rgba(99,102,241,0.28); }
+    :root[data-edition="harbour"] ::selection { background: rgba(0,90,121,0.22); color:#0F1B30; }
+
     /* ── Login gate (Harbour Blue page + centered white card) ── */
     :root[data-edition="harbour"] #authGate { background:var(--accent) !important; }
     :root[data-edition="harbour"] #authGate > div { background:#FFFFFF; border-radius:16px; box-shadow:0 18px 48px rgba(0,0,0,0.28); }
@@ -2124,8 +2133,8 @@
             <button class="seg-btn"        data-group="country"  onclick="setHoldingsGroupBy('country')">Country</button>
             <button class="seg-btn"        data-group="type"     onclick="setHoldingsGroupBy('type')">Type</button>
           </div>
-          <button onclick="refreshAllFundPrices()" class="btn" style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.35);" title="Refresh unit prices for every NZ fund and KiwiSaver holding">
-            <i class="fas fa-bolt mr-1"></i>Refresh funds
+          <button id="refreshFundsBtn" onclick="refreshAllFundPrices()" class="btn btn-secondary" title="Refresh unit prices for every NZ fund and KiwiSaver holding">
+            <i class="fas fa-rotate mr-1"></i>Refresh funds
           </button>
           <button onclick="downloadCSVTemplate()" class="btn btn-secondary" title="Download blank CSV template">
             <i class="fas fa-download mr-1"></i>Template
@@ -2157,13 +2166,13 @@
           <div class="text-2xl font-bold mt-1" id="hKpiCount" style="color:var(--accent);line-height:1.1;">–</div>
           <div class="text-xs neutral mt-1" id="hKpiCountSub">across 0 platforms</div>
         </div>
-        <div class="card2 p-4" style="border-left:3px solid var(--color-green);">
-          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Up Today</div>
+        <div class="card2 p-4" id="hKpiUpTile" style="border-left:3px solid var(--color-green);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;" id="hKpiUpLabel">Up Today</div>
           <div class="text-2xl font-bold mt-1" id="hKpiUp" style="color:var(--color-green);line-height:1.1;">–</div>
           <div class="text-xs neutral mt-1" id="hKpiUpSub">awaiting prices</div>
         </div>
-        <div class="card2 p-4" style="border-left:3px solid var(--color-red);">
-          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;">Down Today</div>
+        <div class="card2 p-4" id="hKpiDownTile" style="border-left:3px solid var(--color-red);">
+          <div class="text-xs uppercase neutral font-semibold" style="letter-spacing:0.4px;" id="hKpiDownLabel">Down Today</div>
           <div class="text-2xl font-bold mt-1" id="hKpiDown" style="color:var(--color-red);line-height:1.1;">–</div>
           <div class="text-xs neutral mt-1" id="hKpiDownSub">awaiting prices</div>
         </div>
@@ -5695,7 +5704,9 @@ function renderFundExposure(metrics) {
     booked.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k] || 0) + (h.currentValue || 0); });
     return Object.entries(o).map(([k,v]) => ({ label: k, pct: v / tv * 100 })).sort((a,b) => b.pct - a.pct);
   };
-  const classRows = agg(h => CLASS[h.type] || 'Other').map(r => ({ ...r, color: ASSET_COLORS[CLASS_TYPE[r.label]] || 'var(--accent)' }));
+  // Harbour-blue ramp instead of the generic purple/green/cyan asset palette.
+  const CLASS_COLOR = { 'Equity':'#005A79', 'Fixed income':'#3F8BA8', 'Alternatives':'#7FB0C4', 'Cash':'#BFC8CC', 'Overlay':'#44546A', 'Other':'#9FB3BD' };
+  const classRows = agg(h => CLASS[h.type] || 'Other').map(r => ({ ...r, color: CLASS_COLOR[r.label] || 'var(--accent)' }));
   document.getElementById('fundExpClass').innerHTML  = bars(classRows);
   document.getElementById('fundExpCcy').innerHTML    = bars(agg(h => h.nativeCurrency || h.currency || 'NZD').slice(0, 8));
   document.getElementById('fundExpRegion').innerHTML = bars(agg(h => h.country || 'Unlisted / cash').slice(0, 8));
@@ -5723,7 +5734,7 @@ function renderPortfolioSwitcher() {
   if (label) label.textContent = viewingAll ? 'All portfolios' : (active?.name || 'Personal');
   // "All portfolios (combined)" — only offered when there's more than one.
   const allRow = ports.length > 1
-    ? `<div role="menuitem" onclick="_switchToAllPortfoliosUI()" style="display:flex;align-items:center;gap:8px;width:100%;background:${viewingAll ? 'rgba(99,102,241,0.12)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;">
+    ? `<div role="menuitem" onclick="_switchToAllPortfoliosUI()" style="display:flex;align-items:center;gap:8px;width:100%;background:${viewingAll ? 'var(--accent-soft)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;font-weight:600;">
          <i class="fas fa-check" style="font-size:10px;width:12px;color:var(--accent,#818cf8);visibility:${viewingAll ? 'visible' : 'hidden'};"></i>
          <i class="fas fa-layer-group" style="font-size:11px;color:var(--accent,#818cf8);"></i>
          <span style="flex:1;">All portfolios</span>
@@ -5734,7 +5745,7 @@ function renderPortfolioSwitcher() {
   const rows = ports.map(p => {
     const isActive = !viewingAll && p.id === active.id;
     const count = (p.holdings || []).length;
-    return `<div role="menuitem" onclick="_switchPortfolioUI('${p.id}')" style="display:flex;align-items:center;gap:8px;width:100%;background:${isActive ? 'rgba(99,102,241,0.12)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;">
+    return `<div role="menuitem" onclick="_switchPortfolioUI('${p.id}')" style="display:flex;align-items:center;gap:8px;width:100%;background:${isActive ? 'var(--accent-soft)' : 'transparent'};color:var(--text-primary);padding:9px 12px;cursor:pointer;font-size:13px;">
       <i class="fas fa-check" style="font-size:10px;width:12px;color:var(--accent,#818cf8);visibility:${isActive ? 'visible' : 'hidden'};"></i>
       <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(p.name)}</span>
       <span class="neutral" style="font-size:11px;" title="${count} holding${count===1?'':'s'}">${count}</span>
@@ -10486,9 +10497,40 @@ function filterHoldings() {
 function renderHoldingsKpiStrip(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const setColor = (id, c) => { const el = document.getElementById(id); if (el) el.style.color = c; };
+  const setBorder = (id, c) => { const el = document.getElementById(id); if (el) el.style.borderLeftColor = c; };
   const holdings = (metrics.holdings || []).filter(h => !h.ignored);
   if (!holdings.length) return;
   set('hKpiCount', holdings.length);
+  const refreshBtn = document.getElementById('refreshFundsBtn');
+
+  // ── Weight-based fund book: repurpose the price-based tiles ──
+  if (_isFundWeightView()) {
+    const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+    const fm = _fundMetrics(metrics);
+    const real = holdings.filter(h => !_isSyntheticFundRow(h));
+    const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0))[0];
+    if (refreshBtn) refreshBtn.style.display = 'none';      // no prices to refresh
+    set('hKpiCountSub', fund && fund.asAt ? `as at ${fund.asAt}` : 'disclosed positions');
+    // Up Today → Top weight
+    set('hKpiUpLabel', 'Top Weight'); setBorder('hKpiUpTile', 'var(--accent)'); setColor('hKpiUp', 'var(--accent)');
+    set('hKpiUp', top ? fmt(top.currentValue) + '%' : '–');
+    set('hKpiUpSub', top ? _fundLabel(top) : '—');
+    // Down Today → Offshore
+    set('hKpiDownLabel', 'Offshore'); setBorder('hKpiDownTile', 'var(--accent)'); setColor('hKpiDown', 'var(--accent)');
+    set('hKpiDown', fmt(fm.offshorePct) + '%');
+    set('hKpiDownSub', 'non-NZD currency');
+    // Biggest single position (exclude the aggregated tail + overlay)
+    const big = document.getElementById('hKpiBiggest');
+    if (big) big.textContent = top ? _fundLabel(top) : '–';
+    set('hKpiBiggestSub', top ? `${fmt(top.currentValue)}% of fund` : '–');
+    return;
+  }
+
+  // ── Normal (priced) mode — restore any repurposed labels/borders ──
+  if (refreshBtn) refreshBtn.style.display = '';
+  set('hKpiUpLabel', 'Up Today');   setBorder('hKpiUpTile', 'var(--color-green)'); setColor('hKpiUp', 'var(--color-green)');
+  set('hKpiDownLabel', 'Down Today'); setBorder('hKpiDownTile', 'var(--color-red)'); setColor('hKpiDown', 'var(--color-red)');
   const platforms = new Set(holdings.map(h => h.platform).filter(Boolean));
   set('hKpiCountSub', `across ${platforms.size} platform${platforms.size === 1 ? '' : 's'}`);
 
