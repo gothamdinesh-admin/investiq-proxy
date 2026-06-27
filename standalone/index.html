@@ -5302,6 +5302,27 @@ async function _finishSignInAfterMfa() {
 }
 window._finishSignInAfterMfa = _finishSignInAfterMfa;
 
+// Fire-and-forget call to the notify-signup Edge Function. kind: 'signup'
+// (alerts the admins to approve) or 'approved' (tells the user they're in).
+// Best-effort — never blocks or breaks the auth flow.
+async function notifySignupServer(kind, email) {
+  try {
+    if (!_supabase) return;
+    const baseUrl = (typeof EDITION !== 'undefined' && EDITION.supabaseUrl) || state.settings.supabaseUrl;
+    const anonKey = (typeof EDITION !== 'undefined' && EDITION.supabaseKey) || state.settings.supabaseKey;
+    if (!baseUrl) return;
+    const { data: { session } } = await _supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return; // verify-jwt requires a live session
+    const edition = (typeof cmsName === 'function') ? cmsName() : ((typeof EDITION !== 'undefined' && EDITION.name) || 'InvestIQ');
+    await fetch(baseUrl.replace(/\/$/, '') + '/functions/v1/notify-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, 'apikey': anonKey || '' },
+      body: JSON.stringify({ type: kind, email: email || (_supaUser && _supaUser.email) || '', edition })
+    });
+  } catch(e) { console.warn('[notify-signup] non-fatal:', e); }
+}
+
 async function signUp(email, password) {
   if (!_supabase) return { error: 'Supabase not configured' };
   // emailRedirectTo tells Supabase where to send the user after they click
@@ -5319,6 +5340,12 @@ async function signUp(email, password) {
   if (_supaUser) {
     logActivity('signup', { email: _supaUser.email, emailConfirm: !data.session });
     await saveToSupabase();
+    // Email confirmation OFF → live session: create the profile row (lands
+    // is_approved=false), show the pending-approval gate, and ping the admins.
+    if (data.session) {
+      try { await checkAdminStatus(); } catch(e) { console.warn('[signup] checkAdminStatus', e); }
+      notifySignupServer('signup', _supaUser.email);
+    }
   }
   return { ok: true, emailConfirm: !data.session };
 }
@@ -12557,6 +12584,8 @@ async function adminApproveUser(userId, email, approve) {
   }
   const { error } = await _supabase.from('profiles').update(updates).eq('id', userId);
   if (error) { toast.error('Failed: ' + error.message); return; }
+  // Let the user know they're in (best-effort).
+  if (approve && typeof notifySignupServer === 'function') notifySignupServer('approved', email);
   toast.success(approve
     ? `${email} approved — proxy secret issued, they can now use the app`
     : `${email} revoked — proxy access removed`);
