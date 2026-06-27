@@ -7801,15 +7801,17 @@ function populateSettingsForm() {
   if (digestSection) digestSection.style.display = _supaUser ? 'block' : 'none';
   if (digestToggle)  digestToggle.checked = !!_userProfile?.digest_opt_in;
 
-  // Family + Alerts + Plan sections — all visible only when signed in
+  // Family + Alerts + Plan sections — all visible only when signed in.
+  // Family is also gated by the edition feature flag (off for Harbour IQ).
   const familySection = document.getElementById('familySection');
   const alertsSection = document.getElementById('alertsSection');
   const planSection   = document.getElementById('planSection');
-  if (familySection) familySection.style.display = _supaUser ? 'block' : 'none';
+  const familyEnabled = !(typeof EDITION !== 'undefined' && EDITION.features && EDITION.features.family === false);
+  if (familySection) familySection.style.display = (_supaUser && familyEnabled) ? 'block' : 'none';
   if (alertsSection) alertsSection.style.display = _supaUser ? 'block' : 'none';
   if (planSection)   planSection.style.display   = _supaUser ? 'block' : 'none';
   if (_supaUser) {
-    renderFamilySection();
+    if (familyEnabled) renderFamilySection();
     renderAlertsSection();
     renderPlanSection();
   }
