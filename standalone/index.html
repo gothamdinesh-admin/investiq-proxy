@@ -3119,6 +3119,9 @@
           <button onclick="adminTestDigest()" class="btn btn-sm" style="background:rgba(96,165,250,0.1);color:#60a5fa;border:1px solid rgba(96,165,250,0.3);">
             <i class="fas fa-envelope mr-1"></i>Send Test Digest
           </button>
+          <button onclick="adminTestSignupNotify()" class="btn btn-sm" style="background:rgba(52,211,153,0.1);color:#34d399;border:1px solid rgba(52,211,153,0.3);" title="Send a test 'new signup' email to your admin recipients via notify-signup">
+            <i class="fas fa-user-check mr-1"></i>Test Signup Email
+          </button>
           <button onclick="adminRunAlertCheck()" class="btn btn-sm" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);">
             <i class="fas fa-bell mr-1"></i>Run Alert Check
           </button>
@@ -12772,6 +12775,41 @@ function adminTestSentry() {
   } catch(e) {
     _adminLog('✗ captureMessage threw: ' + e.message);
   }
+}
+
+async function adminTestSignupNotify() {
+  _adminClearOutput();
+  const supaUrl = ((typeof EDITION !== 'undefined' && EDITION.supabaseUrl) || state.settings.supabaseUrl || PLATFORM_CONFIG.supabaseUrl || '').replace(/\/$/, '');
+  const anonKey = (typeof EDITION !== 'undefined' && EDITION.supabaseKey) || state.settings.supabaseKey || PLATFORM_CONFIG.supabaseKey || '';
+  if (!supaUrl) return _adminLog('✗ Supabase URL not set');
+  _adminLog('🔍 Will invoke: ' + supaUrl + '/functions/v1/notify-signup');
+  _adminLog('   Sends a TEST "new signup" email to the admin recipients (ADMIN_NOTIFY_EMAILS).\n');
+  let jwt = '';
+  try { jwt = (await _getFreshJwt()) || ''; } catch(e) {}
+  if (!jwt) return _adminLog('⚠ No active Supabase session — Verify-JWT will reject. Sign in first.');
+  const edition = (typeof cmsName === 'function') ? cmsName() : ((typeof EDITION !== 'undefined' && EDITION.name) || 'InvestIQ');
+  _adminLog('🚀 Calling notify-signup …');
+  try {
+    const res = await fetch(supaUrl + '/functions/v1/notify-signup', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + jwt, 'apikey': anonKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'signup', email: 'test-signup@example.com', edition }),
+      signal: AbortSignal.timeout(30000)
+    });
+    const text = await res.text();
+    let body; try { body = JSON.parse(text); } catch { body = text; }
+    _adminLog('Response: ' + res.status);
+    if (res.status === 404) return _adminLog('✗ Function not deployed in THIS project. Deploy the notify-signup Edge Function here.');
+    if (res.status === 401) return _adminLog('✗ Unauthorised — Verify-JWT rejected the call. Sign in again, then retry.');
+    if (res.ok && body && body.ok) {
+      _adminLog('✓ Resend accepted the email. Check the inbox(es) in ADMIN_NOTIFY_EMAILS');
+      _adminLog('  (default: gothamdinesh@gmail.com + the Harbour work address).');
+      _adminLog('  If it doesn\'t arrive: the from-domain may be unverified in Resend — only your Resend-account email receives onboarding@resend.dev mail.');
+    } else {
+      _adminLog('✗ Send failed: ' + String((body && body.error) || text).slice(0, 300));
+      _adminLog('  Common cause: RESEND_API_KEY / RESEND_FROM_EMAIL not set in THIS project\'s Edge Function secrets.');
+    }
+  } catch(e) { _adminLog('✗ Error: ' + e.message); }
 }
 
 async function adminTestDigest() {
