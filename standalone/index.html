@@ -6636,6 +6636,27 @@ function updateTicker() {
   }
 
   const metrics = getMetrics();
+
+  // Weight-based fund book: there are no intraday prices, so "today's moves"
+  // never lands. Show the as-at date + the largest weights instead of spinning.
+  if (_isFundWeightView()) {
+    const fund = _activeFund();
+    const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
+    const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 3);
+    strip.innerHTML = `
+      <span class="flex items-center gap-2" style="padding-right:16px;border-right:1px solid #1e2d4a;">
+        <i class="fas fa-scale-balanced" style="color:var(--accent);font-size:11px;"></i>
+        <span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Weight basis</span>
+        ${fund && fund.asAt ? `<b style="color:#c8d6ef;">as at ${_escape(fund.asAt)}</b>` : ''}
+      </span>
+      <span class="flex items-center gap-3">${top.map(h => `<span class="flex items-center gap-1" style="color:#94a3b8;">
+        <span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Top</span>
+        <b style="color:#c8d6ef;">${_escape(_fundLabel(h))}</b>
+        <b style="color:var(--accent);">${fmt(h.currentValue)}%</b></span>`).join('')}</span>
+      <span style="margin-left:auto;color:#4a6080;font-size:11px;">${metrics.holdings.length} holdings · no intraday prices</span>`;
+    return;
+  }
+
   const withLive = metrics.holdings.filter(h => h.dayChangePct != null);
 
   // If live data hasn't landed yet
