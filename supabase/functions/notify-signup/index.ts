@@ -7,7 +7,7 @@
 //   RESEND_API_KEY        — your Resend API key (already set for the digest)
 //   RESEND_FROM_EMAIL     — e.g. "Harbour IQ <onboarding@resend.dev>"
 //   ADMIN_NOTIFY_EMAILS   — comma-separated admin recipients. Defaults to
-//                           gothamdinesh@gmail.com + the Harbour work address.
+//                           gothamdinesh@gmail.com (set this to add more).
 //
 // Keep "Verify JWT" ON (default) so only authenticated calls (a real signup
 // session, or an admin) can trigger it.
@@ -20,7 +20,7 @@
 const RESEND_KEY  = Deno.env.get("RESEND_API_KEY") || "";
 const FROM_EMAIL  = Deno.env.get("RESEND_FROM_EMAIL") || "InvestIQ <onboarding@resend.dev>";
 const ADMIN_EMAILS = (Deno.env.get("ADMIN_NOTIFY_EMAILS")
-  || "gothamdinesh@gmail.com,dinesh.muthusamy@harbourasset.co.nz")
+  || "gothamdinesh@gmail.com")
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 const CORS = {

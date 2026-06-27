@@ -12803,7 +12803,7 @@ async function adminTestSignupNotify() {
     if (res.status === 401) return _adminLog('✗ Unauthorised — Verify-JWT rejected the call. Sign in again, then retry.');
     if (res.ok && body && body.ok) {
       _adminLog('✓ Resend accepted the email. Check the inbox(es) in ADMIN_NOTIFY_EMAILS');
-      _adminLog('  (default: gothamdinesh@gmail.com + the Harbour work address).');
+      _adminLog('  (default: gothamdinesh@gmail.com).');
       _adminLog('  If it doesn\'t arrive: the from-domain may be unverified in Resend — only your Resend-account email receives onboarding@resend.dev mail.');
     } else {
       _adminLog('✗ Send failed: ' + String((body && body.error) || text).slice(0, 300));
