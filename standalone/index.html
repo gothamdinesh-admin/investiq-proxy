@@ -2157,7 +2157,7 @@
           </div>
         </div>
         <div id="holdingsTableWrap">
-          <div class="table-header" style="display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
+          <div class="table-header" id="overviewHoldingsHeader" style="display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;">
             <span>Asset</span><span class="text-right">Price</span><span class="text-right">Value</span><span class="text-right">Return</span><span class="text-right">Weight</span><span class="text-right">Actions</span>
           </div>
           <div id="holdingsRows"></div>
@@ -6006,12 +6006,21 @@ function renderOverviewGreeting(metrics) {
   const dayPct = metrics.totalValue > 0 ? (metrics.totalDayChange / (metrics.totalValue - metrics.totalDayChange)) * 100 : 0;
   const daySign = metrics.totalDayChange >= 0 ? '+' : '−';
   const totalSign = metrics.totalGain >= 0 ? 'up' : 'down';
-  let storyParts = [];
-  if (metrics.totalDayChange != null && Math.abs(metrics.totalDayChange) >= 0.01) {
-    storyParts.push(`<span style="color:${metrics.totalDayChange >= 0 ? '#34d399' : '#f87171'};">${daySign}${sym}${fmt(Math.abs(metrics.totalDayChange))}</span> today`);
+  // Weight-based fund: no dollar value / return exists — describe the fund instead.
+  if (_isFundWeightView()) {
+    const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+    sub.innerHTML = `<b style="color:var(--text-primary);">${_escape((fund && fund.name) || state.settings.name || 'Fund')}</b>`
+      + ` · ${metrics.holdings.length} holdings`
+      + (fund && fund.asAt ? ` · as at ${_escape(fund.asAt)}` : '')
+      + ` · <span class="neutral">% of fund net assets</span>`;
+  } else {
+    let storyParts = [];
+    if (metrics.totalDayChange != null && Math.abs(metrics.totalDayChange) >= 0.01) {
+      storyParts.push(`<span style="color:${metrics.totalDayChange >= 0 ? '#34d399' : '#f87171'};">${daySign}${sym}${fmt(Math.abs(metrics.totalDayChange))}</span> today`);
+    }
+    storyParts.push(`<span style="color:${metrics.totalGain >= 0 ? '#34d399' : '#f87171'};">${totalSign} ${fmt(Math.abs(metrics.totalGainPct))}%</span> all-time`);
+    sub.innerHTML = `Your portfolio is ${storyParts.join(' · ')}`;
   }
-  storyParts.push(`<span style="color:${metrics.totalGain >= 0 ? '#34d399' : '#f87171'};">${totalSign} ${fmt(Math.abs(metrics.totalGainPct))}%</span> all-time`);
-  sub.innerHTML = `Your portfolio is ${storyParts.join(' · ')}`;
 
   // Right-side badges: holdings count + date. For a weight-based fund book the
   // figures are "as at" the disclosure date, not today — show that instead so
@@ -6117,6 +6126,26 @@ function renderPlatformBreakdown(metrics) {
 function renderSidebar(metrics) {
   const base = state.settings.currency || 'NZD';
   const sym = CURRENCY_SYMBOLS[base] || 'NZ$';
+
+  // Weight-based fund book has no dollar value or return — show fund facts.
+  if (_isFundWeightView()) {
+    const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+    document.getElementById('portfolioName').textContent = (fund && fund.name) || state.settings.name;
+    document.getElementById('sidebarTotal').textContent = `${metrics.holdings.length} holdings`;
+    const r = document.getElementById('sidebarReturn');
+    if (r) r.innerHTML = `<span class="neutral">${fund && fund.asAt ? 'as at ' + _escape(fund.asAt) : 'weight basis · % of fund'}</span>`;
+    const fxEl = document.getElementById('sidebarFxRate'); if (fxEl) fxEl.textContent = '';
+    const stH = document.getElementById('statHoldings'); if (stH) stH.textContent = metrics.holdings.length;
+    const stP = document.getElementById('statPlatforms'); if (stP) stP.textContent = 1;
+    const stT = document.getElementById('statTypes'); if (stT) stT.textContent = new Set(metrics.holdings.map(h=>h.type)).size;
+    const real = [...metrics.holdings].filter(h => !_isSyntheticFundRow(h)).sort((a,b)=>(b.currentValue||0)-(a.currentValue||0));
+    const stB = document.getElementById('statBest');  if (stB && real[0]) stB.textContent = `${_fundLabel(real[0])} (${fmt(real[0].currentValue)}%)`;
+    const stW = document.getElementById('statWorst'); if (stW) stW.innerHTML = `<span class="neutral">${real.length} named positions</span>`;
+    try { renderTodaysMovers(metrics); } catch(e) {}
+    try { showFab(); } catch(e) {}
+    return;
+  }
+
   document.getElementById('sidebarTotal').textContent = sym + fmt(metrics.totalValue);
   document.getElementById('portfolioName').textContent = state.settings.name;
 
@@ -6317,6 +6346,48 @@ function renderHoldingsTable(metrics) {
       .slice(0, 5)
   };
 
+  // Weight-based fund: relabel the header + drop the $ price/value/return columns.
+  const wmode = _isFundWeightView();
+  const ovHdr = document.getElementById('overviewHoldingsHeader');
+  if (ovHdr) {
+    if (wmode) {
+      if (!ovHdr.dataset.orig) ovHdr.dataset.orig = ovHdr.innerHTML;
+      ovHdr.innerHTML = '<span>Asset</span><span class="text-right">Type</span><span class="text-right">Country</span><span class="text-right">Currency</span><span class="text-right">Weight</span><span class="text-right">Actions</span>';
+    } else if (ovHdr.dataset.orig) { ovHdr.innerHTML = ovHdr.dataset.orig; delete ovHdr.dataset.orig; }
+  }
+  if (wmode) {
+    const bar = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour') ? '#005A79' : 'var(--accent)';
+    if (isMobile) {
+      if (header) header.style.display = 'none';
+      document.getElementById('holdingsRows').innerHTML = `<div class="overview-mobile-list">${metrics.holdings.map(h => `
+        <div class="overview-mobile-card" onclick="viewHolding('${h.id}')">
+          <div class="overview-mobile-top">
+            <div style="width:38px;height:38px;border-radius:10px;background:${bar}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${bar};flex-shrink:0;">${(h.symbol||'?').slice(0,3).toUpperCase()}</div>
+            <div class="overview-mobile-meta">
+              <div class="overview-mobile-symbol">${_escape(h.name||h.symbol)}</div>
+              <div class="overview-mobile-name">${_assetTypeLabel(h.type)}${h.country?' · '+_escape(h.country):''}</div>
+            </div>
+            <div style="margin-left:auto;text-align:right;"><div class="mono font-semibold" style="color:var(--accent);">${fmt(h.currentValue)}%</div><div class="text-xs neutral">of fund</div></div>
+          </div>
+        </div>`).join('')}</div>`;
+      return;
+    }
+    if (header) header.style.display = '';
+    document.getElementById('holdingsRows').innerHTML = metrics.holdings.map(h => `
+      <div class="table-row" style="display:grid;grid-template-columns:2.4fr 1fr 1fr 1fr 1.4fr 100px;" onclick="viewHolding('${h.id}')">
+        <div class="flex items-center gap-3" style="min-width:0;">
+          <div style="width:36px;height:36px;border-radius:8px;background:${bar}22;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:${bar};flex-shrink:0;">${(h.symbol||'?').slice(0,3).toUpperCase()}</div>
+          <div style="min-width:0;overflow:hidden;"><div class="font-semibold text-sm" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(h.name||h.symbol)}</div></div>
+        </div>
+        <div class="text-right text-sm" style="color:var(--text-muted);">${_assetTypeLabel(h.type)}</div>
+        <div class="text-right text-sm" style="color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;">${_escape(h.country||'—')}</div>
+        <div class="text-right mono text-sm" style="color:var(--text-muted);">${_escape(h.nativeCurrency||h.currency||'—')}</div>
+        <div class="text-right"><div class="flex items-center justify-end gap-2"><div class="progress-bar" style="width:60px;"><div class="progress-fill" style="width:${Math.min(h.currentValue,100)}%;background:${bar};"></div></div><span class="text-xs neutral mono" style="min-width:40px;">${fmt(h.currentValue)}%</span></div></div>
+        <div class="text-right" onclick="event.stopPropagation()"><button onclick="editHolding('${h.id}')" class="btn btn-sm btn-secondary mr-1" title="Edit"><i class="fas fa-edit"></i></button><button onclick="deleteHolding('${h.id}')" class="btn btn-sm btn-danger" title="Delete"><i class="fas fa-trash"></i></button></div>
+      </div>`).join('');
+    return;
+  }
+
   if (isMobile) {
     if (header) header.style.display = 'none';
     document.getElementById('holdingsRows').innerHTML = `<div class="overview-mobile-list">${metrics.holdings.map(h => {
@@ -6423,7 +6494,14 @@ function renderAllocChart(metrics) {
 
   const labels = Object.keys(groups);
   const values = Object.values(groups);
+  const wmode = _isFundWeightView();
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  // Harbour-branded chart palette (cohesive blue/teal/slate ramp) — replaces the
+  // generic indigo/green/cyan asset palette on the Harbour edition.
+  const HARBOUR_RAMP = ['#005A79','#3F8BA8','#7FB0C4','#2E7D8F','#44546A','#9FB3BD','#5A6B7D','#BFC8CC'];
+  const HARBOUR_TYPE = { stock:'#005A79', etf:'#2E7D8F', bond:'#3F8BA8', fund:'#7FB0C4', mutualfund:'#7FB0C4', cash:'#BFC8CC', other:'#44546A', kiwisaver:'#5A6B7D', crypto:'#9FB3BD', realestate:'#5A6B7D' };
   const colors = labels.map((l,i) => {
+    if (harbour) return state.allocMode === 'type' ? (HARBOUR_TYPE[l] || HARBOUR_RAMP[i % HARBOUR_RAMP.length]) : HARBOUR_RAMP[i % HARBOUR_RAMP.length];
     if (state.allocMode === 'type') return ASSET_COLORS[l] || '#64748b';
     const palette = ['#818cf8','#60a5fa','#34d399','#fbbf24','#f87171','#c4b5fd','#fb923c','#94a3b8'];
     return palette[i % palette.length];
@@ -6448,7 +6526,7 @@ function renderAllocChart(metrics) {
         responsive: true, maintainAspectRatio: false,
         scales: isBar ? { x: { display: false }, y: { ticks: { color: textC }, grid: { color: gridC } } } : {},
         plugins: { legend: { display: false }, tooltip: {
-          callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); return ` ${lbl}: ${fmtCurrency(c.raw)} (${(c.raw/metrics.totalValue*100).toFixed(1)}%)`; } }
+          callbacks: { label: (c) => { const lbl = c.label.toUpperCase()==='ETF'?'ETF':c.label.charAt(0).toUpperCase()+c.label.slice(1); const pct = (c.raw/metrics.totalValue*100).toFixed(1); return wmode ? ` ${lbl}: ${pct}% of fund` : ` ${lbl}: ${fmtCurrency(c.raw)} (${pct}%)`; } }
         }}
       }
     });
@@ -6461,7 +6539,7 @@ function renderAllocChart(metrics) {
         <div style="width:8px;height:8px;border-radius:2px;background:${colors[i]};flex-shrink:0;"></div>
         <span>${l.toUpperCase() === 'ETF' ? 'ETF' : l.charAt(0).toUpperCase() + l.slice(1)}</span>
       </div>
-      <span class="neutral">${sym}${fmt(values[i])} (${(values[i]/metrics.totalValue*100).toFixed(1)}%)</span>
+      <span class="neutral">${wmode ? `${(values[i]/metrics.totalValue*100).toFixed(1)}%` : `${sym}${fmt(values[i])} (${(values[i]/metrics.totalValue*100).toFixed(1)}%)`}</span>
     </div>`).join('');
 }
 
