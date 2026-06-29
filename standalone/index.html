@@ -5850,10 +5850,43 @@ function renderExposurePage(metrics) {
   </div>`;
 }
 
+// Mandate guideline limits — stored per fund in state.settings (cloud-synced),
+// with sensible defaults. Editable from the Mandate page.
+const _MANDATE_DEFAULTS = { largest:5, top10:50, offshore:60, equity:75 };
+function _mandateLimits() {
+  const stored = (state.settings && state.settings.mandateLimits) || {};
+  return Object.assign({}, _MANDATE_DEFAULTS, stored);
+}
+async function editMandateLimits() {
+  const L = _mandateLimits();
+  const r = await showFormModal({
+    title: 'Edit guideline limits', icon: 'fa-scale-balanced', iconColor: 'var(--accent)',
+    description: 'Maximum % of fund for each check. Used to flag Watch / Breach on the Mandate page.',
+    fields: [
+      { name:'largest',  label:'Largest single holding (max %)', type:'number', value:L.largest,  min:0 },
+      { name:'top10',    label:'Top-10 concentration (max %)',   type:'number', value:L.top10,    min:0 },
+      { name:'offshore', label:'Offshore / non-NZD (max %)',     type:'number', value:L.offshore, min:0 },
+      { name:'equity',   label:'Equity allocation (max %)',      type:'number', value:L.equity,   min:0 }
+    ],
+    submitLabel: 'Save limits'
+  });
+  if (!r) return;
+  state.settings.mandateLimits = {
+    largest:  parseFloat(r.largest)  || _MANDATE_DEFAULTS.largest,
+    top10:    parseFloat(r.top10)    || _MANDATE_DEFAULTS.top10,
+    offshore: parseFloat(r.offshore) || _MANDATE_DEFAULTS.offshore,
+    equity:   parseFloat(r.equity)   || _MANDATE_DEFAULTS.equity
+  };
+  try { saveState(); } catch(e) {}
+  try { renderMandatePage(getMetrics()); } catch(e) {}
+  if (window.toast) toast.success('Mandate limits updated');
+}
+
 function renderMandatePage(metrics) {
   const el = document.getElementById('mandatePageBody'); if (!el) return;
   if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to run mandate checks.</div>'; return; }
   const tv = metrics.totalValue || 1;
+  const L = _mandateLimits();
   const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
   const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
   const largest = top[0];
@@ -5861,10 +5894,10 @@ function renderMandatePage(metrics) {
   const fm = _fundMetrics(metrics);
   const equityPct = (fm.mixPct.find(m => m[0] === 'Equity') || ['',0])[1];
   const checks = [
-    { label:'Largest single holding', value: largest ? largest.currentValue : 0, limit:5,  note: largest ? _fundLabel(largest) : '—' },
-    { label:'Top-10 concentration',   value: top10,            limit:50, note:'sum of 10 largest' },
-    { label:'Offshore (non-NZD)',     value: fm.offshorePct,   limit:60, note:'FX exposure' },
-    { label:'Equity allocation',      value: equityPct,        limit:75, note:'asset class' }
+    { label:'Largest single holding', value: largest ? largest.currentValue : 0, limit:L.largest,  note: largest ? _fundLabel(largest) : '—' },
+    { label:'Top-10 concentration',   value: top10,            limit:L.top10,    note:'sum of 10 largest' },
+    { label:'Offshore (non-NZD)',     value: fm.offshorePct,   limit:L.offshore, note:'FX exposure' },
+    { label:'Equity allocation',      value: equityPct,        limit:L.equity,   note:'asset class' }
   ];
   const row = (c) => {
     const breach = c.value > c.limit, watch = !breach && c.value > c.limit * 0.85;
@@ -5872,30 +5905,90 @@ function renderMandatePage(metrics) {
     const status = breach ? 'Breach' : watch ? 'Watch' : 'OK';
     return `<div class="table-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;align-items:center;"><div><div class="font-semibold text-sm">${_escape(c.label)}</div><div class="text-xs neutral">${_escape(c.note)}</div></div><div class="text-right mono">${fmt(c.value)}%</div><div class="text-right mono neutral">&le; ${c.limit}%</div><div class="text-right"><span style="color:${col};font-weight:600;font-size:12px;">${status}</span></div></div>`;
   };
+  const breaches = checks.filter(c => c.value > c.limit).length;
+  const watches  = checks.filter(c => c.value <= c.limit && c.value > c.limit * 0.85).length;
+  const summary = breaches ? `<span style="color:var(--color-red);font-weight:600;">${breaches} breach${breaches>1?'es':''}</span>`
+                : watches ? `<span style="color:var(--color-amber);font-weight:600;">${watches} on watch</span>`
+                : `<span style="color:var(--color-green);font-weight:600;">All within guidelines</span>`;
   el.innerHTML = `<div class="card">
+    <div class="flex items-center justify-between p-4" style="border-bottom:1px solid var(--border);">
+      <div class="text-sm">${summary}</div>
+      <button onclick="editMandateLimits()" class="btn btn-sm btn-secondary" title="Edit guideline limits"><i class="fas fa-sliders mr-1"></i>Edit limits</button>
+    </div>
     <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;"><span>Check</span><span class="text-right">Current</span><span class="text-right">Guideline</span><span class="text-right">Status</span></div>
     ${checks.map(row).join('')}
-    <div class="text-xs neutral p-3" style="border-top:1px solid var(--border);"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Guideline limits are illustrative defaults — editable limits are coming next. Educational only, not a compliance determination.</div>
+    <div class="text-xs neutral p-3" style="border-top:1px solid var(--border);"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Limits are editable per fund and saved to your account. Educational only — not a compliance determination.</div>
   </div>`;
+}
+
+// Disclosure history is kept in localStorage (reference data, not synced to the
+// portfolio blob): { [fundName]: [{ asAtISO, asAt, holdings:[{n,w,t}] }] }.
+function _saveDiscloseHistory(fundName, asAtISO, asAt, rows) {
+  if (!fundName || !asAtISO || !Array.isArray(rows)) return;
+  try {
+    const KEY = '_discloseHistory';
+    const all = JSON.parse(localStorage.getItem(KEY) || '{}');
+    const list = (all[fundName] || []).filter(p => p.asAtISO !== asAtISO);  // re-import replaces same period
+    list.push({ asAtISO, asAt, holdings: rows });
+    list.sort((a,b) => a.asAtISO < b.asAtISO ? -1 : 1);
+    all[fundName] = list.slice(-8);  // keep the last 8 periods
+    localStorage.setItem(KEY, JSON.stringify(all));
+  } catch(e) { console.warn('[disclose-history] save', e); }
+}
+function _getDiscloseHistory(fundName) {
+  try { return (JSON.parse(localStorage.getItem('_discloseHistory') || '{}'))[fundName] || []; }
+  catch(e) { return []; }
 }
 
 function renderDisclosurePage(metrics) {
   const el = document.getElementById('disclosurePageBody'); if (!el) return;
   if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to start a history.</div>'; return; }
+  const esc = _escape;
   const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const fundName = (fund && fund.name) || state.settings.name || 'Fund';
   const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
-  const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 8);
-  el.innerHTML = `<div class="card p-5 mb-4">
+  const topNow = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 8);
+  const hist = _getDiscloseHistory(fundName);
+
+  let html = `<div class="card p-5 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <div><div class="font-bold text-lg">${_escape((fund && fund.name) || 'Fund')}</div><div class="text-xs neutral">Current disclosure period</div></div>
-      <div class="text-right"><div class="mono font-bold" style="color:var(--accent);">${fund && fund.asAt ? _escape(fund.asAt) : '—'}</div><div class="text-xs neutral">${metrics.holdings.length} holdings</div></div>
+      <div><div class="font-bold text-lg">${esc(fundName)}</div><div class="text-xs neutral">Latest disclosure period</div></div>
+      <div class="text-right"><div class="mono font-bold" style="color:var(--accent);">${fund && fund.asAt ? esc(fund.asAt) : '—'}</div><div class="text-xs neutral">${metrics.holdings.length} holdings</div></div>
     </div>
     <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
       <div class="text-xs neutral uppercase font-semibold mb-2" style="letter-spacing:0.5px;">Top holdings this period</div>
-      ${top.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${_escape(_fundLabel(h))}</span><span class="mono neutral">${fmt(h.currentValue)}%</span></div>`).join('')}
+      ${topNow.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${esc(_fundLabel(h))}</span><span class="mono neutral">${fmt(h.currentValue)}%</span></div>`).join('')}
     </div>
-  </div>
-  <div class="card p-5 text-sm neutral"><i class="fas fa-circle-info mr-2" style="color:var(--accent);"></i>Import another period's disclosure (a different "as at" date) to unlock period-over-period comparison — new positions, exits and the biggest weight moves. That cross-period diff is the next step.</div>`;
+  </div>`;
+
+  if (hist.length < 2) {
+    html += `<div class="card p-5 text-sm neutral"><i class="fas fa-circle-info mr-2" style="color:var(--accent);"></i>Import another period's disclosure (a different "as at" date) to unlock period-over-period comparison — new positions, exits and the biggest weight moves.${hist.length === 1 ? ` <b>1 period on file: ${esc(hist[0].asAt)}.</b>` : ''}</div>`;
+  } else {
+    const latest = hist[hist.length - 1], prev = hist[hist.length - 2];
+    const isReal = (n) => !/^Other |hedges|overlay|\bIRS\b|forward|SELL .+:/i.test(n || '');
+    const mapOf = (p) => { const m = {}; (p.holdings||[]).forEach(h => { if (isReal(h.n)) m[h.n] = h.w; }); return m; };
+    const a = mapOf(prev), b = mapOf(latest);
+    const names = new Set([...Object.keys(a), ...Object.keys(b)]);
+    const entrants = [], exits = [], moves = [];
+    names.forEach(n => {
+      const wa = a[n], wb = b[n];
+      if (wa == null && wb != null) entrants.push({ n, w: wb });
+      else if (wb == null && wa != null) exits.push({ n, w: wa });
+      else if (wa != null && wb != null) { const d = wb - wa; if (Math.abs(d) >= 0.05) moves.push({ n, d }); }
+    });
+    entrants.sort((x,y) => y.w - x.w); exits.sort((x,y) => y.w - x.w); moves.sort((x,y) => Math.abs(y.d) - Math.abs(x.d));
+    const list = (rows, render) => rows.length ? rows.slice(0, 8).map(render).join('') : '<div class="text-xs neutral">None</div>';
+    html += `<div class="card p-5">
+      <div class="flex items-center justify-between mb-3"><div class="font-bold">Changes</div><div class="text-xs neutral">${esc(prev.asAt)} → ${esc(latest.asAt)}</div></div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div><div class="text-xs uppercase font-semibold mb-2" style="letter-spacing:.5px;color:var(--color-green);">New positions</div>${list(entrants, e => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">${esc(e.n)}</span><span class="mono" style="color:var(--color-green);">+${fmt(e.w)}%</span></div>`)}</div>
+        <div><div class="text-xs uppercase font-semibold mb-2" style="letter-spacing:.5px;color:var(--color-red);">Exited</div>${list(exits, e => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">${esc(e.n)}</span><span class="mono neutral">${fmt(e.w)}%</span></div>`)}</div>
+        <div><div class="text-xs uppercase font-semibold mb-2" style="letter-spacing:.5px;">Biggest moves</div>${list(moves, m => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%;">${esc(m.n)}</span><span class="mono" style="color:${m.d>=0?'var(--color-green)':'var(--color-red)'};">${m.d>=0?'+':''}${fmt(m.d)}%</span></div>`)}</div>
+      </div>
+      <div class="text-xs neutral mt-4" style="border-top:1px solid var(--border);padding-top:10px;"><i class="fas fa-clock-rotate-left mr-1" style="color:var(--accent);"></i>${hist.length} periods on file: ${hist.map(p => esc(p.asAt)).join(' · ')}</div>
+    </div>`;
+  }
+  el.innerHTML = html;
 }
 
 // ─── Portfolio switcher (multi-portfolio v0.21) ──────────────────────────
@@ -13944,8 +14037,9 @@ function applyEdition() {
     _rebuildSectionToGroup();
   }
   if (!feat.family) document.getElementById('familyInviteBanner')?.remove();
-  // Regenerate the sidebar from the (possibly restructured) NAV_GROUPS.
+  // Regenerate the sidebar + mobile tabs from the (possibly restructured) NAV_GROUPS.
   try { renderPrimaryNav(); } catch(e) { console.warn('[nav]', e); }
+  try { renderMobileTabs(); } catch(e) { console.warn('[mobtabs]', e); }
 }
 
 async function init() {
@@ -14176,6 +14270,20 @@ function renderPrimaryNav() {
     out.push(`<div class="nav-link${g.id === activeGroup ? ' active' : ''}" data-group="${g.id}"${idAttr ? ` id="${idAttr}"` : ''} onclick="showGroup('${g.id}',this)"${styleBits ? ` style="${styleBits}"` : ''}><i class="fas ${icon}"${color ? ` style="color:${color};"` : ''}></i> ${esc(g.label)}</div>`);
   });
   nav.innerHTML = out.join('');
+}
+
+// Mobile bottom tab bar — edition-aware so Harbour shows fund sections.
+function renderMobileTabs() {
+  const bar = document.getElementById('mobileTabBar'); if (!bar) return;
+  const esc = (typeof _escape === 'function') ? _escape : (s => s);
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  const tabs = harbour
+    ? [['overview','fa-gauge-high','Overview'],['holdings','fa-layer-group','Holdings'],['exposure','fa-chart-pie','Exposure'],['insights','fa-clipboard-check','Review']]
+    : [['overview','fa-gauge-high','Overview'],['holdings','fa-wallet','Portfolio'],['performance','fa-chart-line','Performance'],['insights','fa-brain','Intel']];
+  let html = tabs.map(([s,ic,lb],i) => `<div class="mob-tab${i===0?' active':''}" data-section="${s}" onclick="showSection('${s}',null)"><i class="fas ${ic}"></i><span>${esc(lb)}</span></div>`).join('');
+  html += `<div class="mob-tab" id="mobileAdminTab" data-section="admin" onclick="showSection('admin',null)" style="display:none;color:var(--color-amber);"><i class="fas fa-shield-alt"></i><span>Admin</span></div>`;
+  html += `<div class="mob-tab" onclick="openModal('addModal')" style="color:var(--accent);"><i class="fas fa-plus-circle"></i><span>Add</span></div>`;
+  bar.innerHTML = html;
 }
 
 // Open a group from the sidebar → show its remembered (or first) child.

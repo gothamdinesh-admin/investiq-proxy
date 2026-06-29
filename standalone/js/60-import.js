@@ -546,6 +546,11 @@ async function importDiscloseHoldings(text) {
   if (fundName) renamePortfolio(active.id, fundName);
   // Stamp fund metadata on the portfolio (drives the "as at" badge + weight view).
   active.fund = { name: fundName || active.name, asAt: asAt || '', asAtISO: asAtISO || '', importedRows: stats.rows };
+  // Record this period for the Disclosure History page (period-over-period diff).
+  if (typeof _saveDiscloseHistory === 'function') {
+    _saveDiscloseHistory(fundName || active.name, asAtISO, asAt,
+      holdings.map(h => ({ n: h.name, w: (h.lots && h.lots[0] ? h.lots[0].quantity : 0), t: h.type })));
+  }
 
   saveState();
   if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
