@@ -2297,6 +2297,31 @@
       </div>
     </div>
 
+    <!-- ═══ FUND PAGES (Harbour) — Exposure · Disclosure history · Mandate ═══ -->
+    <div id="section-exposure" style="display:none;">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-chart-pie" style="color:var(--accent);"></i> <span>Fund Exposure</span></h2>
+        <div class="text-xs neutral mt-1">How the fund's net assets break down by asset class, currency, region and overlay — % of fund.</div>
+      </div>
+      <div id="exposurePageBody"></div>
+    </div>
+
+    <div id="section-disclosure" style="display:none;">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-clock-rotate-left" style="color:var(--accent);"></i> <span>Disclosure History</span></h2>
+        <div class="text-xs neutral mt-1">Each imported disclosure period and how the holdings shift between them.</div>
+      </div>
+      <div id="disclosurePageBody"></div>
+    </div>
+
+    <div id="section-mandate" style="display:none;">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-scale-balanced" style="color:var(--accent);"></i> <span>Mandate &amp; Limits</span></h2>
+        <div class="text-xs neutral mt-1">Concentration, sector and FX exposure checked against guideline limits. Educational — not compliance advice.</div>
+      </div>
+      <div id="mandatePageBody"></div>
+    </div>
+
     <!-- PERFORMANCE SECTION -->
     <div id="section-performance" style="display:none;">
       <div class="mb-6">
@@ -5803,6 +5828,74 @@ function renderFundExposure(metrics) {
         <span class="mono" style="color:${h.overlayNet >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${h.overlayNet >= 0 ? '+' : ''}${fmt(h.overlayNet)}% of NAV</span>
       </div>`).join('')
     : '<div class="text-xs neutral">No derivative overlay disclosed.</div>';
+}
+
+// ── Fund pages (Harbour) — Exposure / Mandate / Disclosure history ───────
+function renderExposurePage(metrics) {
+  const el = document.getElementById('exposurePageBody'); if (!el) return;
+  if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to see its exposure.</div>'; return; }
+  const tv = metrics.totalValue || 1;
+  const booked = (metrics.holdings || []).filter(h => h.overlayNet == null);
+  const CLASS = { stock:'Equity', etf:'Equity', bond:'Fixed income', cash:'Cash', fund:'Alternatives', mutualfund:'Alternatives', other:'Other' };
+  const CLASS_COLOR = { 'Equity':'#005A79', 'Fixed income':'#3F8BA8', 'Alternatives':'#7FB0C4', 'Cash':'#BFC8CC', 'Overlay':'#44546A', 'Other':'#9FB3BD' };
+  const agg = (keyFn) => { const o = {}; booked.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k]||0) + (h.currentValue||0); }); return Object.entries(o).map(([k,v]) => ({ label:k, pct:v/tv*100 })).sort((a,b) => b.pct-a.pct); };
+  const bars = (rows, colorFn) => rows.length ? rows.map(r => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">${_escape(r.label)}</span><span class="mono neutral">${fmt(r.pct)}%</span></div><div style="height:8px;border-radius:4px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(r.pct,100).toFixed(1)}%;background:${(colorFn && colorFn(r)) || 'var(--accent)'};border-radius:4px;"></div></div></div>`).join('') : '<div class="text-xs neutral">—</div>';
+  const ov = (metrics.holdings || []).filter(h => h.overlayNet != null);
+  const panel = (title, inner) => `<div class="card p-5"><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">${title}</div>${inner}</div>`;
+  el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    ${panel('By asset class', bars(agg(h => CLASS[h.type] || 'Other'), r => CLASS_COLOR[r.label]))}
+    ${panel('By currency', bars(agg(h => h.nativeCurrency || h.currency || 'NZD')))}
+    ${panel('By region', bars(agg(h => h.country || 'Unlisted / cash')))}
+    ${panel('Derivative overlay', ov.length ? ov.map(h => `<div style="display:flex;justify-content:space-between;font-size:14px;padding:8px 0;border-bottom:1px solid var(--border);"><span>${_escape((h.name||'').split('·')[0].trim())}</span><span class="mono" style="color:${h.overlayNet>=0?'var(--color-green)':'var(--color-red)'};">${h.overlayNet>=0?'+':''}${fmt(h.overlayNet)}% of NAV</span></div>`).join('') : '<div class="text-xs neutral">No derivative overlay disclosed.</div>')}
+  </div>`;
+}
+
+function renderMandatePage(metrics) {
+  const el = document.getElementById('mandatePageBody'); if (!el) return;
+  if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to run mandate checks.</div>'; return; }
+  const tv = metrics.totalValue || 1;
+  const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
+  const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
+  const largest = top[0];
+  const top10 = top.slice(0,10).reduce((s,h) => s + (h.currentValue||0), 0) / tv * 100;
+  const fm = _fundMetrics(metrics);
+  const equityPct = (fm.mixPct.find(m => m[0] === 'Equity') || ['',0])[1];
+  const checks = [
+    { label:'Largest single holding', value: largest ? largest.currentValue : 0, limit:5,  note: largest ? _fundLabel(largest) : '—' },
+    { label:'Top-10 concentration',   value: top10,            limit:50, note:'sum of 10 largest' },
+    { label:'Offshore (non-NZD)',     value: fm.offshorePct,   limit:60, note:'FX exposure' },
+    { label:'Equity allocation',      value: equityPct,        limit:75, note:'asset class' }
+  ];
+  const row = (c) => {
+    const breach = c.value > c.limit, watch = !breach && c.value > c.limit * 0.85;
+    const col = breach ? 'var(--color-red)' : watch ? 'var(--color-amber)' : 'var(--color-green)';
+    const status = breach ? 'Breach' : watch ? 'Watch' : 'OK';
+    return `<div class="table-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;align-items:center;"><div><div class="font-semibold text-sm">${_escape(c.label)}</div><div class="text-xs neutral">${_escape(c.note)}</div></div><div class="text-right mono">${fmt(c.value)}%</div><div class="text-right mono neutral">&le; ${c.limit}%</div><div class="text-right"><span style="color:${col};font-weight:600;font-size:12px;">${status}</span></div></div>`;
+  };
+  el.innerHTML = `<div class="card">
+    <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;"><span>Check</span><span class="text-right">Current</span><span class="text-right">Guideline</span><span class="text-right">Status</span></div>
+    ${checks.map(row).join('')}
+    <div class="text-xs neutral p-3" style="border-top:1px solid var(--border);"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Guideline limits are illustrative defaults — editable limits are coming next. Educational only, not a compliance determination.</div>
+  </div>`;
+}
+
+function renderDisclosurePage(metrics) {
+  const el = document.getElementById('disclosurePageBody'); if (!el) return;
+  if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to start a history.</div>'; return; }
+  const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
+  const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 8);
+  el.innerHTML = `<div class="card p-5 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <div><div class="font-bold text-lg">${_escape((fund && fund.name) || 'Fund')}</div><div class="text-xs neutral">Current disclosure period</div></div>
+      <div class="text-right"><div class="mono font-bold" style="color:var(--accent);">${fund && fund.asAt ? _escape(fund.asAt) : '—'}</div><div class="text-xs neutral">${metrics.holdings.length} holdings</div></div>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;">
+      <div class="text-xs neutral uppercase font-semibold mb-2" style="letter-spacing:0.5px;">Top holdings this period</div>
+      ${top.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${_escape(_fundLabel(h))}</span><span class="mono neutral">${fmt(h.currentValue)}%</span></div>`).join('')}
+    </div>
+  </div>
+  <div class="card p-5 text-sm neutral"><i class="fas fa-circle-info mr-2" style="color:var(--accent);"></i>Import another period's disclosure (a different "as at" date) to unlock period-over-period comparison — new positions, exits and the biggest weight moves. That cross-period diff is the next step.</div>`;
 }
 
 // ─── Portfolio switcher (multi-portfolio v0.21) ──────────────────────────
@@ -10234,7 +10327,7 @@ async function clearAllData() {
 function _showSectionCore(name, el) {
   // CMS nav: a section hidden via Content Studio is unreachable — bounce to Overview.
   if (name !== 'overview' && typeof isCmsSectionHidden === 'function' && isCmsSectionHidden(name)) name = 'overview';
-  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms'].forEach(s => {
+  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms','exposure','disclosure','mandate'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -13823,22 +13916,36 @@ function applyEdition() {
   }
 
   const feat = ed.features || {};
-  // Family OFF → remove the nav link + invite banner so it's unreachable.
-  if (!feat.family) {
-    document.getElementById('familyNavLink')?.remove();
-    document.getElementById('familyInviteBanner')?.remove();
-  }
-  // Goals OFF → drop the Goals pill from the Planning group.
   if (typeof NAV_GROUPS !== 'undefined') {
-    if (!feat.goals) {
-      const plan = NAV_GROUPS.find(g => g.id === 'planning');
-      if (plan) plan.children = plan.children.filter(c => c !== 'goals');
+    if (ed.id === 'harbour') {
+      // Fund-native navigation (a holdings disclosure isn't a personal book).
+      NAV_GROUPS.length = 0;
+      NAV_GROUPS.push(
+        { id:'overview', label:'Overview', children:['overview'] },
+        { id:'fund',     label:'Fund',     children:['holdings','exposure','disclosure'] },
+        { id:'risk',     label:'Risk',     children:['mandate','insights'] },
+        { id:'market',   label:'Market',   children:['market','news','askiq'] },
+        { id:'reports',  label:'Reports',  children:['reports'] },
+        { id:'admin',    label:'Admin',    children:['admin'] }
+      );
+      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Mandate & Limits' });
+      Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', insights:'fa-clipboard-check' });
+    } else {
+      // Personal edition — drop Goals / Family per feature flags.
+      if (!feat.goals) {
+        const plan = NAV_GROUPS.find(g => g.id === 'planning');
+        if (plan) plan.children = plan.children.filter(c => c !== 'goals');
+      }
+      if (!feat.family) {
+        const i = NAV_GROUPS.findIndex(g => g.id === 'family');
+        if (i >= 0) NAV_GROUPS.splice(i, 1);
+      }
     }
-    if (!feat.family) {
-      const i = NAV_GROUPS.findIndex(g => g.id === 'family');
-      if (i >= 0) NAV_GROUPS.splice(i, 1);
-    }
+    _rebuildSectionToGroup();
   }
+  if (!feat.family) document.getElementById('familyInviteBanner')?.remove();
+  // Regenerate the sidebar from the (possibly restructured) NAV_GROUPS.
+  try { renderPrimaryNav(); } catch(e) { console.warn('[nav]', e); }
 }
 
 async function init() {
@@ -14035,6 +14142,42 @@ const _groupLastChild = {};
 function _groupOf(section)  { return _SECTION_TO_GROUP[section] || section; }
 function _groupDef(groupId) { return NAV_GROUPS.find(g => g.id === groupId); }
 
+// Sidebar is generated from NAV_GROUPS so an edition restructure (e.g. the
+// Harbour fund nav) + role-gating + CMS toggles all flow from one source.
+const NAV_GROUP_ICONS = {
+  overview:'fa-gauge-high', portfolio:'fa-wallet', fund:'fa-layer-group',
+  intelligence:'fa-brain', risk:'fa-shield-halved', planning:'fa-compass',
+  market:'fa-globe', watchlist:'fa-eye', trader:'fa-arrow-trend-up',
+  reports:'fa-file-pdf', family:'fa-users', admin:'fa-shield-alt'
+};
+const _NAV_SPECIAL = { family:{ id:'familyNavLink', color:'var(--color-teal)', hidden:true }, admin:{ id:'adminNavLink', color:'var(--color-amber)', hidden:true } };
+const _NAV_LEGACY_ID = { intelligence:'navLinkInsights', planning:'navLinkGoals', trader:'navLinkTrader' };
+const _NAV_COLOR = { trader:'var(--accent)' };
+function _rebuildSectionToGroup() {
+  Object.keys(_SECTION_TO_GROUP).forEach(k => delete _SECTION_TO_GROUP[k]);
+  NAV_GROUPS.forEach(g => g.children.forEach(c => { _SECTION_TO_GROUP[c] = g.id; }));
+}
+function renderPrimaryNav() {
+  const nav = document.getElementById('primaryNav');
+  if (!nav) return;
+  const activeGroup = (typeof currentSection !== 'undefined') ? _groupOf(currentSection) : 'overview';
+  const esc = (typeof _escape === 'function') ? _escape : (s => s);
+  const out = [];
+  NAV_GROUPS.forEach(g => {
+    if (g.id === 'admin') {
+      // "My Account" sits just above Admin (no group; opens Settings).
+      out.push(`<div class="nav-link" id="accountNavLink" onclick="openModal('settingsModal')" style="display:none;border-top:1px solid var(--border);margin-top:8px;padding-top:8px;"><i class="fas fa-user-circle"></i> My Account</div>`);
+    }
+    const sp = _NAV_SPECIAL[g.id];
+    const idAttr = sp ? sp.id : (_NAV_LEGACY_ID[g.id] || '');
+    const icon = NAV_GROUP_ICONS[g.id] || 'fa-circle';
+    const color = (sp && sp.color) || _NAV_COLOR[g.id] || '';
+    const styleBits = (sp && sp.hidden ? 'display:none;' : '') + (color ? `color:${color};` : '');
+    out.push(`<div class="nav-link${g.id === activeGroup ? ' active' : ''}" data-group="${g.id}"${idAttr ? ` id="${idAttr}"` : ''} onclick="showGroup('${g.id}',this)"${styleBits ? ` style="${styleBits}"` : ''}><i class="fas ${icon}"${color ? ` style="color:${color};"` : ''}></i> ${esc(g.label)}</div>`);
+  });
+  nav.innerHTML = out.join('');
+}
+
 // Open a group from the sidebar → show its remembered (or first) child.
 function showGroup(groupId, el) {
   const g = _groupDef(groupId);
@@ -14108,6 +14251,9 @@ function showSection(name, el) {
     if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
     try { renderReportPreview(); } catch(e) { console.warn('[reports]', e); }
   }
+  if (name === 'exposure')   { try { renderExposurePage(getMetrics()); } catch(e) { console.warn('[exposure]', e); } }
+  if (name === 'mandate')    { try { renderMandatePage(getMetrics()); } catch(e) { console.warn('[mandate]', e); } }
+  if (name === 'disclosure') { try { renderDisclosurePage(getMetrics()); } catch(e) { console.warn('[disclosure]', e); } }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
     // network call. Replaced by renderTraderIQ() once the cache loads.
