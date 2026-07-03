@@ -81,9 +81,12 @@ function renderInsightsSection(results) {
       <div class="text-2xl font-bold mt-1" style="color:${color};line-height:1.1;">${value}</div>
       <div class="text-xs neutral mt-1">${sub}</div>
     </button>`;
+  // Harbour: the fund agents produce a composition-quality read, not a
+  // personal "health" score — label it accordingly.
+  const scoreTileLabel = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour') ? 'Composition Score' : 'Portfolio Health';
   const kpiStrip = `
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-      ${kpiTile('Portfolio Health',  score != null ? score + '/100' : '–', scoreLabel,                            scoreColor, 'fa-heartbeat',    'agent-report-portfolio')}
+      ${kpiTile(scoreTileLabel,      score != null ? score + '/100' : '–', scoreLabel,                            scoreColor, 'fa-heartbeat',    'agent-report-portfolio')}
       ${kpiTile('Risk Level',        riskLevel,                              'Auto-classified by Risk Watcher',   riskColor,  riskIcon,          'agent-report-risk')}
       ${kpiTile('Market Sentiment',  sentiment,                              'Across your holdings today',        sentColor,  sentIcon,          'agent-report-market')}
       ${kpiTile('Opportunities',     oppCount || '–',                        oppCount ? 'Ideas found by Scout' : 'No gaps flagged', 'var(--color-violet)', 'fa-lightbulb', 'agent-report-opportunity')}

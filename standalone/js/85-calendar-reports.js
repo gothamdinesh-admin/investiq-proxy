@@ -197,6 +197,133 @@ async function renderCalendarSection() {
 // needed, keeps the bundle lean. Browser's "Save as PDF" creates the file.
 // ─────────────────────────────────────────────────────────────────────────
 
+// ── Harbour Fund Report (weight-based fund books) ────────────────────────
+// Modelled on Harbour's official monthly fund report PDF (Reporting_*.pdf):
+// headline stat strip → top-10 holdings → investment mix → monthly returns →
+// fund profile / risk indicator → footer. Built entirely from connected data:
+// Disclose weights + feed (NAV/unit/returns) + Disclose meta (monthly/profile).
+function _harbourFundReportHtml(metrics, asOf) {
+  const esc = _escape, HB = '#005A79', SLATE = '#44546A';
+  const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const fundName = (fund && fund.name) || (typeof getActivePortfolio === 'function' ? getActivePortfolio().name : 'Fund');
+  const fd = (typeof getFundMarketData === 'function') ? getFundMarketData(fundName) : null;
+  const dm = (typeof getFundDiscloseMeta === 'function') ? getFundDiscloseMeta(fundName) : null;
+  const det = (dm && dm.details) || {};
+  const generated = new Date().toLocaleString('en-NZ');
+  const tv = metrics.totalValue || 1;
+  const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
+  const top10 = [...real].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0)).slice(0, 10);
+
+  const pct = (v, signed) => v == null ? '—' : `${signed && v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  const statCell = (label, value, sub) => `
+    <div style="padding:12px;border-left:3px solid ${HB};background:#F1F5F9;border-radius:4px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#64748B;font-weight:600;">${label}</div>
+      <div style="font-size:20px;font-weight:700;color:#0B1220;margin-top:4px;">${value}</div>
+      <div style="font-size:10px;color:#64748B;margin-top:2px;">${sub || ''}</div>
+    </div>`;
+  const secTitle = (t) => `<div style="font-size:14px;font-weight:800;color:${HB};margin:22px 0 10px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #E2E8F0;padding-bottom:6px;">${t}</div>`;
+
+  // Header
+  let html = `
+    <div style="border-bottom:3px solid ${HB};padding-bottom:16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:${HB};letter-spacing:1px;text-transform:uppercase;">Harbour IQ · Fund Report</div>
+          <div style="font-size:22px;font-weight:800;color:#0B1220;margin-top:2px;">${esc(fundName)}</div>
+          <div style="font-size:12px;color:#475569;margin-top:2px;">Holdings as at ${esc((fund && fund.asAt) || asOf)}${fd && fd.date ? ` · priced ${esc(fd.date)}` : ''}</div>
+        </div>
+        <div style="font-size:11px;color:#64748B;text-align:right;">
+          <div>Generated ${esc(generated)}</div>
+          <div style="margin-top:2px;">${esc(cms('report.footer'))}</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Headline stat strip (like the PDF's 1m / 1yr / size / inception row)
+  const fmtNav = (n) => n == null ? '—' : 'NZ$' + (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Math.round(n / 1e3).toLocaleString() + 'k');
+  html += `<div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:8px;">
+    ${statCell('1 month performance', pct(fd && fd.returns ? fd.returns['1m'] : (dm && dm.monthly && dm.monthly.length ? dm.monthly[dm.monthly.length - 1].pct : null), true), 'gross, before fees & tax')}
+    ${statCell('1 year performance', pct(fd && fd.returns ? fd.returns['1yr'] : null, true), fd && fd.bmark && fd.bmark['1yr'] != null ? `benchmark ${pct(fd.bmark['1yr'], true)}` : 'gross, before fees & tax')}
+    ${statCell('Fund size', fmtNav((fd && fd.nav) != null ? fd.nav : det.fundValue), det.classification ? esc(det.classification) : 'NZD')}
+    ${statCell('Unit price', fd && fd.price != null ? fd.price.toFixed(4) : '—', fd && fd.dailyPct != null ? `${pct(fd.dailyPct, true)} on the day` : '')}
+  </div>`;
+
+  // Top 10 holdings (PDF page 2)
+  html += secTitle('Top 10 holdings');
+  html += `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:#F1F5F9;">
+      <th style="text-align:left;padding:7px 10px;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Holding</th>
+      <th style="text-align:right;padding:7px 10px;color:#64748B;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Position</th>
+    </tr></thead><tbody>
+    ${top10.map((h, i) => `<tr style="border-bottom:1px solid #E2E8F0;${i % 2 ? 'background:#FAFBFC;' : ''}">
+      <td style="padding:6px 10px;color:#0B1220;">${esc(h.name || h.symbol)}</td>
+      <td style="padding:6px 10px;text-align:right;font-weight:600;color:${HB};">${fmt(h.currentValue)}%</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <div style="font-size:10px;color:#64748B;margin-top:4px;">Top 10 total: ${fmt(top10.reduce((s, h) => s + (h.currentValue || 0), 0))}% of fund net assets · ${real.length} named positions disclosed</div>`;
+
+  // Investment mix (asset class) + currency (named holdings)
+  const CLASS = { stock: 'Equity', etf: 'Equity', bond: 'Fixed income', cash: 'Cash', fund: 'Alternatives', mutualfund: 'Alternatives', other: 'Other' };
+  const agg = (rows, keyFn) => { const t = rows.reduce((s, h) => s + (h.currentValue || 0), 0) || 1; const o = {}; rows.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k] || 0) + (h.currentValue || 0); }); return Object.entries(o).map(([k, v]) => [k, v / t * 100]).sort((a, b) => b[1] - a[1]); };
+  const booked = metrics.holdings.filter(h => h.overlayNet == null);
+  const barRow = ([k, v]) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+      <div style="width:130px;font-size:11px;color:#0B1220;">${esc(k)}</div>
+      <div style="flex:1;height:10px;background:#E2E8F0;border-radius:5px;overflow:hidden;"><div style="height:100%;width:${Math.min(v, 100).toFixed(1)}%;background:${HB};"></div></div>
+      <div style="width:52px;text-align:right;font-size:11px;font-weight:600;color:${SLATE};">${v.toFixed(2)}%</div>
+    </div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div>${secTitle('Investment mix')}${agg(booked, h => CLASS[h.type] || 'Other').map(barRow).join('')}</div>
+    <div>${secTitle('Currency exposure')}${agg(real, h => h.nativeCurrency || h.currency || 'NZD').slice(0, 6).map(barRow).join('')}
+      <div style="font-size:10px;color:#64748B;">% of named holdings</div></div>
+  </div>`;
+
+  // Monthly fund returns (from the Disclose FUND RETURNS file)
+  if (dm && dm.monthly && dm.monthly.length) {
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    html += secTitle('Monthly fund returns');
+    html += `<table style="width:100%;border-collapse:collapse;font-size:12px;"><tbody><tr>
+      ${dm.monthly.slice(-6).map(r => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(r.d); const lbl = m ? `${MON[(+m[2]) - 1]} ${m[3].slice(2)}` : r.d; return `
+        <td style="text-align:center;padding:8px;border:1px solid #E2E8F0;">
+          <div style="font-size:10px;color:#64748B;">${lbl}</div>
+          <div style="font-weight:700;color:${r.pct >= 0 ? '#0F766E' : '#B91C1C'};">${r.pct >= 0 ? '+' : ''}${r.pct.toFixed(2)}%</div>
+        </td>`; }).join('')}
+    </tr></tbody></table>`;
+  }
+
+  // Fund profile + risk indicator (from GENERAL FUND DETAILS)
+  if (det.classification || det.risk || det.description) {
+    html += secTitle('Fund profile');
+    if (det.risk) {
+      html += `<div style="display:flex;gap:4px;align-items:center;margin-bottom:10px;">
+        <span style="font-size:11px;color:#64748B;margin-right:6px;">Risk indicator</span>
+        ${[1, 2, 3, 4, 5, 6, 7].map(n => `<div style="width:24px;height:24px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;${n === det.risk ? `background:${HB};color:#fff;` : 'background:#F1F5F9;color:#94A3B8;'}">${n}</div>`).join('')}
+        <span style="font-size:10px;color:#64748B;margin-left:6px;">1 = lower risk · 7 = higher risk</span>
+      </div>`;
+    }
+    if (det.description) html += `<div style="font-size:12px;color:#334155;line-height:1.6;">${esc(det.description)}</div>`;
+    if (det.started) html += `<div style="font-size:11px;color:#64748B;margin-top:6px;">Fund started ${esc(det.started)}</div>`;
+  }
+
+  // AI review (if the agents have been run on THIS fund book)
+  const ar = state.agentResults;
+  if (ar && ar.advisor && ar.portfolioId === state.activePortfolioId) {
+    const line = (ar.advisor.match(/\[(?:Critical|High|Medium)\][^\n]+/g) || []).slice(0, 3);
+    if (line.length) {
+      html += secTitle('AI review highlights');
+      html += `<ul style="font-size:12px;color:#334155;line-height:1.7;margin:0;padding-left:18px;">${line.map(l => `<li>${esc(l.replace(/\s+/g, ' ').trim())}</li>`).join('')}</ul>
+        <div style="font-size:10px;color:#64748B;margin-top:4px;">Generated by Harbour IQ AI agents — internal analytical support, not investment advice.</div>`;
+    }
+  }
+
+  // Footer
+  html += `<div style="border-top:1px solid #E2E8F0;margin-top:24px;padding-top:10px;font-size:10px;color:#64748B;line-height:1.6;">
+    Data sources: NZ Disclose Register full portfolio holdings${fd ? ' · Harbour unit-price feed' : ''}${dm && dm.monthly ? ' · Disclose fund returns' : ''}.
+    Weights are % of fund net assets as at the disclosure date. ${esc(cms('report.dataSource'))}
+    This report is generated by Harbour IQ for internal analytical use — it is not an offer document, fund update under the FMC Act, or investment advice.
+  </div>`;
+  return html;
+}
+
 function renderReportPreview() {
   const wrap = document.getElementById('reportPreview');
   if (!wrap) return;
@@ -205,6 +332,17 @@ function renderReportPreview() {
   const scope  = document.getElementById('reportScope')?.value || 'all';
   const metrics = (typeof getMetrics === 'function') ? getMetrics() : null;
   if (!metrics) { wrap.innerHTML = '<div class="text-center py-10">Portfolio data not loaded yet.</div>'; return; }
+
+  // Weight-based fund book → the Harbour fund report (modelled on the official
+  // monthly PDF: headline stats, top-10, mix, monthly returns, profile). The
+  // personal $-based templates are meaningless for a fund, whatever "type" says.
+  const _repSub = document.getElementById('reportsSubtitle');
+  if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
+    if (_repSub) _repSub.textContent = 'Printable Harbour fund report — headline stats, top-10 holdings, mix, monthly returns and fund profile from the connected data. PDF-ready via Print.';
+    wrap.innerHTML = _harbourFundReportHtml(metrics, asOf);
+    return;
+  }
+  if (_repSub) _repSub.textContent = 'Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.';
 
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
   const userName = state.settings.name || _userProfile?.display_name || _supaUser?.email || 'Investor';
