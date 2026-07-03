@@ -8034,7 +8034,8 @@ Total under 220 words. Be specific. No generic advice. No disclaimers.`;
     // Inject a one-shot 'analyse' agent definition
     AGENT_DEFS.analyse = {
       label:    'Holding Analyse',
-      model:    'claude-sonnet-4-5',
+      // v0.56 — sonnet-4-5 → sonnet-4-6 (same $3/$15 price, current generation)
+      model:    'claude-sonnet-4-6',
       modelOpenAI: 'local-model',
       maxTokens: 600,
       system:   'You are a senior equity analyst writing a per-holding review for a NZ-based retail investor. Focused, specific, non-generic. Reference the actual ticker. No regulatory disclaimers — the app surfaces them separately.'

@@ -70,7 +70,7 @@ If I add a new credential-like field, **add it to this array**.
 If I touch `AGENT_DEFS` or any agent prompt, confirm:
 - Portfolio Health still starts with `Health Score: X/100` (regex `/Health Score:\s*(\d+)/i`)
 - Word-limits on each agent still match what's in `docs/GUARDRAILS.md`
-- Model IDs are still valid (`claude-haiku-4-5`, `claude-sonnet-4-5`, `claude-opus-4-5`)
+- Model IDs are still valid (`claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-8`)
 - `max_tokens` caps unchanged unless deliberately updated
 
 ## 🔍 7. UI regressions — render every section

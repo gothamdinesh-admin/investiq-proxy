@@ -365,7 +365,9 @@ Then 3-4 bullet observations referencing specific tickers and weights. Under 220
   },
   advisor: {
     label: '💼 Senior Advisor',
-    model: 'claude-opus-4-5',
+    // v0.56 — upgraded from opus-4-5 (two generations old) to opus-4-8.
+    // Same per-token price ($5/$25 per MTok), meaningfully better synthesis.
+    model: 'claude-opus-4-8',
     modelOpenAI: 'local-model',
     maxTokens: 1200,
     system: `You are a senior personal financial advisor. Your specialist team has produced:

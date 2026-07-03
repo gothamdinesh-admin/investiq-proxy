@@ -8,9 +8,11 @@ _Which Claude model to use for which job, and why._
 
 | Tier | Model | Speed | Cost (rel.) | When to reach for it |
 |---|---|---|---|---|
-| **Fast** | `claude-haiku-4-5` | ~1-2s | 1× | Structured data crunching, classification, formatting, extraction, validation |
-| **Balanced** | `claude-sonnet-4-5` | ~3-6s | ~5× | Market analysis, reasoning with domain knowledge, balanced creativity |
-| **Premium** | `claude-opus-4-5` | ~8-15s | ~25× | Strategic synthesis, multi-source reasoning, final recommendations |
+| **Fast** | `claude-haiku-4-5` | ~1-2s | 1× ($1/$5 per MTok) | Structured data crunching, classification, formatting, extraction, validation |
+| **Balanced** | `claude-sonnet-4-6` | ~3-6s | ~3× ($3/$15 per MTok) | Market analysis, reasoning with domain knowledge, balanced creativity |
+| **Premium** | `claude-opus-4-8` | ~8-15s | ~5× ($5/$25 per MTok) | Strategic synthesis, multi-source reasoning, final recommendations |
+
+_Updated 2026-07 (v0.56): sonnet-4-5 → sonnet-4-6 and opus-4-5 → opus-4-8. Both are same-price generation upgrades (the old ids remain active if a rollback is ever needed). Haiku 4.5 is still the current fast tier._
 
 Always start with the cheapest tier that can do the job. Move up only when quality demonstrably matters.
 
@@ -96,7 +98,7 @@ AI is for **judgment and language**, not maths. Never ask Claude to compute a nu
 
 ## 6. Model version policy
 
-- Always pin exact model IDs (`claude-sonnet-4-5`, not `claude-sonnet-latest`).
+- Always pin exact model IDs (`claude-sonnet-4-6`, not `claude-sonnet-latest`).
 - When Anthropic releases a new version, update the pins in `AGENT_DEFS` after testing on the user's real portfolio.
 - Keep `max_tokens` fixed per agent — cost regressions are the biggest risk when upgrading.
 
@@ -105,9 +107,11 @@ AI is for **judgment and language**, not maths. Never ask Claude to compute a nu
 ## 7. Quick reference snippet
 
 ```js
-// In AGENT_DEFS — current production mapping
-portfolio:   { model: 'claude-haiku-4-5',  maxTokens:  800 }   // fast scorer
-market:      { model: 'claude-sonnet-4-5', maxTokens:  800 }   // macro reasoning
-opportunity: { model: 'claude-sonnet-4-5', maxTokens:  800 }   // gap analysis
-advisor:     { model: 'claude-opus-4-5',   maxTokens: 1200 }   // synthesis
+// In AGENT_DEFS — current production mapping (v0.56)
+portfolio:   { model: 'claude-haiku-4-5', maxTokens:  800 }   // fast scorer
+market:      { model: 'claude-haiku-4-5', maxTokens:  800 }   // demoted from sonnet — escapes the 10k input-tokens/min cap on big books
+opportunity: { model: 'claude-haiku-4-5', maxTokens:  800 }   // same rate-limit demotion
+risk:        { model: 'claude-haiku-4-5', maxTokens:  800 }   // risk watcher
+advisor:     { model: 'claude-opus-4-8',  maxTokens: 1200 }   // synthesis (upgraded from opus-4-5)
+analyse:     { model: 'claude-sonnet-4-6', maxTokens: 600 }   // per-holding review (one-shot, injected)
 ```

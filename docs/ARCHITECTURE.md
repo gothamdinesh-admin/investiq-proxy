@@ -45,8 +45,8 @@ Last updated: 2026-05-16 · v0.7a-family-foundation
 │   (free 100  │         │   (pay-per-use) │         │  + 8 RSS sources │
 │    /day)     │         │                 │         │  (free)          │
 │ Transactional│         │ claude-haiku-4-5│         │ RNZ, Stuff, BBC, │
-│ email send   │         │ claude-sonnet-..│         │ MarketWatch,     │
-│              │         │ claude-opus-4-5 │         │ CNBC, etc.       │
+│ email send   │         │ claude-sonnet-4-6│         │ MarketWatch,     │
+│              │         │ claude-opus-4-8 │         │ CNBC, etc.       │
 └──────────────┘         └─────────────────┘         └──────────────────┘
                                                               ▲
                                                               │

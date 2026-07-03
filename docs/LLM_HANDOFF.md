@@ -664,11 +664,11 @@ const CRYPTO_ALIAS = {
 | Agent | Model | Why |
 |---|---|---|
 | 📊 Portfolio Health | `claude-haiku-4-5` | Pure data analysis, structured score output |
-| 🌍 Market Impact | `claude-sonnet-4-5` | Needs real-world market knowledge + reasoning |
-| 🔭 Opportunity Scout | `claude-sonnet-4-5` | Creative gap analysis with named tickers |
-| 💼 Senior Advisor | `claude-opus-4-5` | Synthesises all 3 + portfolio data into action plan |
+| 🌍 Market Impact | `claude-haiku-4-5` | Demoted from Sonnet to escape the 10k input-tokens/min cap on large books |
+| 🔭 Opportunity Scout | `claude-haiku-4-5` | Creative gap analysis with named tickers (same rate-limit demotion) |
+| 💼 Senior Advisor | `claude-opus-4-8` | Synthesises all 3 + portfolio data into action plan (upgraded v0.56, same $5/$25 price) |
 
-**Pattern: 3× fan-out (Haiku + 2× Sonnet) in parallel → 1× Opus synthesis.** Wall time ≈ 10-20s.
+**Pattern: sequential Haiku fan-out → 1× Opus 4.8 synthesis.** Wall time ≈ 25-40s (sequential to stay inside rate limits).
 
 System prompts live in `AGENT_DEFS` constant (~line 4400). Output contracts:
 - Portfolio Health MUST start with `Health Score: X/100` (parsed by regex `/Health Score:\s*(\d+)/i`)
