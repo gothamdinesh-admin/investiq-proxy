@@ -2122,11 +2122,11 @@
             <div>
               <div class="section-title" style="margin:0;">
                 <i class="fas fa-chart-area" style="color:var(--color-green);"></i>
-                <span data-cms="chart.perfTitle">Performance</span>
+                <span data-cms="chart.perfTitle" id="perfTitle">Performance</span>
               </div>
-              <div class="text-xs neutral mt-1">Your top 6 winners and 6 losers by the active metric.</div>
+              <div class="text-xs neutral mt-1" id="perfSubtitle">Your top 6 winners and 6 losers by the active metric.</div>
             </div>
-            <div class="flex gap-2">
+            <div class="flex gap-2" id="perfToggle">
               <span class="tab active text-xs" onclick="switchPerfTab(this,'value')">Value</span>
               <span class="tab text-xs" onclick="switchPerfTab(this,'return')">Return %</span>
             </div>
@@ -6914,6 +6914,49 @@ function renderPerfChart(metrics) {
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
   if (charts.perf) charts.perf.destroy();
   if (!metrics.holdings.length) return;
+
+  const _perfSub = document.getElementById('perfSubtitle');
+  const _perfTog = document.getElementById('perfToggle');
+
+  // ── Fund weight books: winners/losers by return is meaningless (no prices,
+  // zero gains) — the card rendered blank. Show TOP HOLDINGS BY WEIGHT instead.
+  const _perfTitle = document.getElementById('perfTitle');
+  if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
+    if (_perfTog) _perfTog.style.display = 'none';
+    if (_perfTitle) _perfTitle.textContent = 'Position sizes';
+    if (_perfSub) _perfSub.textContent = 'The fund’s largest disclosed positions by weight.';
+    const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
+    const top = [...real].sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0)).slice(0, 10);
+    if (!top.length) return;
+    const style = getComputedStyle(document.documentElement);
+    const gridColor = style.getPropertyValue('--chart-grid').trim() || 'rgba(30,45,74,0.4)';
+    const tickColor = style.getPropertyValue('--chart-text').trim() || '#7a9cc0';
+    const accent    = style.getPropertyValue('--accent').trim() || '#005A79';
+    const ctxF = document.getElementById('perfChart').getContext('2d');
+    charts.perf = new Chart(ctxF, {
+      type: 'bar',
+      data: {
+        labels: top.map(h => (h.name || h.symbol)),
+        datasets: [{ data: top.map(h => h.currentValue || 0), backgroundColor: accent, borderRadius: 4, maxBarThickness: 22 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => ` ${fmt(c.parsed.x)}% of fund` } }
+        },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: (v) => v + '%' } },
+          y: { grid: { display: false }, ticks: { color: tickColor, font: { size: 11 }, autoSkip: false } }
+        }
+      }
+    });
+    return;
+  }
+  // Non-fund books: restore the winners/losers UI.
+  if (_perfTog) _perfTog.style.display = '';
+  if (_perfTitle) _perfTitle.textContent = 'Performance';
+  if (_perfSub) _perfSub.textContent = 'Your top 6 winners and 6 losers by the active metric.';
 
   // v0.12.3 — Top winners + top losers, with truncated labels so long
   // names like 'HARBOUR GROWTH FUND' don't overlap on the x-axis.
