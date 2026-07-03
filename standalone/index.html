@@ -11955,7 +11955,19 @@ let _newsCacheTime = 0;
 
 function getNewsScopeSymbols() {
   const scope = document.getElementById('newsScopeFilter')?.value || 'all';
-  const portfolioSymbols = state.portfolio.filter(h => !h.ignored).map(h => h.symbol);
+  // Weight-based fund book: sending all ~221 asset NAMES (incl. bond lines,
+  // "OTHER-*" tail rows, FX forwards, IRS legs) makes a huge junk query that
+  // can't return news. Use the top 25 real EQUITY/FUND names by weight only.
+  let portfolioSymbols;
+  if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
+    portfolioSymbols = state.portfolio
+      .filter(h => !h.ignored && !_isSyntheticFundRow(h) && (h.type === 'stock' || h.type === 'etf' || h.type === 'fund'))
+      .sort((a, b) => ((b.lots?.[0]?.quantity) || 0) - ((a.lots?.[0]?.quantity) || 0))
+      .slice(0, 25)
+      .map(h => h.name || h.symbol);
+  } else {
+    portfolioSymbols = state.portfolio.filter(h => !h.ignored).map(h => h.symbol);
+  }
   const watchlistSymbols = (state.settings.watchlist || []).map(w => w.symbol);
   if (scope === 'portfolio') return portfolioSymbols;
   if (scope === 'watchlist') return watchlistSymbols;
