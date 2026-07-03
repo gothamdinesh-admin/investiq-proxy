@@ -139,6 +139,80 @@ function isDiscloseFormat(text) {
   return /disclose register/i.test(text)
       || /^\s*asset name\s*,\s*% of fund net assets/im.test(text);
 }
+// Disclose comes in three flavours — route by the header line.
+function discloseKind(text) {
+  const head = text.slice(0, 200).toUpperCase();
+  if (head.includes('FUND RETURNS'))         return 'returns';
+  if (head.includes('GENERAL FUND DETAILS')) return 'details';
+  return 'holdings';
+}
+
+// ── Disclose fund metadata store (monthly returns + fund profile) ────────
+// localStorage: { [normName]: { name, asAt, monthly:[{d,pct}], details:{...} } }
+const _FUND_META_KEY = '_fundDiscloseMeta';
+function _loadFundMeta()  { try { return JSON.parse(localStorage.getItem(_FUND_META_KEY) || '{}'); } catch(e) { return {}; } }
+function _saveFundMeta(d) { try { localStorage.setItem(_FUND_META_KEY, JSON.stringify(d)); } catch(e) {} }
+function getFundDiscloseMeta(fundName) {
+  if (!fundName) return null;
+  return _loadFundMeta()[_normFundName(fundName)] || null;
+}
+function _discloseHeaderInfo(lines) {
+  let fundName = '', asAt = '';
+  for (const l of lines.slice(0, 6)) {
+    if (/^fund name\s*,/i.test(l)) fundName = (parseCSVLine(l)[1] || '').trim();
+    if (/^"?period disclosure applies/i.test(l)) {
+      const c = parseCSVLine(l);
+      asAt = (c[1] || '').trim();
+    }
+  }
+  return { fundName, asAt };
+}
+
+// DISCLOSE REGISTER - FUND RETURNS → monthly fund-return % series.
+function importDiscloseReturns(text) {
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  const { fundName, asAt } = _discloseHeaderInfo(lines);
+  if (!fundName) return { ok: false };
+  const monthly = [];
+  for (const l of lines) {
+    const c = parseCSVLine(l);
+    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test((c[0] || '').trim())) {
+      const pct = parseFloat(String(c[1] || '').replace('%', ''));
+      if (!isNaN(pct)) monthly.push({ d: c[0].trim(), pct });
+    }
+  }
+  if (!monthly.length) return { ok: false, fundName };
+  const meta = _loadFundMeta();
+  const key = _normFundName(fundName);
+  meta[key] = { ...(meta[key] || {}), name: fundName, asAt, monthly };
+  _saveFundMeta(meta);
+  return { ok: true, fundName, months: monthly.length };
+}
+
+// DISCLOSE REGISTER - GENERAL FUND DETAILS → classification / risk / profile.
+function importDiscloseDetails(text) {
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  const { fundName, asAt } = _discloseHeaderInfo(lines);
+  if (!fundName) return { ok: false };
+  const details = {};
+  for (const l of lines) {
+    const c = parseCSVLine(l);
+    const label = (c[0] || '').trim().toLowerCase();
+    const val = (c[1] || '').trim();
+    if (label === 'fund classification')            details.classification = val;
+    else if (label === 'risk indicator')            details.risk = parseInt(val, 10) || null;
+    else if (label === 'fund description')          details.description = val;
+    else if (label.startsWith('total value of fund')) details.fundValue = parseFloat(val.replace(/[",\s]/g, '')) || null;
+    else if (label === 'currency of fund value')    details.currency = val;
+    else if (label.startsWith('date fund started')) details.started = val;
+    else if (label.startsWith('number of investors')) details.investors = parseInt(val.replace(/[",\s]/g, ''), 10) || null;
+  }
+  const meta = _loadFundMeta();
+  const key = _normFundName(fundName);
+  meta[key] = { ...(meta[key] || {}), name: fundName, asAt, details };
+  _saveFundMeta(meta);
+  return { ok: true, fundName, fields: Object.keys(details).length };
+}
 
 // Classify a Disclose row into the app's asset types + flag derivatives.
 function _discloseClassify(name, code) {
@@ -487,10 +561,21 @@ async function _importCSVImpl(event) {
     return;
   }
 
-  // ── NZ Disclose Register (fund full-holdings) takes a dedicated path ──
-  // It's weights-based with metadata header rows, so the column parser below
-  // doesn't apply. importDiscloseHoldings handles parse + replace + rename.
+  // ── NZ Disclose Register — three flavours, routed by header ──
   if (isDiscloseFormat(text)) {
+    const kind = discloseKind(text);
+    if (kind === 'returns') {
+      const r = importDiscloseReturns(text);
+      if (r.ok) { toast.success({ title: `${r.fundName} — monthly returns imported`, message: `${r.months} months of Disclose fund returns saved. They show on the fund's Returns card.`, duration: 6000 }); try { renderAll(); } catch(e) {} }
+      else toast.warning('Disclose FUND RETURNS file recognised but no monthly rows parsed.');
+      return;
+    }
+    if (kind === 'details') {
+      const r = importDiscloseDetails(text);
+      if (r.ok) { toast.success({ title: `${r.fundName} — fund profile imported`, message: `Classification, risk indicator and description saved (${r.fields} fields). See Fund → Disclosure History.`, duration: 6000 }); try { renderAll(); } catch(e) {} }
+      else toast.warning('Disclose GENERAL FUND DETAILS file recognised but nothing parsed.');
+      return;
+    }
     await importDiscloseHoldings(text);
     return;
   }
@@ -661,27 +746,47 @@ async function importDiscloseHoldings(text) {
     return;
   }
 
-  const active = getActivePortfolio();
-  const existing = (active.holdings || []).length;
+  // Find-or-create the book for THIS fund (matched by normalised name), so
+  // importing the whole fund family builds one portfolio per fund instead of
+  // clobbering whichever book happens to be active.
+  const norm = _normFundName(fundName);
+  let target = null;
+  if (fundName && typeof listPortfolios === 'function') {
+    target = listPortfolios().find(p => _normFundName((p.fund && p.fund.name) || p.name) === norm) || null;
+  }
+  if (!target && typeof getActivePortfolio === 'function') {
+    const act = getActivePortfolio();
+    // Reuse the active book only when it's still empty (fresh install / first import).
+    if (!(act.holdings || []).length) target = act;
+  }
+  const isNew = !target;
+  const existing = target ? (target.holdings || []).length : 0;
   const ok = await showFormModal({
     title: 'Import fund holdings',
     icon: 'fa-building-columns',
-    description: `Import <b>${holdings.length}</b> lines from <b>${fundName || 'this fund'}</b> into "<b>${active.name}</b>"?` +
-      (existing ? `<br><br>This <b>replaces</b> the ${existing} holdings currently in this portfolio.` : '') +
+    description: `Import <b>${holdings.length}</b> lines from <b>${fundName || 'this fund'}</b>` +
+      (isNew ? ` into a <b>new portfolio</b> "<b>${fundName || 'Fund'}</b>"?`
+             : ` into "<b>${target.name}</b>"?${existing ? `<br><br>This <b>replaces</b> its ${existing} current holdings.` : ''}`) +
       `<br><br><span style="color:#94a3b8;font-size:12px;">${stats.individual} securities ≥0.10% · ${stats.aggregated} smaller positions rolled into ${stats.tailLines} "Other …" lines · derivatives netted into overlay summaries. Figures are <b>% of fund (weight basis)</b> — no prices.</span>`,
-    submitLabel: existing ? 'Import & replace' : 'Import',
+    submitLabel: isNew ? 'Create & import' : (existing ? 'Import & replace' : 'Import'),
     submitVariant: existing ? 'danger' : 'primary'
   });
   if (!ok) { toast.info('Import cancelled.'); return; }
 
-  // Replace the active portfolio's holdings + rename it to the fund.
+  if (isNew) {
+    const id = createPortfolio(fundName || 'Fund');   // creates + activates
+    target = listPortfolios().find(p => p.id === id);
+  } else {
+    setActivePortfolio(target.id);
+  }
+  // Replace the target portfolio's holdings + name it after the fund.
   state.portfolio = holdings;
-  if (fundName) renamePortfolio(active.id, fundName);
+  if (fundName) renamePortfolio(target.id, fundName);
   // Stamp fund metadata on the portfolio (drives the "as at" badge + weight view).
-  active.fund = { name: fundName || active.name, asAt: asAt || '', asAtISO: asAtISO || '', importedRows: stats.rows };
+  target.fund = { name: fundName || target.name, asAt: asAt || '', asAtISO: asAtISO || '', importedRows: stats.rows };
   // Record this period for the Disclosure History page (period-over-period diff).
   if (typeof _saveDiscloseHistory === 'function') {
-    _saveDiscloseHistory(fundName || active.name, asAtISO, asAt,
+    _saveDiscloseHistory(fundName || target.name, asAtISO, asAt,
       holdings.map(h => ({ n: h.name, w: (h.lots && h.lots[0] ? h.lots[0].quantity : 0), t: h.type })));
   }
 

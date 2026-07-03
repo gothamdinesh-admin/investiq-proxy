@@ -334,8 +334,8 @@
     :root[data-edition="harbour"] h2,
     :root[data-edition="harbour"] h3,
     :root[data-edition="harbour"] .section-title { letter-spacing: -0.015em; font-weight: 700; }
-    /* Tabular figures so all the numbers/weights line up cleanly. */
-    :root[data-edition="harbour"] .mono { font-variant-numeric: tabular-nums; letter-spacing: 0; }
+    /* Numerals in the brand mono cut (Monotype licence), tabular so they align. */
+    :root[data-edition="harbour"] .mono { font-family: 'Harmonia Sans Mono', 'JetBrains Mono', monospace; font-variant-numeric: tabular-nums; letter-spacing: 0; }
     /* Cohesive Harbour-family KPI accent bars (was a blue/green/violet/amber rainbow). */
     :root[data-edition="harbour"] .metric-card.green::before  { background: linear-gradient(90deg, #2E7D8F, transparent); }
     :root[data-edition="harbour"] .metric-card.purple::before { background: linear-gradient(90deg, #44546A, transparent); }
@@ -374,6 +374,8 @@
     @font-face { font-family:'Harmonia Sans'; font-weight:600; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-SemiBd.otf')  format('opentype'); }
     @font-face { font-family:'Harmonia Sans'; font-weight:700; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Bold.otf')    format('opentype'); }
     @font-face { font-family:'Harmonia Sans'; font-weight:800; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansStd-Black.otf')   format('opentype'); }
+    @font-face { font-family:'Harmonia Sans Mono'; font-weight:400; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansMonoStd-Regular.otf') format('opentype'); }
+    @font-face { font-family:'Harmonia Sans Mono'; font-weight:700; font-style:normal; font-display:swap; src:url('fonts/harbour/HarmoniaSansMonoStd-Bold.otf')    format('opentype'); }
     :root[data-edition="harbour"] body,
     :root[data-edition="harbour"] button,
     :root[data-edition="harbour"] input,
@@ -5866,22 +5868,46 @@ function renderFundReturns() {
   if (!card) return;
   const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
   const fd = (_isFundWeightView() && fund && typeof getFundMarketData === 'function') ? getFundMarketData(fund.name) : null;
-  if (!fd || !fd.returns) { card.style.display = 'none'; return; }
+  const dm = (_isFundWeightView() && fund && typeof getFundDiscloseMeta === 'function') ? getFundDiscloseMeta(fund.name) : null;
+  const hasFeed = !!(fd && fd.returns), hasMonthly = !!(dm && dm.monthly && dm.monthly.length);
+  if (!hasFeed && !hasMonthly) { card.style.display = 'none'; return; }
   card.style.display = '';
   const meta = document.getElementById('fundReturnsMeta');
-  if (meta) meta.textContent = `${fd.code}${fd.returnsDate ? ' · gross, to ' + fd.returnsDate : ''}${fd.nav != null ? ' · NAV NZ$' + (fd.nav >= 1e6 ? (fd.nav/1e6).toFixed(1) + 'M' : Math.round(fd.nav/1e3) + 'k') : ''}`;
-  const PERIODS = [['1m','1 mth'], ['3m','3 mth'], ['1yr','1 yr'], ['2yr','2 yr p.a.'], ['3yr','3 yr p.a.'], ['5yr','5 yr p.a.']];
+  if (meta) meta.textContent = hasFeed
+    ? `${fd.code}${fd.returnsDate ? ' · gross, to ' + fd.returnsDate : ''}${fd.nav != null ? ' · NAV NZ$' + (fd.nav >= 1e6 ? (fd.nav/1e6).toFixed(1) + 'M' : Math.round(fd.nav/1e3) + 'k') : ''}`
+    : `Disclose fund returns${dm.asAt ? ' · to ' + dm.asAt : ''}`;
   const cell = (v, muted) => v == null ? '<span class="neutral">—</span>'
     : `<span class="mono" style="color:${muted ? 'var(--text-muted)' : (v >= 0 ? 'var(--color-green)' : 'var(--color-red)')};font-weight:${muted ? '400' : '600'};">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
-  const cols = PERIODS.map(([k, label]) => `
-    <div style="text-align:center;padding:10px 6px;border-radius:10px;background:var(--bg-panel-2);">
-      <div class="text-xs neutral uppercase font-semibold mb-1" style="letter-spacing:0.4px;">${label}</div>
-      <div style="font-size:15px;">${cell(fd.returns[k], false)}</div>
-      <div class="text-xs mt-1">${fd.bmark && fd.bmark[k] != null ? `<span class="neutral">bmk</span> ${cell(fd.bmark[k], true)}` : '<span class="neutral">&nbsp;</span>'}</div>
-    </div>`).join('');
-  document.getElementById('fundReturnsBody').innerHTML =
-    `<div class="grid grid-cols-3 lg:grid-cols-6 gap-2">${cols}</div>
-     <div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Gross returns from the Harbour unit-price feed; "bmk" = benchmark. Educational display — not investment advice.</div>`;
+  let html = '';
+  if (hasFeed) {
+    const PERIODS = [['1m','1 mth'], ['3m','3 mth'], ['1yr','1 yr'], ['2yr','2 yr p.a.'], ['3yr','3 yr p.a.'], ['5yr','5 yr p.a.']];
+    html += `<div class="grid grid-cols-3 lg:grid-cols-6 gap-2">${PERIODS.map(([k, label]) => `
+      <div style="text-align:center;padding:10px 6px;border-radius:10px;background:var(--bg-panel-2);">
+        <div class="text-xs neutral uppercase font-semibold mb-1" style="letter-spacing:0.4px;">${label}</div>
+        <div style="font-size:15px;">${cell(fd.returns[k], false)}</div>
+        <div class="text-xs mt-1">${fd.bmark && fd.bmark[k] != null ? `<span class="neutral">bmk</span> ${cell(fd.bmark[k], true)}` : '<span class="neutral">&nbsp;</span>'}</div>
+      </div>`).join('')}</div>`;
+  }
+  if (hasMonthly) {
+    // Last 12 months from the Disclose FUND RETURNS file — mini bar chips.
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const rows = dm.monthly.slice(-12);
+    const maxAbs = Math.max(...rows.map(r => Math.abs(r.pct)), 0.01);
+    html += `<div class="text-xs neutral uppercase font-semibold ${hasFeed ? 'mt-4' : ''} mb-2" style="letter-spacing:0.4px;">Monthly fund returns</div>
+      <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">${rows.map(r => {
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(r.d);
+        const label = m ? `${MON[(+m[2]) - 1] || ''} ${m[3].slice(2)}` : r.d;
+        const h = Math.max(6, Math.round(Math.abs(r.pct) / maxAbs * 34));
+        const up = r.pct >= 0;
+        return `<div style="text-align:center;min-width:44px;">
+          <div style="height:40px;display:flex;align-items:flex-end;justify-content:center;"><div style="width:18px;height:${h}px;border-radius:3px;background:${up ? 'var(--color-green)' : 'var(--color-red)'};opacity:0.85;"></div></div>
+          <div class="mono" style="font-size:10.5px;color:${up ? 'var(--color-green)' : 'var(--color-red)'};">${up ? '+' : ''}${r.pct.toFixed(2)}%</div>
+          <div class="text-xs neutral" style="font-size:9.5px;">${label}</div>
+        </div>`;
+      }).join('')}</div>`;
+  }
+  html += `<div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>${hasFeed ? 'Gross returns from the Harbour unit-price feed; "bmk" = benchmark. ' : ''}${hasMonthly ? 'Monthly series from the Disclose FUND RETURNS file. ' : ''}Educational display — not investment advice.</div>`;
+  document.getElementById('fundReturnsBody').innerHTML = html;
 }
 
 // ── Fund pages (Harbour) — Exposure / Mandate / Disclosure history ───────
@@ -6015,6 +6041,26 @@ function renderDisclosurePage(metrics) {
       ${topNow.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;"><span>${esc(_fundLabel(h))}</span><span class="mono neutral">${fmt(h.currentValue)}%</span></div>`).join('')}
     </div>
   </div>`;
+
+  // Fund profile — from the Disclose GENERAL FUND DETAILS file, if imported.
+  const dmeta = (typeof getFundDiscloseMeta === 'function') ? getFundDiscloseMeta(fundName) : null;
+  if (dmeta && dmeta.details) {
+    const d = dmeta.details;
+    const riskBoxes = d.risk ? `<div style="display:flex;gap:3px;align-items:center;">${[1,2,3,4,5,6,7].map(n =>
+      `<div style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;${n === d.risk ? 'background:var(--accent);color:#fff;' : 'background:var(--bg-panel-2);color:var(--text-muted);'}">${n}</div>`).join('')}
+      <span class="text-xs neutral" style="margin-left:8px;">1 = lower risk · 7 = higher risk</span></div>` : '';
+    html += `<div class="card p-5 mb-4">
+      <div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">Fund profile <span style="text-transform:none;letter-spacing:0;">· Disclose general fund details</span></div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+        ${d.classification ? `<div><div class="text-xs neutral mb-1">Classification</div><div class="font-semibold text-sm">${esc(d.classification)}</div></div>` : ''}
+        ${d.fundValue != null ? `<div><div class="text-xs neutral mb-1">Fund value</div><div class="font-semibold text-sm mono">${esc(d.currency || 'NZD')} ${d.fundValue >= 1e6 ? (d.fundValue/1e6).toFixed(2) + 'M' : (d.fundValue/1e3).toFixed(0) + 'k'}</div></div>` : ''}
+        ${d.started ? `<div><div class="text-xs neutral mb-1">Fund started</div><div class="font-semibold text-sm mono">${esc(d.started)}</div></div>` : ''}
+        ${d.investors != null ? `<div><div class="text-xs neutral mb-1">Investors</div><div class="font-semibold text-sm mono">${d.investors.toLocaleString()}</div></div>` : ''}
+      </div>
+      ${riskBoxes ? `<div class="mb-3"><div class="text-xs neutral mb-2">Risk indicator</div>${riskBoxes}</div>` : ''}
+      ${d.description ? `<div class="text-sm" style="line-height:1.6;color:var(--text-secondary);">${esc(d.description)}</div>` : ''}
+    </div>`;
+  }
 
   if (hist.length < 2) {
     html += `<div class="card p-5 text-sm neutral"><i class="fas fa-circle-info mr-2" style="color:var(--accent);"></i>Import another period's disclosure (a different "as at" date) to unlock period-over-period comparison — new positions, exits and the biggest weight moves.${hist.length === 1 ? ` <b>1 period on file: ${esc(hist[0].asAt)}.</b>` : ''}</div>`;
