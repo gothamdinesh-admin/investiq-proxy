@@ -197,6 +197,100 @@ async function renderCalendarSection() {
 // needed, keeps the bundle lean. Browser's "Save as PDF" creates the file.
 // ─────────────────────────────────────────────────────────────────────────
 
+// ── Official Harbour report PDFs (Supabase Storage bucket: fund-reports) ─
+// The real monthly Reporting_<CODE>_<MMMYY>.pdf documents, stored per fund
+// under fund-reports/<FUND KEY>/. Approved users read via signed URLs;
+// admins upload. Requires migration 020 in the Harbour project.
+function _officialReportKey() {
+  const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const name = (fund && fund.name) || (typeof getActivePortfolio === 'function' ? getActivePortfolio().name : '');
+  if (!name || typeof _normFundName !== 'function') return null;
+  const norm = _normFundName(name);
+  return norm ? norm.replace(/\s+/g, '-') : null;
+}
+
+async function renderOfficialReports() {
+  const card = document.getElementById('officialReportsCard');
+  if (!card) return;
+  const isFund = (typeof _isFundWeightView === 'function') && _isFundWeightView();
+  const key = isFund ? _officialReportKey() : null;
+  if (!isFund || !key || typeof _supabase === 'undefined' || !_supabase || !_supaUser) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const up = document.getElementById('officialReportsUpload');
+  if (up) up.style.display = (typeof _isAdmin !== 'undefined' && _isAdmin) ? '' : 'none';
+  const list = document.getElementById('officialReportsList');
+  try {
+    const { data, error } = await _supabase.storage.from('fund-reports')
+      .list(key, { limit: 36, sortBy: { column: 'name', order: 'desc' } });
+    if (error) throw error;
+    const files = (data || []).filter(f => f.name && /\.pdf$/i.test(f.name));
+    if (!files.length) {
+      list.innerHTML = `<div class="text-xs neutral py-2">No official reports uploaded for this fund yet.${(typeof _isAdmin !== 'undefined' && _isAdmin) ? ' Use <b>Upload PDF</b> to add the monthly Reporting_*.pdf documents.' : ''}</div>`;
+      return;
+    }
+    list.innerHTML = files.map(f => `
+      <div class="flex items-center justify-between gap-3" style="padding:9px 4px;border-bottom:1px solid var(--border);">
+        <div class="flex items-center gap-3" style="min-width:0;">
+          <i class="fas fa-file-pdf" style="color:var(--color-red);font-size:16px;"></i>
+          <div style="min-width:0;overflow:hidden;">
+            <div class="text-sm font-semibold" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_escape(f.name)}</div>
+            <div class="text-xs neutral">${f.metadata && f.metadata.size ? (f.metadata.size / 1024 / 1024).toFixed(1) + ' MB · ' : ''}${f.created_at ? new Date(f.created_at).toLocaleDateString('en-NZ') : ''}</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2" style="flex-shrink:0;">
+          <button onclick="openOfficialReport('${_escape(key)}/${_escape(f.name)}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 12px;"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open</button>
+          ${(typeof _isAdmin !== 'undefined' && _isAdmin) ? `<button onclick="deleteOfficialReport('${_escape(key)}/${_escape(f.name)}')" class="btn btn-sm btn-danger" style="font-size:11px;padding:4px 8px;" title="Delete (admin)"><i class="fas fa-trash"></i></button>` : ''}
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    const missing = /not found|bucket/i.test(e.message || '');
+    list.innerHTML = `<div class="text-xs neutral py-2">${missing ? 'Storage bucket not set up yet — run migration <b>020_fund_reports_storage.sql</b> in the Harbour project.' : 'Couldn\'t load reports: ' + _escape(e.message || String(e))}</div>`;
+  }
+}
+
+async function openOfficialReport(path) {
+  try {
+    const { data, error } = await _supabase.storage.from('fund-reports').createSignedUrl(path, 3600);
+    if (error) throw error;
+    window.open(data.signedUrl, '_blank', 'noopener');
+  } catch(e) { toast.error('Couldn\'t open report: ' + (e.message || e)); }
+}
+
+async function uploadOfficialReports(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  const key = _officialReportKey();
+  if (!files.length || !key) return;
+  let ok = 0, failed = [];
+  toast.info(`Uploading ${files.length} PDF(s)…`);
+  for (const f of files) {
+    try {
+      const { error } = await _supabase.storage.from('fund-reports')
+        .upload(`${key}/${f.name}`, f, { upsert: true, contentType: 'application/pdf' });
+      if (error) throw error;
+      ok++;
+    } catch(e) { failed.push(`${f.name}: ${e.message || e}`); }
+  }
+  if (ok) toast.success(`${ok} report(s) uploaded for this fund.`);
+  if (failed.length) toast.error({ title: `${failed.length} failed`, message: failed.slice(0, 2).join('\n') });
+  logActivity('official_report_upload', { fund: key, ok, failed: failed.length });
+  renderOfficialReports();
+}
+
+async function deleteOfficialReport(path) {
+  const sure = await showFormModal({ title: 'Delete report?', icon: 'fa-trash', iconColor: 'var(--color-red)',
+    description: `Delete <b>${_escape(path.split('/').pop())}</b> from storage? This can't be undone.`,
+    submitLabel: 'Delete', submitVariant: 'danger' });
+  if (!sure) return;
+  try {
+    const { error } = await _supabase.storage.from('fund-reports').remove([path]);
+    if (error) throw error;
+    toast.success('Report deleted.');
+    logActivity('official_report_delete', { path });
+    renderOfficialReports();
+  } catch(e) { toast.error('Delete failed: ' + (e.message || e)); }
+}
+
 // ── Harbour Fund Report (weight-based fund books) ────────────────────────
 // Modelled on Harbour's official monthly fund report PDF (Reporting_*.pdf):
 // headline stat strip → top-10 holdings → investment mix → monthly returns →
@@ -338,11 +432,14 @@ function renderReportPreview() {
   // personal $-based templates are meaningless for a fund, whatever "type" says.
   const _repSub = document.getElementById('reportsSubtitle');
   if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
-    if (_repSub) _repSub.textContent = 'Printable Harbour fund report — headline stats, top-10 holdings, mix, monthly returns and fund profile from the connected data. PDF-ready via Print.';
+    if (_repSub) _repSub.textContent = 'Official monthly PDFs above; the generated snapshot below is built live from the connected data. PDF-ready via Print.';
+    try { renderOfficialReports(); } catch(e) { console.warn('[official-reports]', e); }
     wrap.innerHTML = _harbourFundReportHtml(metrics, asOf);
     return;
   }
   if (_repSub) _repSub.textContent = 'Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.';
+  const _orc = document.getElementById('officialReportsCard');
+  if (_orc) _orc.style.display = 'none';
 
   const sym = CURRENCY_SYMBOLS[state.settings.currency] || 'NZ$';
   const userName = state.settings.name || _userProfile?.display_name || _supaUser?.email || 'Investor';

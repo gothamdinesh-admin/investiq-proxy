@@ -1,0 +1,11 @@
+# Netlify security headers — served on every response from the publish dir.
+# Conservative set that cannot break the app (no CSP yet — the strict CSP is
+# tracked in docs/PRODUCTION_READINESS.md because the Tailwind CDN requires
+# inline-script allowances that need testing first).
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Cross-Origin-Opener-Policy: same-origin
