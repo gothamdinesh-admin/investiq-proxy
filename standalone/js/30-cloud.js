@@ -28,8 +28,32 @@ function initSupabase() {
   }
 }
 
+// The local envelope is per-BROWSER; without an owner tag, switching accounts
+// on one machine let the keep-local guards below PUSH the previous user's
+// portfolio into the new account (cross-account data bleed). Tag the envelope
+// with the user id and treat a mismatch as foreign data: wipe local, adopt cloud.
+function _wipeLocalEnvelope(reason) {
+  console.warn(`[account-isolation] wiping local portfolio data (${reason})`);
+  state.portfolios = [{ id: 'default', name: 'Personal', holdings: [] }];
+  state.activePortfolioId = 'default';
+  state.agentResults = null;
+  if (state.settings) delete state.settings.updatedAt;
+  ['investiq_v2', 'investiq_updated_at', 'investiq_autobackup'].forEach(k => {
+    try { localStorage.removeItem(k); } catch(e) {}
+  });
+}
+
 async function loadFromSupabase() {
   if (!_supabase || !_supaUser) return false;
+  // ── ACCOUNT ISOLATION ──────────────────────────────────────────────────
+  // If the local envelope belongs to a DIFFERENT user, it must never merge
+  // into (or be pushed over) this account. Wipe it and adopt cloud cleanly.
+  // owner=null (never signed in here) keeps the legit local→cloud migration.
+  try {
+    const owner = localStorage.getItem('investiq_owner');
+    if (owner && owner !== _supaUser.id) _wipeLocalEnvelope(`local data belongs to another account (${owner.slice(0, 8)}…)`);
+    localStorage.setItem('investiq_owner', _supaUser.id);
+  } catch(e) {}
   try {
     // select('*') so this keeps working whether or not the multi-portfolio
     // columns (portfolios, active_portfolio_id) exist yet (migration 016).
@@ -175,6 +199,9 @@ let _allowEmptyCloudSave = false;
 
 async function saveToSupabase() {
   if (!_supabase || !_supaUser) return;
+  // Tag the local envelope with its owner — the account-isolation check in
+  // loadFromSupabase uses this to detect (and wipe) another user's leftovers.
+  try { localStorage.setItem('investiq_owner', _supaUser.id); } catch(e) {}
   try {
     // ── DATA-LOSS GUARD ──────────────────────────────────────────────────
     // Never overwrite a NON-EMPTY cloud portfolio with an EMPTY local one

@@ -4335,21 +4335,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=61"></script>
-<script src="js/05-content.js?b=61"></script>
-<script src="js/10-helpers.js?b=61"></script>
-<script src="js/20-state.js?b=61"></script>
-<script src="js/30-cloud.js?b=61"></script>
-<script src="js/40-auth.js?b=61"></script>
-<script src="js/45-auth-security.js?b=61"></script>
-<script src="js/60-import.js?b=61"></script>
-<script src="js/50-portfolio.js?b=61"></script>
-<script src="js/70-ai.js?b=61"></script>
-<script src="js/80-trader.js?b=61"></script>
-<script src="js/85-calendar-reports.js?b=61"></script>
-<script src="js/88-onboarding-tour.js?b=61"></script>
-<script src="js/90-goals.js?b=61"></script>
-<script src="js/95-integrations.js?b=61"></script>
+<script src="js/00-config.js?b=62"></script>
+<script src="js/05-content.js?b=62"></script>
+<script src="js/10-helpers.js?b=62"></script>
+<script src="js/20-state.js?b=62"></script>
+<script src="js/30-cloud.js?b=62"></script>
+<script src="js/40-auth.js?b=62"></script>
+<script src="js/45-auth-security.js?b=62"></script>
+<script src="js/60-import.js?b=62"></script>
+<script src="js/50-portfolio.js?b=62"></script>
+<script src="js/70-ai.js?b=62"></script>
+<script src="js/80-trader.js?b=62"></script>
+<script src="js/85-calendar-reports.js?b=62"></script>
+<script src="js/88-onboarding-tour.js?b=62"></script>
+<script src="js/90-goals.js?b=62"></script>
+<script src="js/95-integrations.js?b=62"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -5562,7 +5562,13 @@ async function signOut() {
 // platform settings (Supabase URL, proxy URL, theme prefs) so the gate
 // can still load on next visit.
 function clearLocalUserData({ keepSettings = true } = {}) {
-  state.portfolio = [];
+  // CROSS-ACCOUNT ISOLATION: this must clear the WHOLE multi-portfolio
+  // envelope. The old `state.portfolio = []` only emptied the ACTIVE book —
+  // every other portfolio survived in memory, so when the next user signed
+  // in the keep-local/structure guards pushed the previous user's books into
+  // their cloud account (observed data transfer between accounts).
+  state.portfolios = [{ id: 'default', name: 'Personal', holdings: [] }];
+  state.activePortfolioId = 'default';
   state.agentResults = null;
   if (!keepSettings) {
     state.settings = { name: 'My Portfolio', currency: 'NZD', claudeApiKey: '',
@@ -5578,9 +5584,14 @@ function clearLocalUserData({ keepSettings = true } = {}) {
   try {
     localStorage.removeItem('investiq_v2');
     localStorage.removeItem('investiq_updated_at');
+    localStorage.removeItem('investiq_autobackup');   // previous user's rolling backups
+    localStorage.removeItem('investiq_owner');        // envelope no longer belongs to anyone
   } catch(e) {}
-  // Re-persist what we kept
-  try { localStorage.setItem('investiq_v2', JSON.stringify({ portfolio: [], settings: state.settings, agentResults: null })); } catch(e) {}
+  // Re-persist what we kept — modern envelope shape, fully empty.
+  try { localStorage.setItem('investiq_v2', JSON.stringify({
+    portfolios: state.portfolios, activePortfolioId: 'default',
+    portfolio: [], settings: state.settings, agentResults: null
+  })); } catch(e) {}
 }
 
 // Manual force-sync from cloud (admin diagnostic + user-facing button)
