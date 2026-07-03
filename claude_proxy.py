@@ -48,9 +48,19 @@ ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGIN
 # via the validate_proxy_secret() RPC. Either is sufficient to authorise.
 PROXY_SECRET = os.environ.get("PROXY_SECRET", "")
 
-# Supabase config — needed for per-user secret validation
-SUPABASE_URL  = os.environ.get("SUPABASE_URL", "")          # e.g. https://xxxx.supabase.co
+# Supabase config — needed for per-user secret validation.
+# Multi-edition: one shared proxy serves multiple editions, each with its OWN
+# Supabase project (personal + harbour). A per-user secret is validated against
+# EVERY configured project until one matches. Add more with _2 / _3 suffixes.
+SUPABASE_URL  = os.environ.get("SUPABASE_URL", "")          # primary (personal) — e.g. https://xxxx.supabase.co
 SUPABASE_ANON = os.environ.get("SUPABASE_ANON_KEY", "")     # publishable anon key
+SUPABASE_URL_2  = os.environ.get("SUPABASE_URL_2", "")      # 2nd edition (harbour)
+SUPABASE_ANON_2 = os.environ.get("SUPABASE_ANON_KEY_2", "")
+SUPABASE_URL_3  = os.environ.get("SUPABASE_URL_3", "")
+SUPABASE_ANON_3 = os.environ.get("SUPABASE_ANON_KEY_3", "")
+SUPABASE_PROJECTS = [(u, a) for (u, a) in (
+    (SUPABASE_URL, SUPABASE_ANON), (SUPABASE_URL_2, SUPABASE_ANON_2), (SUPABASE_URL_3, SUPABASE_ANON_3)
+) if u and a]
 
 # RATE_LIMIT — N requests per minute per IP (0 = disabled). Default 60/min.
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "60"))
@@ -61,30 +71,34 @@ _secret_cache = {}  # secret → (user_id_or_None, expires_at)
 def validate_user_secret(secret):
     """Return user_id if secret matches an approved user, None otherwise.
     Cached for 60s to avoid roundtrip per request."""
-    if not secret or not SUPABASE_URL or not SUPABASE_ANON:
+    if not secret or not SUPABASE_PROJECTS:
         return None
     now = time.time()
     cached = _secret_cache.get(secret)
     if cached and cached[1] > now:
         return cached[0]
-    try:
-        # Call the SECURITY DEFINER RPC: returns user_id (uuid) or null
-        url = f"{SUPABASE_URL}/rest/v1/rpc/validate_proxy_secret"
-        body = json.dumps({"secret": secret}).encode()
-        req = urllib.request.Request(url, data=body, method="POST", headers={
-            "apikey":        SUPABASE_ANON,
-            "Authorization": f"Bearer {SUPABASE_ANON}",
-            "Content-Type":  "application/json",
-        })
-        with urllib.request.urlopen(req, context=ctx, timeout=5) as r:
-            result = json.loads(r.read())
-        # RPC returns the uuid as a JSON string (or null)
-        user_id = result if isinstance(result, str) else None
-        _secret_cache[secret] = (user_id, now + 60)
-        return user_id
-    except Exception as ex:
-        print(f"  ⚠ validate_user_secret error: {ex}")
-        return None
+    # Try each configured Supabase project until one recognises the secret.
+    body = json.dumps({"secret": secret}).encode()
+    for sb_url, sb_anon in SUPABASE_PROJECTS:
+        try:
+            # Call the SECURITY DEFINER RPC: returns user_id (uuid) or null
+            url = f"{sb_url}/rest/v1/rpc/validate_proxy_secret"
+            req = urllib.request.Request(url, data=body, method="POST", headers={
+                "apikey":        sb_anon,
+                "Authorization": f"Bearer {sb_anon}",
+                "Content-Type":  "application/json",
+            })
+            with urllib.request.urlopen(req, context=ctx, timeout=5) as r:
+                result = json.loads(r.read())
+            user_id = result if isinstance(result, str) else None
+            if user_id:
+                _secret_cache[secret] = (user_id, now + 60)
+                return user_id
+        except Exception as ex:
+            print(f"  ⚠ validate_user_secret error ({sb_url}): {ex}")
+            continue
+    _secret_cache[secret] = (None, now + 60)   # cache the miss too (all projects said no)
+    return None
 
 ctx = ssl.create_default_context()
 
@@ -163,25 +177,25 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._auth_fail_reason = None
         incoming = self.headers.get("X-Proxy-Secret", "")
         # Dev mode — no secret configured at all
-        if not PROXY_SECRET and not (SUPABASE_URL and SUPABASE_ANON):
+        if not PROXY_SECRET and not SUPABASE_PROJECTS:
             self._auth_user_id = "dev-mode-no-auth"
             return True
         # Global admin secret
         if PROXY_SECRET and incoming == PROXY_SECRET:
             self._auth_user_id = "admin-global"
             return True
-        # Per-user secret via Supabase RPC
-        if incoming and SUPABASE_URL and SUPABASE_ANON:
+        # Per-user secret validated against every configured Supabase project
+        if incoming and SUPABASE_PROJECTS:
             uid = validate_user_secret(incoming)
             if uid:
                 self._auth_user_id = uid
                 return True
-            self._auth_fail_reason = "rpc_reject"  # secret sent but RPC said no
+            self._auth_fail_reason = "rpc_reject"  # secret sent but no project matched
             return False
         # Pinpoint the failure mode for the response body
         if not incoming:
             self._auth_fail_reason = "no_header"
-        elif not (SUPABASE_URL and SUPABASE_ANON):
+        elif not SUPABASE_PROJECTS:
             self._auth_fail_reason = "proxy_supabase_misconfigured"
         else:
             self._auth_fail_reason = "unknown"
@@ -257,6 +271,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "PROXY_SECRET_length":  len(PROXY_SECRET) if PROXY_SECRET else 0,
                     "SUPABASE_URL_set":     bool(SUPABASE_URL),
                     "SUPABASE_ANON_set":    bool(SUPABASE_ANON),
+                    "supabase_projects":    len(SUPABASE_PROJECTS),
                     "allowed_origins":      ALLOWED_ORIGINS,
                     "rate_limit_per_min":   RATE_LIMIT,
                 },
