@@ -13039,6 +13039,19 @@ function updateApprovalGate() {
   // Admins always bypass; non-admin must be is_approved=true
   const needsApproval = _supaUser && !_isAdmin && _userProfile && _userProfile.is_approved === false;
   gate.style.display = needsApproval ? 'flex' : 'none';
+  // RELIABLE admin notification: signUp() only pings the admins when it gets a
+  // live session, so with email-confirmation ON the ping was silently skipped
+  // forever. Fire it here instead — the pending user's first authenticated
+  // load — once per user per device.
+  if (needsApproval && typeof notifySignupServer === 'function') {
+    try {
+      const k = '_signupNotified_' + _supaUser.id;
+      if (!localStorage.getItem(k)) {
+        localStorage.setItem(k, '1');
+        notifySignupServer('signup', _supaUser.email);
+      }
+    } catch(e) {}
+  }
 }
 
 // Returns true if user can run an AI agent (admin or under quota or BYOK).
