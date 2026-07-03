@@ -2621,6 +2621,16 @@
         <button onclick="loadNewsAll(true)" class="btn btn-sm btn-secondary"><i class="fas fa-sync-alt mr-1"></i>Refresh all</button>
       </div>
 
+      <!-- HARBOUR INSIGHTS — Research & Commentary scraped from harbourasset.co.nz
+           (harbour edition only; hidden elsewhere). -->
+      <div id="harbourInsightsCard" class="card p-4 mb-5" style="display:none;">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <div class="section-title" style="margin:0;font-size:15px;"><i class="fas fa-anchor" style="color:var(--accent);"></i> Harbour Research &amp; Commentary</div>
+          <a href="https://www.harbourasset.co.nz/research-and-commentary/" target="_blank" rel="noopener" class="text-xs" style="color:var(--accent);text-decoration:underline;">View all on harbourasset.co.nz <i class="fas fa-arrow-up-right-from-square" style="font-size:9px;"></i></a>
+        </div>
+        <div id="harbourInsightsBody"><div class="text-xs neutral py-3"><i class="fas fa-spinner fa-spin mr-2"></i>Loading Harbour insights…</div></div>
+      </div>
+
       <!-- News tab switcher — tabs filter cards via data-news-tab attribute -->
       <div class="flex items-center gap-1 mb-5 p-1 rounded-lg" style="background:var(--bg-panel-2);width:fit-content;">
         <button onclick="switchNewsTab('foryou')" id="newsTabForYou" class="news-tab active"><i class="fas fa-bullseye"></i> For You</button>
@@ -10559,7 +10569,7 @@ function _showSectionCore(name, el) {
   if (name === 'cms') { try { renderCmsStudio(); } catch(e) {} }
   if (name === 'performance') { loadSnapshotChart(90); refreshSnapshotDropdown(); }
   if (name === 'watchlist') { rebuildWatchlistSuggestions(); renderWatchlist(); refreshWatchlist(); }
-  if (name === 'news') { loadHeadlines(); loadNews(); }
+  if (name === 'news') { loadHeadlines(); loadNews(); try { loadHarbourInsights(); } catch(e) {} }
   if (name === 'family') loadFamilyAggregateView();
   if (name === 'dividends') loadDividends();
   if (name === 'tax') refreshFIF();
@@ -12105,6 +12115,47 @@ function getNewsScopeSymbols() {
   return [...new Set([...portfolioSymbols, ...watchlistSymbols])];
 }
 
+// Harbour Research & Commentary — scraped server-side from harbourasset.co.nz
+// via the proxy (/api/harbour-news, cached 3h there). Harbour edition only.
+let _harbourInsightsCache = null, _harbourInsightsTime = 0;
+async function loadHarbourInsights(forceRefresh = false) {
+  const card = document.getElementById('harbourInsightsCard');
+  if (!card) return;
+  if (!(typeof EDITION !== 'undefined' && EDITION.id === 'harbour')) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const body = document.getElementById('harbourInsightsBody');
+  if (!forceRefresh && _harbourInsightsCache && (Date.now() - _harbourInsightsTime < 30 * 60 * 1000)) {
+    return _renderHarbourInsights(_harbourInsightsCache);
+  }
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/, '');
+  if (!proxyBase) { body.innerHTML = '<div class="text-xs neutral py-2">No proxy configured.</div>'; return; }
+  try {
+    const res = await fetch(proxyBase + '/api/harbour-news', { headers: proxyHeaders(), signal: AbortSignal.timeout(20000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.articles || !data.articles.length) throw new Error('no articles returned');
+    _harbourInsightsCache = data.articles; _harbourInsightsTime = Date.now();
+    _renderHarbourInsights(data.articles);
+  } catch(e) {
+    body.innerHTML = `<div class="text-xs neutral py-2">Couldn't load Harbour insights (${_escape(e.message)}). <a onclick="loadHarbourInsights(true)" style="color:var(--accent);cursor:pointer;text-decoration:underline;">Retry</a></div>`;
+  }
+}
+function _renderHarbourInsights(articles) {
+  const body = document.getElementById('harbourInsightsBody');
+  if (!body) return;
+  const chip = (cat) => cat === 'Harbour Outlook'
+    ? '<span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(68,84,106,0.12);color:#44546A;font-weight:600;">Outlook</span>'
+    : cat === 'Harbour Navigator'
+      ? '<span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:rgba(0,90,121,0.10);color:#005A79;font-weight:600;">Navigator</span>'
+      : '<span style="font-size:10px;padding:2px 8px;border-radius:9999px;background:var(--bg-panel-2);color:var(--text-muted);font-weight:600;">Insights</span>';
+  body.innerHTML = articles.slice(0, 6).map(a => `
+    <a href="${_escape(a.url)}" target="_blank" rel="noopener" style="display:block;padding:10px 4px;border-bottom:1px solid var(--border);text-decoration:none;color:inherit;">
+      <div class="flex items-center gap-2 mb-1 flex-wrap">${chip(a.category)}<span class="text-xs neutral">${_escape(a.date)}${a.author ? ' · ' + _escape(a.author) : ''}</span></div>
+      <div class="font-semibold text-sm" style="color:var(--text-primary);line-height:1.4;">${_escape(a.title)}</div>
+      ${a.excerpt ? `<div class="text-xs neutral mt-1" style="line-height:1.5;">${_escape(a.excerpt.slice(0, 170))}${a.excerpt.length > 170 ? '…' : ''}</div>` : ''}
+    </a>`).join('');
+}
+
 async function loadNews(forceRefresh = false) {
   const wrap = document.getElementById('newsContent');
   if (!wrap) return;
@@ -12345,7 +12396,8 @@ Write a 3-bullet briefing for this NZ-based investor on what matters TODAY. Each
 async function loadNewsAll(forceRefresh = false) {
   await Promise.all([
     loadHeadlines(forceRefresh),
-    loadNews(forceRefresh)
+    loadNews(forceRefresh),
+    (async () => { try { await loadHarbourInsights(forceRefresh); } catch(e) {} })()
   ]);
 }
 

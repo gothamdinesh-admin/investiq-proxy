@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from datetime import datetime, timedelta
 
 import os
+import re
 import time
 from collections import defaultdict, deque
 
@@ -314,6 +315,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
             sym = (params.get("symbol", [""])[0] or "").strip()
             period = (params.get("period", ["1y"])[0] or "1y").strip()
             self._fetch_history(sym, period)
+        elif parsed.path == "/api/harbour-news":
+            # Harbour Asset Management "Research & Commentary" articles
+            # (Harbour Navigator / Harbour Outlook), scraped server-side and
+            # cached — the site has no RSS feed.
+            self._fetch_harbour_news()
         elif parsed.path == "/api/nz-fund":
             # NZ Managed Fund / KiwiSaver unit price scraper.
             # Tries multiple sources in order of reliability:
@@ -798,6 +804,59 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._json(200, payload)
         except Exception as e:
             self._json(502, {"error": f"Yahoo history failed: {e}"})
+
+    # ── Harbour "Research & Commentary" scraper ──────────────────
+    # harbourasset.co.nz publishes Harbour Navigator / Harbour Outlook articles
+    # but has no RSS feed, so we parse the listing page. Markup (stable Silver-
+    # Stripe blog): <div class="blog-post"> → h4.blog-post-ttl title, first <a>
+    # href = slug, first <p> = excerpt, author-descr = "Author | Posted on
+    # Mon D, YYYY". Cached 3h — articles land ~weekly.
+    def _fetch_harbour_news(self):
+        cached = cache_get("harbour_news")
+        if cached:
+            return self._json(200, cached)
+        try:
+            url = "https://www.harbourasset.co.nz/research-and-commentary/"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
+                "Accept": "text/html",
+            })
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as r:
+                html = r.read().decode("utf-8", errors="ignore")
+            articles = []
+            # Split on article blocks; parse each independently so one odd
+            # block can't break the rest.
+            # Split on the WRAPPER class only ('blog-post ' / 'blog-post"') —
+            # 'blog-post-thumb' / 'blog-post-ttl' sub-classes must not split.
+            for block in re.split(r'class="blog-post[" ]', html)[1:]:
+                block = block[:4000]
+                m_href = re.search(r'href="(/research-and-commentary/[^"#]+)"', block)
+                m_ttl  = re.search(r'blog-post-ttl[^>]*>\s*(.*?)\s*</h4>', block, re.S)
+                if not (m_href and m_ttl):
+                    continue
+                title = re.sub(r"<[^>]+>", "", m_ttl.group(1)).strip()
+                m_p   = re.search(r"<p>(.*?)</p>", block, re.S)
+                excerpt = re.sub(r"<[^>]+>", " ", m_p.group(1)).replace("\r", " ").replace("\n", " ") if m_p else ""
+                excerpt = re.sub(r"\s+", " ", excerpt).strip()[:280]
+                m_auth = re.search(r'author-descr[^>]*>.*?<a[^>]*>\s*([^<|]+?)\s*</a>\s*\|\s*Posted on\s*([A-Za-z]{3,9}\s+\d{1,2},\s*\d{4})', block, re.S)
+                category = ("Harbour Navigator" if title.lower().startswith("harbour navigator")
+                            else "Harbour Outlook" if title.lower().startswith("harbour outlook") else "Insights")
+                unesc = lambda s: (s.replace("&amp;", "&").replace("&#39;", "'").replace("&quot;", '"')
+                                    .replace("&rsquo;", "’").replace("&lsquo;", "‘").replace("&ndash;", "–"))
+                articles.append({
+                    "title":    unesc(title),
+                    "url":      "https://www.harbourasset.co.nz" + m_href.group(1),
+                    "excerpt":  unesc(excerpt),
+                    "author":   unesc(m_auth.group(1).strip()) if m_auth else "",
+                    "date":     (m_auth.group(2).strip() if m_auth else ""),
+                    "category": category,
+                })
+            payload = {"source": "harbourasset.co.nz/research-and-commentary", "count": len(articles), "articles": articles}
+            if articles:
+                cache_set("harbour_news", payload, ttl_seconds=3 * 3600)
+            self._json(200, payload)
+        except Exception as e:
+            self._json(502, {"error": f"Harbour news scrape failed: {e}"})
 
     # ── NZ Managed Fund unit-price scraping ──────────────────────
     # Yahoo doesn't track NZ-domiciled unit trusts. Until users can self-
