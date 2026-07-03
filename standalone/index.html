@@ -12115,6 +12115,29 @@ function getNewsScopeSymbols() {
   return [...new Set([...portfolioSymbols, ...watchlistSymbols])];
 }
 
+// Fund books hold company NAMES (from Disclose), not tickers — Yahoo's news
+// API needs tickers. Resolve names → tickers once via /api/search and cache
+// the mapping forever in localStorage (names are stable identifiers).
+async function _resolveFundTickers(names) {
+  let map = {};
+  try { map = JSON.parse(localStorage.getItem('_fundTickerMap') || '{}'); } catch(e) {}
+  const proxyBase = (state.settings.proxyUrl || PLATFORM_CONFIG.proxyUrl || '').replace(/\/$/, '');
+  const unresolved = names.filter(n => !(n in map));
+  if (unresolved.length && proxyBase) {
+    await Promise.all(unresolved.slice(0, 10).map(async (n) => {
+      try {
+        const res = await fetch(`${proxyBase}/api/search?q=${encodeURIComponent(n)}`, { headers: proxyHeaders(), signal: AbortSignal.timeout(12000) });
+        if (!res.ok) return;
+        const data = await res.json();
+        const q = (data.quotes || []).find(x => x.type === 'EQUITY' || x.type === 'ETF') || (data.quotes || [])[0];
+        map[n] = q ? q.symbol : null;   // cache misses too (null) so we don't re-search
+      } catch(e) {}
+    }));
+    try { localStorage.setItem('_fundTickerMap', JSON.stringify(map)); } catch(e) {}
+  }
+  return [...new Set(names.map(n => map[n]).filter(Boolean))];
+}
+
 // Harbour Research & Commentary — scraped server-side from harbourasset.co.nz
 // via the proxy (/api/harbour-news, cached 3h there). Harbour edition only.
 let _harbourInsightsCache = null, _harbourInsightsTime = 0;
@@ -12159,7 +12182,15 @@ function _renderHarbourInsights(articles) {
 async function loadNews(forceRefresh = false) {
   const wrap = document.getElementById('newsContent');
   if (!wrap) return;
-  const symbols = getNewsScopeSymbols();
+  let symbols = getNewsScopeSymbols();
+  // Fund books: convert the top-10 holding NAMES into real Yahoo tickers
+  // (cached name→ticker map) so per-ticker news actually resolves.
+  if (typeof _isFundWeightView === 'function' && _isFundWeightView() && symbols.length) {
+    try {
+      const resolved = await _resolveFundTickers(symbols.slice(0, 10));
+      if (resolved.length) symbols = resolved;
+    } catch(e) { console.warn('[news] fund ticker resolution failed:', e); }
+  }
   if (!symbols.length) {
     wrap.innerHTML = `<div class="card p-8 text-center neutral text-sm">
       <i class="fas fa-newspaper text-3xl mb-3 block" style="opacity:0.3;"></i>
@@ -14585,7 +14616,12 @@ function switchNewsTab(tab) {
   document.getElementById('newsTabForYou')?.classList.toggle('active', tab === 'foryou');
   document.getElementById('newsTabMarkets')?.classList.toggle('active', tab === 'markets');
   document.querySelectorAll('[data-news-tab]').forEach(el => {
-    el.style.display = (el.dataset.newsTab === tab) ? '' : 'none';
+    // The sentiment rollup starts EMPTY and hidden — force-showing it painted
+    // a bare card sliver (rounded corner + accent border read as a stray "(").
+    // Keep empty containers hidden; renderSentimentRollup() shows it when it
+    // actually has content.
+    const emptyRollup = el.id === 'newsSentimentRollup' && !el.innerHTML.trim();
+    el.style.display = (el.dataset.newsTab === tab && !emptyRollup) ? '' : 'none';
   });
 }
 

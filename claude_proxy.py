@@ -1289,7 +1289,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "type":      q.get("quoteType") or ""
                 })
             payload = {"quotes": quotes}
-            cache_set(cache_key, payload, ttl=300)
+            cache_set(cache_key, payload, ttl_seconds=300)
             self._json(200, payload)
         except Exception as e:
             self._json(502, {"error": f"Yahoo search failed: {e}"})
