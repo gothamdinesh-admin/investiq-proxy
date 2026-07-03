@@ -2131,6 +2131,15 @@
       </div>
 
       <!-- Top holdings preview — replaces the duplicate full table -->
+      <!-- FUND RETURNS — weight-based books, shown when the unit-price feed matches -->
+      <div id="fundReturnsCard" class="card p-4 mb-6" style="display:none;">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <div class="section-title" style="margin:0;font-size:15px;"><i class="fas fa-chart-line" style="color:var(--accent);"></i> Fund returns</div>
+          <div class="text-xs neutral" id="fundReturnsMeta"></div>
+        </div>
+        <div id="fundReturnsBody"></div>
+      </div>
+
       <!-- FUND EXPOSURE — weight-based books only (currency / region / class / overlay) -->
       <div id="fundExposureCard" class="card p-4 mb-6" style="display:none;">
         <div class="section-title" style="margin:0 0 12px;font-size:15px;"><i class="fas fa-earth-oceania" style="color:var(--accent);"></i> Fund exposure</div>
@@ -5715,6 +5724,7 @@ function renderAll() {
   refreshSidebarScore(metrics);
   try { renderOvernightBrief(metrics); } catch(e) { console.warn('[brief]', e); }
   try { renderFundExposure(metrics); } catch(e) { console.warn('[fund-exposure]', e); }
+  try { renderFundReturns(); } catch(e) { console.warn('[fund-returns]', e); }
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
@@ -5828,6 +5838,31 @@ function renderFundExposure(metrics) {
         <span class="mono" style="color:${h.overlayNet >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${h.overlayNet >= 0 ? '+' : ''}${fmt(h.overlayNet)}% of NAV</span>
       </div>`).join('')
     : '<div class="text-xs neutral">No derivative overlay disclosed.</div>';
+}
+
+// Fund returns card — 1m…5y gross vs benchmark from the imported unit-price /
+// returns feed. Shown only when the feed has a record matching this fund.
+function renderFundReturns() {
+  const card = document.getElementById('fundReturnsCard');
+  if (!card) return;
+  const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
+  const fd = (_isFundWeightView() && fund && typeof getFundMarketData === 'function') ? getFundMarketData(fund.name) : null;
+  if (!fd || !fd.returns) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const meta = document.getElementById('fundReturnsMeta');
+  if (meta) meta.textContent = `${fd.code}${fd.returnsDate ? ' · gross, to ' + fd.returnsDate : ''}${fd.nav != null ? ' · NAV NZ$' + (fd.nav >= 1e6 ? (fd.nav/1e6).toFixed(1) + 'M' : Math.round(fd.nav/1e3) + 'k') : ''}`;
+  const PERIODS = [['1m','1 mth'], ['3m','3 mth'], ['1yr','1 yr'], ['2yr','2 yr p.a.'], ['3yr','3 yr p.a.'], ['5yr','5 yr p.a.']];
+  const cell = (v, muted) => v == null ? '<span class="neutral">—</span>'
+    : `<span class="mono" style="color:${muted ? 'var(--text-muted)' : (v >= 0 ? 'var(--color-green)' : 'var(--color-red)')};font-weight:${muted ? '400' : '600'};">${v >= 0 ? '+' : ''}${v.toFixed(2)}%</span>`;
+  const cols = PERIODS.map(([k, label]) => `
+    <div style="text-align:center;padding:10px 6px;border-radius:10px;background:var(--bg-panel-2);">
+      <div class="text-xs neutral uppercase font-semibold mb-1" style="letter-spacing:0.4px;">${label}</div>
+      <div style="font-size:15px;">${cell(fd.returns[k], false)}</div>
+      <div class="text-xs mt-1">${fd.bmark && fd.bmark[k] != null ? `<span class="neutral">bmk</span> ${cell(fd.bmark[k], true)}` : '<span class="neutral">&nbsp;</span>'}</div>
+    </div>`).join('');
+  document.getElementById('fundReturnsBody').innerHTML =
+    `<div class="grid grid-cols-3 lg:grid-cols-6 gap-2">${cols}</div>
+     <div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Gross returns from the Harbour unit-price feed; "bmk" = benchmark. Educational display — not investment advice.</div>`;
 }
 
 // ── Fund pages (Harbour) — Exposure / Mandate / Disclosure history ───────
@@ -6317,9 +6352,19 @@ function renderSidebar(metrics) {
   if (_isFundWeightView()) {
     const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
     document.getElementById('portfolioName').textContent = (fund && fund.name) || state.settings.name;
-    document.getElementById('sidebarTotal').textContent = `${metrics.holdings.length} holdings`;
-    const r = document.getElementById('sidebarReturn');
-    if (r) r.innerHTML = `<span class="neutral">${fund && fund.asAt ? 'as at ' + _escape(fund.asAt) : 'weight basis · % of fund'}</span>`;
+    // With the unit-price feed matched: headline = unit price + daily move + NAV.
+    const fd = (typeof getFundMarketData === 'function' && fund) ? getFundMarketData(fund.name) : null;
+    if (fd && fd.price != null) {
+      document.getElementById('sidebarTotal').textContent = fd.price.toFixed(4);
+      const r0 = document.getElementById('sidebarReturn');
+      if (r0) r0.innerHTML =
+        (fd.dailyPct != null ? `<span class="${fd.dailyPct >= 0 ? 'pos' : 'neg'}">${fd.dailyPct >= 0 ? '+' : ''}${fd.dailyPct.toFixed(2)}% today</span> · ` : '')
+        + `<span class="neutral">NAV ${fd.nav != null ? 'NZ$' + (fd.nav >= 1e6 ? (fd.nav/1e6).toFixed(1) + 'M' : Math.round(fd.nav/1e3) + 'k') : '—'}</span>`;
+    } else {
+      document.getElementById('sidebarTotal').textContent = `${metrics.holdings.length} holdings`;
+      const r = document.getElementById('sidebarReturn');
+      if (r) r.innerHTML = `<span class="neutral">${fund && fund.asAt ? 'as at ' + _escape(fund.asAt) : 'weight basis · % of fund'}</span>`;
+    }
     const fxEl = document.getElementById('sidebarFxRate'); if (fxEl) fxEl.textContent = '';
     const stH = document.getElementById('statHoldings'); if (stH) stH.textContent = metrics.holdings.length;
     const stP = document.getElementById('statPlatforms'); if (stP) stP.textContent = 1;
@@ -7034,17 +7079,27 @@ function updateTicker() {
     const fund = _activeFund();
     const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
     const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0)).slice(0, 3);
+    // Live fund feed (unit price / NAV / daily move) when the OneDrive export
+    // has been imported and matches this fund by name.
+    const fd = (typeof getFundMarketData === 'function' && fund) ? getFundMarketData(fund.name) : null;
+    const fmtNavShort = (n) => n >= 1e9 ? `$${(n/1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n/1e6).toFixed(1)}M` : `$${(n/1e3).toFixed(0)}k`;
+    const feedBits = fd ? `
+      <span class="flex items-center gap-3" style="padding-right:16px;border-right:1px solid #1e2d4a;">
+        ${fd.price != null ? `<span class="flex items-center gap-1"><span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Unit</span><b style="color:#c8d6ef;">${fd.price.toFixed(4)}</b></span>` : ''}
+        ${fd.dailyPct != null ? `<b style="color:${fd.dailyPct >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${fd.dailyPct >= 0 ? '+' : ''}${fd.dailyPct.toFixed(2)}%</b>` : ''}
+        ${fd.nav != null ? `<span class="flex items-center gap-1"><span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">NAV</span><b style="color:#c8d6ef;">${fmtNavShort(fd.nav)}</b></span>` : ''}
+      </span>` : '';
     strip.innerHTML = `
       <span class="flex items-center gap-2" style="padding-right:16px;border-right:1px solid #1e2d4a;">
         <i class="fas fa-scale-balanced" style="color:var(--accent);font-size:11px;"></i>
-        <span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Weight basis</span>
+        <span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">${fd ? 'Fund' : 'Weight basis'}</span>
         ${fund && fund.asAt ? `<b style="color:#c8d6ef;">as at ${_escape(fund.asAt)}</b>` : ''}
-      </span>
+      </span>${feedBits}
       <span class="flex items-center gap-3">${top.map(h => `<span class="flex items-center gap-1" style="color:#94a3b8;">
         <span style="color:#4a6080;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;">Top</span>
         <b style="color:#c8d6ef;">${_escape(_fundLabel(h))}</b>
         <b style="color:var(--accent);">${fmt(h.currentValue)}%</b></span>`).join('')}</span>
-      <span style="margin-left:auto;color:#4a6080;font-size:11px;">${metrics.holdings.length} holdings · no intraday prices</span>`;
+      <span style="margin-left:auto;color:#4a6080;font-size:11px;">${metrics.holdings.length} holdings${fd && fd.date ? ` · priced ${_escape(fd.date)}` : ' · no intraday prices'}</span>`;
     return;
   }
 

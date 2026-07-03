@@ -181,6 +181,127 @@ function _discloseHolding({ symbol, name, type, weight, code }) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// HARBOUR UNIT-PRICE / RETURNS FEEDS
+// ───────────────────────────────────────────────────────────────────────
+// Three internal CSV exports (OneDrive/SharePoint) enrich the weight-based
+// fund books with real NAV, unit price, daily movement, and 1m–5y returns:
+//   A. HarbourUnitPrices_.CSV   → "FUND NAME,HIPORT CODE,SONATA CODE,DATE,…"
+//   B. Nexus_HarbourUnitPrices  → "Master Client,Fund Name,Fund Code,…"
+//   C. WebsiteReturnData        → "FUND TYPE,FUND NAME,FUND ID,Date,1m gross,…"
+// All keyed by fund code (HRBBAL etc.); merged into one localStorage store.
+// Matching to a Disclose book is by NORMALISED-EQUAL fund name — "contains"
+// would wrongly match "Balanced Growth Fund" to "Balanced Fund".
+// ═══════════════════════════════════════════════════════════════════════
+
+const _FUND_FEED_KEY = '_fundMarketData';
+
+// "Harbour Balanced Fund (RUT) - Retail" → "BALANCED" (drop noise words).
+function _normFundName(s) {
+  return String(s || '').toUpperCase()
+    .replace(/\(HEDGED\)/g, ' HEDGED ')                          // hedged variants stay distinct
+    .replace(/\(RUT\)|\(WUT\)/g, ' ')                            // share-class tags are noise
+    .replace(/\bHARBOUR\b|\bFUND\b|\bRETAIL\b|\bWHOLESALE\b|\bT\.?\s*ROWE\s*PRICE\b/g, ' ')
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function isHarbourFundFeed(text) {
+  const head = text.slice(0, 400).toUpperCase();
+  return /FUND NAME\s*,\s*HIPORT CODE/.test(head)
+      || /MASTER CLIENT\s*,\s*FUND NAME\s*,\s*FUND CODE/.test(head)
+      || /FUND TYPE\s*,\s*FUND NAME\s*,\s*FUND ID\s*,\s*DATE\s*,\s*1M GROSS/.test(head);
+}
+
+function _loadFundFeed()  { try { return JSON.parse(localStorage.getItem(_FUND_FEED_KEY) || '{}'); } catch(e) { return {}; } }
+function _saveFundFeed(d) { try { localStorage.setItem(_FUND_FEED_KEY, JSON.stringify(d)); } catch(e) {} }
+
+// Merge one parsed record into the store (keyed by fund code).
+function _mergeFundFeed(store, code, patch) {
+  if (!code) return;
+  const cur = store[code] || {};
+  Object.keys(patch).forEach(k => { if (patch[k] !== undefined && patch[k] !== null && patch[k] !== '') cur[k] = patch[k]; });
+  store[code] = cur;
+}
+
+// Parse any of the three feed formats + merge into localStorage. Returns stats.
+function importHarbourFundFeed(text) {
+  const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+  const header = (lines[0] || '').toUpperCase();
+  const store = _loadFundFeed();
+  const num = (s) => { const v = parseFloat(String(s ?? '').replace(/[",\s]/g, '')); return isNaN(v) ? null : v; };
+  const pct = (s) => { const v = parseFloat(String(s ?? '').replace(/[%,\s"]/g, '')); return isNaN(v) ? null : v; };
+  let kind = '', count = 0;
+
+  if (/FUND NAME\s*,\s*HIPORT CODE/.test(header)) {
+    kind = 'unit prices (master)';
+    for (let i = 1; i < lines.length; i++) {
+      const c = parseCSVLine(lines[i]);
+      const name = (c[0] || '').trim(), code = (c[1] || '').trim();
+      if (!name || !code || /FUND CLOSED/i.test(name)) continue;
+      const mv = num(c[10]);
+      _mergeFundFeed(store, code, {
+        name, norm: _normFundName(name), date: (c[3] || '').trim(),
+        nav: num(c[6]), price: num(c[7]),
+        dailyPct: mv != null ? mv * 100 : null            // fraction → %
+      });
+      count++;
+    }
+  } else if (/MASTER CLIENT\s*,\s*FUND NAME\s*,\s*FUND CODE/.test(header)) {
+    kind = 'unit prices (Nexus)';
+    const H = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+    const col = (n) => H.findIndex(h => h.startsWith(n));
+    const iName = col('fund name'), iCode = col('other fund code'), iDate = col('date'),
+          iNav = col('net asset value'), iPrice = col('nav price'), iRet = col('daily unit price return');
+    for (let i = 1; i < lines.length; i++) {
+      const c = parseCSVLine(lines[i]);
+      const name = (c[iName] || '').trim(), code = (c[iCode] || '').trim();
+      if (!name || !code) continue;
+      const r = num(c[iRet]);
+      _mergeFundFeed(store, code, {
+        name, norm: _normFundName(name), date: (c[iDate] || '').trim(),
+        nav: num(c[iNav]), price: num(c[iPrice]),
+        dailyPct: r != null ? r * 100 : null
+      });
+      count++;
+    }
+  } else if (/FUND TYPE\s*,\s*FUND NAME\s*,\s*FUND ID/.test(header)) {
+    kind = 'returns';
+    const H = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+    const col = (n) => H.indexOf(n);
+    const PERIODS = ['1m', '3m', '1yr', '2yr', '3yr', '5yr'];
+    for (let i = 1; i < lines.length; i++) {
+      const c = parseCSVLine(lines[i]);
+      const name = (c[1] || '').trim(), code = (c[2] || '').trim();
+      if (!name || !code) continue;
+      const returns = {}, bmark = {};
+      PERIODS.forEach(p => {
+        returns[p] = pct(c[col(`${p} gross`)]);
+        bmark[p]   = pct(c[col(`${p} bmark`)]);
+      });
+      _mergeFundFeed(store, code, {
+        name: store[code]?.name || name, norm: store[code]?.norm || _normFundName(name),
+        returnsDate: (c[3] || '').trim(), returns, bmark
+      });
+      count++;
+    }
+  }
+  _saveFundFeed(store);
+  return { kind, count, total: Object.keys(store).length };
+}
+
+// Look up the feed record for a fund book by name (normalised EXACT match).
+function getFundMarketData(fundName) {
+  if (!fundName) return null;
+  const store = _loadFundFeed();
+  const want = _normFundName(fundName);
+  if (!want) return null;
+  for (const code of Object.keys(store)) {
+    if (store[code].norm === want) return { code, ...store[code] };
+  }
+  return null;
+}
+
 // Parse a Disclose CSV into { fundName, holdings, stats }. Pure — no side effects.
 function parseDiscloseCSV(text) {
   const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
@@ -354,6 +475,18 @@ async function _importCSVImpl(event) {
 
   // Strip BOM, normalise line endings
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  // ── Harbour unit-price / returns feed → reference store, not holdings ──
+  if (isHarbourFundFeed(text)) {
+    const r = importHarbourFundFeed(text);
+    if (r.count) {
+      toast.success({ title: 'Fund data imported', message: `${r.count} fund(s) from the ${r.kind} feed. ${r.total} funds on file — NAV / unit price / returns now show on matching fund books.`, duration: 7000 });
+      try { renderAll(); } catch(e) {}
+    } else {
+      toast.warning('Recognised a Harbour fund feed but found no parseable rows.');
+    }
+    return;
+  }
+
   // ── NZ Disclose Register (fund full-holdings) takes a dedicated path ──
   // It's weights-based with metadata header rows, so the column parser below
   // doesn't apply. importDiscloseHoldings handles parse + replace + rename.
