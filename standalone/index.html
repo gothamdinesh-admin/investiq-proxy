@@ -253,6 +253,18 @@
     :root[data-edition="harbour"] nav.glass .btn-secondary i,
     :root[data-edition="harbour"] nav.glass [style*="99,102,241"] i { color:#FFFFFF !important; }
     :root[data-edition="harbour"] nav.glass .nav-sep { background: rgba(255,255,255,0.28) !important; }
+    /* Sign-In cloud badge was green-on-blue — bring it into the white-glass family. */
+    :root[data-edition="harbour"] nav.glass #supaSignInBadge button {
+      background: rgba(255,255,255,0.14) !important; color:#FFFFFF !important; border:1px solid rgba(255,255,255,0.28) !important;
+    }
+    :root[data-edition="harbour"] nav.glass #supaSignInBadge button i { color:#FFFFFF !important; }
+    /* Asset-type tag pills: generic indigo/blue/amber → Harbour blue family. */
+    :root[data-edition="harbour"] .tag-stock { background: rgba(0,90,121,0.10); color:#005A79; }
+    :root[data-edition="harbour"] .tag-etf   { background: rgba(46,125,143,0.12); color:#2E7D8F; }
+    :root[data-edition="harbour"] .tag-bond  { background: rgba(63,139,168,0.12); color:#3F8BA8; }
+    :root[data-edition="harbour"] .tag-fund  { background: rgba(127,176,196,0.16); color:#44546A; }
+    :root[data-edition="harbour"] .tag-cash  { background: rgba(191,200,204,0.22); color:#44546A; }
+    :root[data-edition="harbour"] .tag-crypto{ background: rgba(68,84,106,0.12); color:#44546A; }
 
     /* Native <select> dropdown options were globally near-black (#141e33) —
        that reads as a "black highlight" on the light/Harbour theme. Make the
@@ -2209,7 +2221,7 @@
           <h2 class="text-xl font-bold flex items-center gap-2">
             <i class="fas fa-briefcase" style="color:var(--accent);"></i><span data-cms="section.holdings.title">All Holdings</span>
           </h2>
-          <div class="text-xs neutral mt-1">Your full portfolio — units, cost, current value, return.</div>
+          <div class="text-xs neutral mt-1" id="holdingsSubtitle">Your full portfolio — units, cost, current value, return.</div>
         </div>
         <div class="flex gap-2 flex-wrap">
           <input type="text" id="holdingsSearch" class="input" style="width:170px;" placeholder="Search..." oninput="filterHoldings()">
@@ -5820,17 +5832,24 @@ function renderFundExposure(metrics) {
         </div>
         <div style="height:6px;border-radius:3px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(r.pct,100).toFixed(1)}%;background:${r.color || 'var(--accent)'};border-radius:3px;"></div></div>
       </div>`).join('') : '<div class="text-xs neutral">—</div>';
-  const agg = (keyFn) => {
+  const agg = (rows, keyFn) => {
+    const total = rows.reduce((s,h) => s + (h.currentValue || 0), 0) || 1;
     const o = {};
-    booked.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k] || 0) + (h.currentValue || 0); });
-    return Object.entries(o).map(([k,v]) => ({ label: k, pct: v / tv * 100 })).sort((a,b) => b.pct - a.pct);
+    rows.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k] || 0) + (h.currentValue || 0); });
+    return Object.entries(o).map(([k,v]) => ({ label: k, pct: v / total * 100 })).sort((a,b) => b.pct - a.pct);
   };
+  // Currency/region come from ISINs, which the aggregated tail rows don't have —
+  // including them just produced a giant misleading "NZD / Unlisted" bar. Use
+  // NAMED holdings only (% of named) for those two panels.
+  const named = booked.filter(h => !_isSyntheticFundRow(h));
   // Harbour-blue ramp instead of the generic purple/green/cyan asset palette.
   const CLASS_COLOR = { 'Equity':'#005A79', 'Fixed income':'#3F8BA8', 'Alternatives':'#7FB0C4', 'Cash':'#BFC8CC', 'Overlay':'#44546A', 'Other':'#9FB3BD' };
-  const classRows = agg(h => CLASS[h.type] || 'Other').map(r => ({ ...r, color: CLASS_COLOR[r.label] || 'var(--accent)' }));
+  const classRows = agg(booked, h => CLASS[h.type] || 'Other').map(r => ({ ...r, color: CLASS_COLOR[r.label] || 'var(--accent)' }));
   document.getElementById('fundExpClass').innerHTML  = bars(classRows);
-  document.getElementById('fundExpCcy').innerHTML    = bars(agg(h => h.nativeCurrency || h.currency || 'NZD').slice(0, 6));
-  document.getElementById('fundExpRegion').innerHTML = bars(agg(h => h.country || 'Unlisted / cash').slice(0, 6));
+  document.getElementById('fundExpCcy').innerHTML    = bars(agg(named, h => h.nativeCurrency || h.currency || 'NZD').slice(0, 6))
+    + '<div class="text-xs neutral mt-1" style="font-size:10px;">% of named holdings</div>';
+  document.getElementById('fundExpRegion').innerHTML = bars(agg(named, h => h.country || 'Unlisted').slice(0, 6))
+    + '<div class="text-xs neutral mt-1" style="font-size:10px;">% of named holdings</div>';
   const ov = (metrics.holdings || []).filter(h => h.overlayNet != null);
   document.getElementById('fundExpOverlay').innerHTML = ov.length
     ? ov.map(h => `<div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid var(--border);">
@@ -5873,14 +5892,15 @@ function renderExposurePage(metrics) {
   const booked = (metrics.holdings || []).filter(h => h.overlayNet == null);
   const CLASS = { stock:'Equity', etf:'Equity', bond:'Fixed income', cash:'Cash', fund:'Alternatives', mutualfund:'Alternatives', other:'Other' };
   const CLASS_COLOR = { 'Equity':'#005A79', 'Fixed income':'#3F8BA8', 'Alternatives':'#7FB0C4', 'Cash':'#BFC8CC', 'Overlay':'#44546A', 'Other':'#9FB3BD' };
-  const agg = (keyFn) => { const o = {}; booked.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k]||0) + (h.currentValue||0); }); return Object.entries(o).map(([k,v]) => ({ label:k, pct:v/tv*100 })).sort((a,b) => b.pct-a.pct); };
+  const agg = (rows, keyFn) => { const total = rows.reduce((s,h) => s + (h.currentValue||0), 0) || 1; const o = {}; rows.forEach(h => { const k = keyFn(h) || 'Other'; o[k] = (o[k]||0) + (h.currentValue||0); }); return Object.entries(o).map(([k,v]) => ({ label:k, pct:v/total*100 })).sort((a,b) => b.pct-a.pct); };
   const bars = (rows, colorFn) => rows.length ? rows.map(r => `<div style="margin-bottom:10px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;">${_escape(r.label)}</span><span class="mono neutral">${fmt(r.pct)}%</span></div><div style="height:8px;border-radius:4px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(r.pct,100).toFixed(1)}%;background:${(colorFn && colorFn(r)) || 'var(--accent)'};border-radius:4px;"></div></div></div>`).join('') : '<div class="text-xs neutral">—</div>';
+  const named = booked.filter(h => !_isSyntheticFundRow(h));   // tail rows have no ISIN → skip for ccy/region
   const ov = (metrics.holdings || []).filter(h => h.overlayNet != null);
   const panel = (title, inner) => `<div class="card p-5"><div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:0.5px;">${title}</div>${inner}</div>`;
   el.innerHTML = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    ${panel('By asset class', bars(agg(h => CLASS[h.type] || 'Other'), r => CLASS_COLOR[r.label]))}
-    ${panel('By currency', bars(agg(h => h.nativeCurrency || h.currency || 'NZD')))}
-    ${panel('By region', bars(agg(h => h.country || 'Unlisted / cash')))}
+    ${panel('By asset class', bars(agg(booked, h => CLASS[h.type] || 'Other'), r => CLASS_COLOR[r.label]))}
+    ${panel('By currency <span style="text-transform:none;letter-spacing:0;">· % of named holdings</span>', bars(agg(named, h => h.nativeCurrency || h.currency || 'NZD')))}
+    ${panel('By region <span style="text-transform:none;letter-spacing:0;">· % of named holdings</span>', bars(agg(named, h => h.country || 'Unlisted')))}
     ${panel('Derivative overlay', ov.length ? ov.map(h => `<div style="display:flex;justify-content:space-between;font-size:14px;padding:8px 0;border-bottom:1px solid var(--border);"><span>${_escape((h.name||'').split('·')[0].trim())}</span><span class="mono" style="color:${h.overlayNet>=0?'var(--color-green)':'var(--color-red)'};">${h.overlayNet>=0?'+':''}${fmt(h.overlayNet)}% of NAV</span></div>`).join('') : '<div class="text-xs neutral">No derivative overlay disclosed.</div>')}
   </div>`;
 }
@@ -6218,9 +6238,10 @@ function renderOverviewGreeting(metrics) {
   // Strip any obvious non-name suffixes/numbers from email-derived names
   // (e.g. "gothamdinesh.admin" → "Gothamdinesh", "john123" → "John")
   name = name.replace(/[._].*$/, '').replace(/\d+$/, '').trim() || 'there';
-  // Title-case first letter only
+  // Title-case first letter only. If we never resolved a real name, greet
+  // without one — "Good evening, There" reads like a bug.
   const niceName = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-  text.textContent = `${greetingWord}, ${niceName}`;
+  text.textContent = name === 'there' ? greetingWord : `${greetingWord}, ${niceName}`;
 
   // Headline storytelling — lead with the most interesting number
   const sym = CURRENCY_SYMBOLS[state.settings.currency || 'NZD'] || 'NZ$';
@@ -10919,6 +10940,7 @@ function renderHoldingsKpiStrip(metrics) {
     const real = holdings.filter(h => !_isSyntheticFundRow(h));
     const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0))[0];
     if (refreshBtn) refreshBtn.style.display = 'none';      // no prices to refresh
+    set('holdingsSubtitle', 'The fund’s disclosed constituents — weight, asset class, region, currency.');
     set('hKpiCountSub', fund && fund.asAt ? `as at ${fund.asAt}` : 'disclosed positions');
     // Up Today → Top weight
     set('hKpiUpLabel', 'Top Weight'); setBorder('hKpiUpTile', 'var(--accent)'); setColor('hKpiUp', 'var(--accent)');
@@ -10937,6 +10959,7 @@ function renderHoldingsKpiStrip(metrics) {
 
   // ── Normal (priced) mode — restore any repurposed labels/borders ──
   if (refreshBtn) refreshBtn.style.display = '';
+  set('holdingsSubtitle', 'Your full portfolio — units, cost, current value, return.');
   set('hKpiUpLabel', 'Up Today');   setBorder('hKpiUpTile', 'var(--color-green)'); setColor('hKpiUp', 'var(--color-green)');
   set('hKpiDownLabel', 'Down Today'); setBorder('hKpiDownTile', 'var(--color-red)'); setColor('hKpiDown', 'var(--color-red)');
   const platforms = new Set(holdings.map(h => h.platform).filter(Boolean));
