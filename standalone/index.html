@@ -1453,6 +1453,8 @@
         <div id="gateSignUpFields" style="display:none;">
           <label>Confirm Password</label>
           <input type="password" id="gatePassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitGateAuth()">
+          <div class="text-xs neutral mt-3" style="line-height:1.5;">By creating an account you agree to the
+            <a onclick="showPrivacyNotice()" style="color:var(--accent);text-decoration:underline;cursor:pointer;">Privacy Notice</a>.</div>
         </div>
       </div>
       <!-- 2FA challenge — its own clean step. Hidden until the password
@@ -4108,6 +4110,8 @@
       <div id="authSignUpFields" style="display:none;">
         <label>Confirm Password</label>
         <input type="password" id="authPassword2" class="input" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitAuth()">
+        <div class="text-xs neutral mt-3" style="line-height:1.5;">By creating an account you agree to the
+          <a onclick="showPrivacyNotice()" style="color:var(--accent);text-decoration:underline;cursor:pointer;">Privacy Notice</a>.</div>
       </div>
     </div>
 
@@ -5493,6 +5497,34 @@ async function notifySignupServer(kind, email) {
       body: JSON.stringify({ type: kind, email: email || (_supaUser && _supaUser.email) || '', edition })
     });
   } catch(e) { console.warn('[notify-signup] non-fatal:', e); }
+}
+
+// Privacy notice (NZ Privacy Act 2020) — linked from both signup surfaces.
+// Content is deliberately plain-English and edition-aware.
+function showPrivacyNotice() {
+  const app = (typeof cmsName === 'function') ? cmsName() : 'InvestIQ';
+  const support = (typeof EDITION !== 'undefined' && EDITION.supportEmail) || 'gothamdinesh@gmail.com';
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  const html = `
+    <div style="font-size:12.5px;line-height:1.7;color:var(--text-body);max-height:52vh;overflow-y:auto;padding-right:6px;">
+      <b>What we collect.</b> Your email address and password (held by our authentication provider — we never see the password),
+      the portfolio/fund data you import or enter, your in-app settings, and an activity log of key events
+      (sign-ins, imports, admin actions) kept for security auditing.
+      ${harbour ? '<br><br><b>About this edition.</b> ' + _escape(app) + ' is an internal analytical tool for approved Harbour Asset Management staff. Fund holdings shown are from the public NZ Disclose Register; unit-price and report files are internal Harbour documents visible only to approved, signed-in users.' : ''}
+      <br><br><b>Where it lives.</b> Data is stored in a dedicated Supabase (hosted PostgreSQL) project and synced to your browser's local storage on your device. Local data is wiped on sign-out.
+      <br><br><b>Who processes it.</b> Supabase (database & auth), Netlify (hosting), Render (API proxy), Anthropic (AI analysis — holding names/weights only, no account data), Resend (email notifications), Sentry (error monitoring), and Yahoo Finance (price lookups for listed tickers). We don't sell or share your data with anyone else.
+      <br><br><b>AI processing.</b> When you run an AI analysis, the holdings data of the selected portfolio (names, weights, returns) is sent to Anthropic's Claude API via our proxy. No email addresses or credentials are included.
+      <br><br><b>Retention & deletion.</b> Your data is kept while your account is active, plus rolling backups (30 days). To access, correct, or delete your data (Privacy Act 2020 rights), email <a href="mailto:${_escape(support)}" style="color:var(--accent);">${_escape(support)}</a> — deletion is completed within 10 working days.
+      <br><br><b>Cookies & storage.</b> No advertising cookies. We use browser local storage for your session and settings only.
+      <br><br><span class="neutral">Last updated 4 July 2026 · ${_escape(app)}</span>
+    </div>`;
+  showFormModal({
+    title: 'Privacy Notice',
+    icon: 'fa-user-shield',
+    iconColor: 'var(--accent)',
+    fields: [{ name: '_p', type: 'static', html }],
+    submitLabel: 'Close', cancelLabel: 'Close'
+  });
 }
 
 async function signUp(email, password) {
