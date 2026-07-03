@@ -239,6 +239,8 @@
     :root[data-edition="harbour"] .sidebar .nav-link.active i { color:#FFFFFF !important; }
     :root[data-edition="harbour"] .sidebar .nav-link:hover:not(.active) { background: rgba(255,255,255,0.10) !important; }
     :root[data-edition="harbour"] .sidebar .card2 { background: rgba(255,255,255,0.12) !important; border-color: rgba(255,255,255,0.22) !important; }
+    /* Portfolio Score ring: personal-investor concept — irrelevant for a managed fund book. */
+    :root[data-edition="harbour"] #sidebarScoreCard { display: none !important; }
 
     /* ── Top nav (Harbour Blue) — whiten only specific toolbar elements ── */
     :root[data-edition="harbour"] nav.glass { background: var(--accent) !important; border-bottom-color: #00485F !important; }
@@ -1926,8 +1928,9 @@
       <div class="text-xs mt-1" id="sidebarFxRate" style="color:#4a6080;"></div>
     </div>
 
-    <!-- Score ring -->
-    <div class="card2 p-4 mb-4 flex items-center gap-4">
+    <!-- Score ring (hidden on Harbour — a diversification score is a personal-
+         investor concept; a managed fund's diversification is by mandate) -->
+    <div id="sidebarScoreCard" class="card2 p-4 mb-4 flex items-center gap-4">
       <div class="score-ring">
         <svg width="80" height="80" viewBox="0 0 80 80">
           <circle cx="40" cy="40" r="32" fill="none" stroke="#1e2d4a" stroke-width="8"/>
