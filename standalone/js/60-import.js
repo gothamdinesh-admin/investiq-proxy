@@ -497,10 +497,138 @@ async function importCSV(event) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// BULK IMPORT — drop a whole folder selection or an OneDrive .zip as-is.
+// Extracts zips natively (DecompressionStream, no library), classifies every
+// file (unit-price feed / Disclose holdings / returns / details), asks ONCE,
+// imports everything, and shows one summary. PDFs + unknown files are skipped.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Minimal ZIP reader: central directory + stored/deflate entries.
+async function _extractZipCsvs(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const bytes = new Uint8Array(arrayBuffer);
+  // Find End-Of-Central-Directory (scan back ≤64KB for PK\x05\x06)
+  let eocd = -1;
+  for (let i = arrayBuffer.byteLength - 22; i >= Math.max(0, arrayBuffer.byteLength - 65558); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error('Not a valid .zip file');
+  const count = view.getUint16(eocd + 10, true);
+  let off = view.getUint32(eocd + 16, true);
+  const out = [];
+  const dec = new TextDecoder('utf-8');
+  for (let n = 0; n < count; n++) {
+    if (view.getUint32(off, true) !== 0x02014b50) break;
+    const method   = view.getUint16(off + 10, true);
+    const compSize = view.getUint32(off + 20, true);
+    const nameLen  = view.getUint16(off + 28, true);
+    const extraLen = view.getUint16(off + 30, true);
+    const cmtLen   = view.getUint16(off + 32, true);
+    const lfhOff   = view.getUint32(off + 42, true);
+    const name     = dec.decode(bytes.subarray(off + 46, off + 46 + nameLen));
+    off += 46 + nameLen + extraLen + cmtLen;
+    if (!/\.csv$/i.test(name) || name.endsWith('/')) continue;   // CSVs only
+    // Local file header → data offset
+    const lfNameLen  = view.getUint16(lfhOff + 26, true);
+    const lfExtraLen = view.getUint16(lfhOff + 28, true);
+    const dataStart  = lfhOff + 30 + lfNameLen + lfExtraLen;
+    const comp = bytes.subarray(dataStart, dataStart + compSize);
+    let text;
+    if (method === 0) {
+      text = dec.decode(comp);
+    } else if (method === 8) {
+      const ds = new Response(new Blob([comp]).stream().pipeThrough(new DecompressionStream('deflate-raw')));
+      text = await ds.text();
+    } else { continue; }   // unsupported compression — skip
+    out.push({ name: name.split('/').pop(), text });
+  }
+  return out;
+}
+
+// Classify raw CSV text into an import route.
+function _classifyImportText(text) {
+  if (isHarbourFundFeed(text)) return 'feed';
+  if (isDiscloseFormat(text))  return 'disclose-' + discloseKind(text);
+  return 'other';
+}
+
+async function importFilesBulk(files) {
+  // 1) Collect texts: expand zips, read CSVs, note skips.
+  const items = [];   // {name, text, route}
+  let skipped = 0;
+  toast.info('Reading files…');
+  for (const f of files) {
+    try {
+      if (/\.zip$/i.test(f.name)) {
+        if (typeof DecompressionStream === 'undefined') { toast.error('This browser can\'t unzip natively — extract the zip first.'); skipped++; continue; }
+        const inner = await _extractZipCsvs(await f.arrayBuffer());
+        inner.forEach(x => items.push({ name: x.name, text: x.text }));
+      } else if (/\.csv$/i.test(f.name)) {
+        if (f.size > 5 * 1024 * 1024) { skipped++; continue; }
+        items.push({ name: f.name, text: await f.text() });
+      } else { skipped++; }   // PDFs etc.
+    } catch(e) { console.warn('[bulk] read failed:', f.name, e); skipped++; }
+  }
+  items.forEach(it => { it.route = _classifyImportText(it.text); });
+  const groups = { 'disclose-holdings': [], 'disclose-returns': [], 'disclose-details': [], 'feed': [], 'other': [] };
+  items.forEach(it => groups[it.route].push(it));
+  const total = items.length;
+  if (!total) { toast.warning('No importable CSVs found.'); return; }
+
+  // 2) One confirmation for the whole batch.
+  const bits = [];
+  if (groups['disclose-holdings'].length) bits.push(`<b>${groups['disclose-holdings'].length}</b> fund holdings file(s) → one portfolio book per fund (created or replaced)`);
+  if (groups['disclose-returns'].length)  bits.push(`<b>${groups['disclose-returns'].length}</b> monthly-returns file(s)`);
+  if (groups['disclose-details'].length)  bits.push(`<b>${groups['disclose-details'].length}</b> fund-profile file(s)`);
+  if (groups['feed'].length)              bits.push(`<b>${groups['feed'].length}</b> unit-price / returns feed(s)`);
+  if (groups['other'].length)             bits.push(`<span class="neutral">${groups['other'].length} unrecognised CSV(s) — skipped in bulk mode</span>`);
+  const ok = await showFormModal({
+    title: `Bulk import — ${total} file${total > 1 ? 's' : ''}`,
+    icon: 'fa-boxes-stacked',
+    description: bits.join('<br>') + (skipped ? `<br><span class="neutral">${skipped} non-CSV file(s) skipped (PDFs etc.)</span>` : ''),
+    submitLabel: 'Import everything',
+    submitVariant: 'primary'
+  });
+  if (!ok) { toast.info('Bulk import cancelled.'); return; }
+
+  // 3) Execute — reference data first, holdings last.
+  const done = { feeds: 0, returns: 0, details: 0, funds: [], failed: [] };
+  groups['feed'].forEach(it => { try { const r = importHarbourFundFeed(it.text); if (r.count) done.feeds++; } catch(e) { done.failed.push(it.name); } });
+  groups['disclose-returns'].forEach(it => { try { if (importDiscloseReturns(it.text).ok) done.returns++; } catch(e) { done.failed.push(it.name); } });
+  groups['disclose-details'].forEach(it => { try { if (importDiscloseDetails(it.text).ok) done.details++; } catch(e) { done.failed.push(it.name); } });
+  for (const it of groups['disclose-holdings']) {
+    try {
+      const r = await importDiscloseHoldings(it.text, { bulk: true });
+      if (r && r.fundName) done.funds.push(r.fundName);
+      else done.failed.push(it.name + ' (no rows)');
+    } catch(e) { console.warn('[bulk] holdings failed:', it.name, e); done.failed.push(it.name + ': ' + e.message); }
+  }
+
+  saveState();
+  if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
+  renderAll();
+  const parts = [];
+  if (done.funds.length)   parts.push(`${done.funds.length} fund book(s): ${done.funds.slice(0, 4).join(', ')}${done.funds.length > 4 ? '…' : ''}`);
+  if (done.returns) parts.push(`${done.returns} monthly-returns set(s)`);
+  if (done.details) parts.push(`${done.details} fund profile(s)`);
+  if (done.feeds)   parts.push(`${done.feeds} price feed(s)`);
+  if (done.failed.length) parts.push(`⚠ ${done.failed.length} failed: ${done.failed.slice(0, 3).join(', ')}`);
+  toast.success({ title: 'Bulk import complete', message: parts.join('\n') || 'Nothing imported.', duration: 10000 });
+  logActivity('bulk_import', { files: total, feeds: done.feeds, returns: done.returns, details: done.details, funds: done.funds.length, failed: done.failed.length });
+  return done;
+}
+
 async function _importCSVImpl(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  event.target.value = ''; // reset so same file can be re-imported
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+  event.target.value = ''; // reset so same file(s) can be re-imported
+  // Multi-select or a .zip → the bulk path handles everything.
+  if (files.length > 1 || /\.zip$/i.test(files[0].name)) {
+    await importFilesBulk(files);
+    return;
+  }
+  const file = files[0];
 
   // Multi-portfolio: ask which portfolio to import INTO (defaults to active).
   // The rest of the import writes to state.portfolio (the active one), so we
@@ -739,11 +867,12 @@ async function _importCSVImpl(event) {
 // Import an NZ Disclose Register holdings file into the ACTIVE portfolio.
 // A fund's full holdings are a complete set, so this REPLACES (not merges)
 // and renames the portfolio to the fund. Weight-based: no price fetch.
-async function importDiscloseHoldings(text) {
+async function importDiscloseHoldings(text, opts = {}) {
+  const bulk = !!opts.bulk;   // bulk mode: no per-fund modal/toast/renders — the batch confirmed once
   const { fundName, asAt, asAtISO, holdings, stats } = parseDiscloseCSV(text);
   if (!holdings.length) {
-    toast.error({ title: 'No holdings found', message: 'This looks like a Disclose file but no asset rows parsed. Check the "Asset name,% of fund net assets,Security code" header is present.' });
-    return;
+    if (!bulk) toast.error({ title: 'No holdings found', message: 'This looks like a Disclose file but no asset rows parsed. Check the "Asset name,% of fund net assets,Security code" header is present.' });
+    return null;
   }
 
   // Find-or-create the book for THIS fund (matched by normalised name), so
@@ -761,7 +890,7 @@ async function importDiscloseHoldings(text) {
   }
   const isNew = !target;
   const existing = target ? (target.holdings || []).length : 0;
-  const ok = await showFormModal({
+  const ok = bulk ? true : await showFormModal({
     title: 'Import fund holdings',
     icon: 'fa-building-columns',
     description: `Import <b>${holdings.length}</b> lines from <b>${fundName || 'this fund'}</b>` +
@@ -771,7 +900,7 @@ async function importDiscloseHoldings(text) {
     submitLabel: isNew ? 'Create & import' : (existing ? 'Import & replace' : 'Import'),
     submitVariant: existing ? 'danger' : 'primary'
   });
-  if (!ok) { toast.info('Import cancelled.'); return; }
+  if (!ok) { toast.info('Import cancelled.'); return null; }
 
   if (isNew) {
     const id = createPortfolio(fundName || 'Fund');   // creates + activates
@@ -782,13 +911,20 @@ async function importDiscloseHoldings(text) {
   // Replace the target portfolio's holdings + name it after the fund.
   state.portfolio = holdings;
   if (fundName) renamePortfolio(target.id, fundName);
+  // saveState() (called by create/rename/switch above) REBUILDS the portfolio
+  // objects, so re-resolve the live object before stamping fund metadata.
+  target = listPortfolios().find(p => p.id === target.id) || target;
   // Stamp fund metadata on the portfolio (drives the "as at" badge + weight view).
   target.fund = { name: fundName || target.name, asAt: asAt || '', asAtISO: asAtISO || '', importedRows: stats.rows };
+  saveState();   // persist the fund stamp itself (cheap; bulk calls it again at the end)
   // Record this period for the Disclosure History page (period-over-period diff).
   if (typeof _saveDiscloseHistory === 'function') {
     _saveDiscloseHistory(fundName || target.name, asAtISO, asAt,
       holdings.map(h => ({ n: h.name, w: (h.lots && h.lots[0] ? h.lots[0].quantity : 0), t: h.type })));
   }
+
+  // Bulk mode: the batch runner saves/renders/toasts once at the end.
+  if (bulk) return { fundName, count: holdings.length, replaced: existing, isNew };
 
   saveState();
   if (typeof renderPortfolioSwitcher === 'function') renderPortfolioSwitcher();
@@ -808,6 +944,7 @@ async function importDiscloseHoldings(text) {
     fundName, total: holdings.length, individual: stats.individual,
     aggregated: stats.aggregated, fxNet: stats.fxNet, ratesNet: stats.ratesNet
   });
+  return { fundName, count: holdings.length, replaced: existing, isNew };
 }
 
 function downloadCSVTemplate() {

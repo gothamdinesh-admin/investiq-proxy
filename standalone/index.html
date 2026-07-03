@@ -1973,7 +1973,7 @@
     <!-- Hidden file inputs used by import flows (still referenced from
          elsewhere — Holdings page, modals). Action buttons themselves
          moved to the FAB. -->
-    <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+    <input type="file" id="csvInput" accept=".csv,.zip" multiple style="display:none" onchange="importCSV(event)">
     <input type="file" id="etoroInput" accept=".csv" style="display:none" onchange="importEtoro(event)">
     <input type="file" id="sharesiesInput" accept=".csv" style="display:none" onchange="importSharesies(event)">
     <input type="file" id="harbourInput" accept=".csv" style="display:none" onchange="importHarbour(event)">
@@ -2252,7 +2252,7 @@
             <!-- Simple CSV import: date + file picker. Smart merge by default. -->
             <label class="btn btn-primary" style="cursor:pointer;" title="Upload an eToro / Sharesies / generic CSV">
               <i class="fas fa-file-import mr-1"></i>Upload CSV
-              <input type="file" accept=".csv" id="csvImportInput" style="display:none;" onchange="importCSV(event)">
+              <input type="file" accept=".csv,.zip" multiple id="csvImportInput" style="display:none;" onchange="importCSV(event)">
             </label>
             <div class="flex items-center gap-1 text-xs neutral" title="The portfolio will be snapshotted as of this date — pick a past date to backfill history">
               <i class="fas fa-calendar" style="font-size:11px;opacity:0.5;"></i>
@@ -4322,21 +4322,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js"></script>
-<script src="js/05-content.js"></script>
-<script src="js/10-helpers.js"></script>
-<script src="js/20-state.js"></script>
-<script src="js/30-cloud.js"></script>
-<script src="js/40-auth.js"></script>
-<script src="js/45-auth-security.js"></script>
-<script src="js/60-import.js"></script>
-<script src="js/50-portfolio.js"></script>
-<script src="js/70-ai.js"></script>
-<script src="js/80-trader.js"></script>
-<script src="js/85-calendar-reports.js"></script>
-<script src="js/88-onboarding-tour.js"></script>
-<script src="js/90-goals.js"></script>
-<script src="js/95-integrations.js"></script>
+<script src="js/00-config.js?b=58"></script>
+<script src="js/05-content.js?b=58"></script>
+<script src="js/10-helpers.js?b=58"></script>
+<script src="js/20-state.js?b=58"></script>
+<script src="js/30-cloud.js?b=58"></script>
+<script src="js/40-auth.js?b=58"></script>
+<script src="js/45-auth-security.js?b=58"></script>
+<script src="js/60-import.js?b=58"></script>
+<script src="js/50-portfolio.js?b=58"></script>
+<script src="js/70-ai.js?b=58"></script>
+<script src="js/80-trader.js?b=58"></script>
+<script src="js/85-calendar-reports.js?b=58"></script>
+<script src="js/88-onboarding-tour.js?b=58"></script>
+<script src="js/90-goals.js?b=58"></script>
+<script src="js/95-integrations.js?b=58"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -8219,7 +8219,8 @@ async function importBackup(event) {
       state.portfolios = backup.portfolios.map(p => ({
         id: p.id || uuid(),
         name: (p.name || 'Portfolio').trim() || 'Portfolio',
-        holdings: consolidatePortfolio(p.holdings || [])
+        holdings: consolidatePortfolio(p.holdings || []),
+        ...(p.fund ? { fund: p.fund } : {})
       }));
       state.activePortfolioId = state.portfolios.some(p => p.id === backup.activePortfolioId)
         ? backup.activePortfolioId : state.portfolios[0].id;

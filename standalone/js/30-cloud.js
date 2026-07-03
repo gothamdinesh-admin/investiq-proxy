@@ -141,10 +141,13 @@ async function loadFromSupabase() {
     if (remoteUpdatedAt) state.settings.updatedAt = remoteUpdatedAt;
 
     // Adopt the cloud envelope: consolidate each portfolio's holdings.
+    // Keep fund metadata (Disclose imports: name/asAt) — dropping it silently
+    // broke the fund view (as-at badge, feed/returns matching) on every load.
     state.portfolios = cloudPortfolios.map(p => ({
       id: p.id || uuid(),
       name: (p.name || 'Portfolio').trim() || 'Portfolio',
-      holdings: consolidatePortfolio(p.holdings || [])
+      holdings: consolidatePortfolio(p.holdings || []),
+      ...(p.fund ? { fund: p.fund } : {})
     }));
     state.activePortfolioId = state.portfolios.some(p => p.id === cloudActiveId)
       ? cloudActiveId : state.portfolios[0].id;
@@ -231,7 +234,8 @@ async function saveToSupabase() {
     const dedupedPortfolios = listPortfolios().map(p => ({
       id: p.id,
       name: p.name,
-      holdings: _dedupe(p.holdings, p.name)
+      holdings: _dedupe(p.holdings, p.name),
+      ...(p.fund ? { fund: p.fund } : {})     // fund metadata rides along to the cloud
     }));
     if (dedupedPortfolios.length === 0) dedupedPortfolios.push({ id: 'default', name: 'Personal', holdings: [] });
     // Push the deduped copy back into local state too.

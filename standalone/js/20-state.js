@@ -175,7 +175,10 @@ function _normalisePortfolios(parsed) {
     state.portfolios = parsed.portfolios.map(p => ({
       id: p.id || uuid(),
       name: (p.name || 'Portfolio').trim() || 'Portfolio',
-      holdings: consolidatePortfolio(p.holdings || [])
+      holdings: consolidatePortfolio(p.holdings || []),
+      // Fund metadata (Disclose imports: name/asAt/asAtISO) must survive
+      // normalisation — dropping it silently broke the fund view on reload.
+      ...(p.fund ? { fund: p.fund } : {})
     }));
     const wanted = parsed.activePortfolioId;
     state.activePortfolioId = state.portfolios.some(p => p.id === wanted)
@@ -215,11 +218,15 @@ function saveState() {
   //   • proxyUrl / supabaseUrl / supabaseKey are platform-level, non-secret config
   //   • akahuTokens are per-user and must persist so users don't re-enter them
   const safeSetting = { ...state.settings, claudeApiKey: '' };
-  // Consolidate every portfolio's holdings before persisting.
+  // Consolidate every portfolio's holdings before persisting. IMPORTANT:
+  // carry fund metadata (Disclose imports) through the rebuild — this map
+  // runs on EVERY save, so dropping the key here silently killed the fund
+  // view (as-at badge, unit-price/returns matching) moments after import.
   const portfolios = listPortfolios().map(p => ({
     id: p.id,
     name: p.name,
-    holdings: consolidatePortfolio(p.holdings || [])
+    holdings: consolidatePortfolio(p.holdings || []),
+    ...(p.fund ? { fund: p.fund } : {})
   }));
   if (portfolios.length === 0) portfolios.push({ id: 'default', name: 'Personal', holdings: [] });
   const activePortfolioId = portfolios.some(p => p.id === state.activePortfolioId)
@@ -304,7 +311,8 @@ function restoreFromAutoBackup(index = 0) {
     state.portfolios = b.portfolios.map(p => ({
       id: p.id || uuid(),
       name: p.name || 'Portfolio',
-      holdings: consolidatePortfolio(p.holdings || [])
+      holdings: consolidatePortfolio(p.holdings || []),
+      ...(p.fund ? { fund: p.fund } : {})
     }));
     state.activePortfolioId = state.portfolios.some(p => p.id === b.activePortfolioId)
       ? b.activePortfolioId : state.portfolios[0].id;
