@@ -38,7 +38,10 @@ AKAHU_API     = "https://api.akahu.io/v1"
 # ALLOWED_ORIGIN — one or more comma-separated origins, e.g.:
 #   "https://investiq-nz.netlify.app,https://staging.netlify.app"
 # Default '*' is open and only safe for local dev.
-ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGIN", "*").split(",") if o.strip()]
+# Normalise: trim whitespace AND a trailing slash — browsers send the Origin
+# header with no trailing slash, so "https://site.app/" in the env would never
+# match. rstrip("/") makes the allowlist forgiving of that common mistake.
+ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in os.environ.get("ALLOWED_ORIGIN", "*").split(",") if o.strip()]
 
 # PROXY_SECRET — global admin override (env-set). Always accepted.
 # Per-user secrets are stored in Supabase profiles.proxy_secret and validated
@@ -107,7 +110,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if "*" in ALLOWED_ORIGINS:
             return "*"
         origin = self.headers.get("Origin", "")
-        if origin and origin in ALLOWED_ORIGINS:
+        # Compare slash-normalised, but echo back the exact Origin the browser sent.
+        if origin and origin.rstrip("/") in ALLOWED_ORIGINS:
             return origin
         # If no Origin header (e.g. server-to-server), allow only with a valid secret
         return None
