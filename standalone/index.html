@@ -15,19 +15,45 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="InvestIQ">
+  <script>
+    // First-paint edition branding. The app is edition-aware at runtime, but the
+    // static title/theme-color/manifest above are the personal defaults — so the
+    // Harbour domain briefly showed "InvestIQ" to PWA install, crawlers, and the
+    // browser tab before JS applied branding. Swap them synchronously here (in
+    // <head>, before paint) using the same hostname rule as detectEdition().
+    (function () {
+      try {
+        if (location.hostname.toLowerCase().indexOf('harbour') === -1) return;
+        document.title = 'Harbour IQ — Investment portfolio dashboard';
+        var set = function (sel, attr, val) { var el = document.querySelector(sel); if (el) el.setAttribute(attr, val); };
+        set('meta[name="theme-color"]', 'content', '#005A79');           // Harbour Blue
+        set('meta[name="apple-mobile-web-app-title"]', 'content', 'Harbour IQ');
+        set('meta[name="description"]', 'content', 'Harbour IQ — fund holdings, exposure and reporting for Harbour Asset Management.');
+        set('meta[property="og:title"]', 'content', 'Harbour IQ — Investment portfolio dashboard');
+        set('link[rel="manifest"]', 'href', 'manifest-harbour.json');
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <!-- Tailwind: dynamic JIT CDN — cannot be SRI-pinned; replacing it with a
+       build is the CSP blocker tracked in docs/PRODUCTION_READINESS.md (P1). -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <!-- Pinned + SRI (F5). Immutable pinned URLs → stable hashes. -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer
+          integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+        integrity="sha384-/o6I2CkkWC//PSjvWC/eYN7l3xM3tJm8ZzVkCOfp//W05QcE3mlGskpoHB6XqI+B" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.0/dist/umd/supabase.min.js" defer
+          integrity="sha384-DjOvX/sJLsmbMrw4wTvf6l3kiGBjdxyOO6X2MTFwOOXGkjN/mE08BoDzrpaaIjil" crossorigin="anonymous"></script>
 
   <!-- Sentry error monitoring (Security C5).
        Loads the Sentry SDK from the official CDN. DSN comes from
        PLATFORM_CONFIG.sentryDsn (00-config.js) — leave blank to disable.
        SRI hash deferred to M8 (Subresource Integrity rollout). -->
   <script src="https://browser.sentry-cdn.com/7.110.0/bundle.tracing.min.js"
+          integrity="sha384-AW7fAmtSljXVfwe7Dukjfbi0Qktn2FWEiYrH79/C6BrhJ6rePsHmThRaPUdTJxad"
           crossorigin="anonymous" defer></script>
   <script>
     tailwind.config = {
@@ -1888,21 +1914,9 @@
   </div>
 
   <div class="drawer-section-title">Sections</div>
-  <button class="drawer-item" onclick="showSection('overview');toggleMobileDrawer(false);"><i class="fas fa-th-large"></i>Overview</button>
-  <button class="drawer-item" onclick="showSection('holdings');toggleMobileDrawer(false);"><i class="fas fa-briefcase"></i>Holdings</button>
-  <button class="drawer-item" onclick="showSection('performance');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>Performance</button>
-  <button class="drawer-item" onclick="showSection('market');toggleMobileDrawer(false);"><i class="fas fa-globe"></i>Market</button>
-  <button class="drawer-item" onclick="showSection('insights');toggleMobileDrawer(false);"><i class="fas fa-brain"></i>AI Insights</button>
-  <button class="drawer-item" onclick="showSection('watchlist');toggleMobileDrawer(false);"><i class="fas fa-eye"></i>Watchlist</button>
-  <button class="drawer-item" onclick="showSection('news');toggleMobileDrawer(false);"><i class="fas fa-newspaper"></i>News</button>
-  <button class="drawer-item" onclick="showSection('tax');toggleMobileDrawer(false);"><i class="fas fa-receipt"></i>NZ Tax (FIF)</button>
-  <button class="drawer-item" onclick="showSection('dividends');toggleMobileDrawer(false);"><i class="fas fa-coins"></i>Dividends</button>
-  <button class="drawer-item" onclick="showSection('calendar');toggleMobileDrawer(false);"><i class="fas fa-calendar-days"></i>Calendar</button>
-  <button class="drawer-item" onclick="showSection('reports');toggleMobileDrawer(false);"><i class="fas fa-file-pdf"></i>Reports</button>
-  <button class="drawer-item" onclick="showSection('goals');toggleMobileDrawer(false);"><i class="fas fa-bullseye"></i>Goals</button>
-  <button class="drawer-item" onclick="showSection('trader');toggleMobileDrawer(false);"><i class="fas fa-chart-line"></i>TraderIQ</button>
-  <button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas fa-users"></i>Family</button>
-  <button class="drawer-item" id="drawerAdminLink" style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas fa-shield-alt" style="color:var(--color-amber);"></i>Admin Panel</button>
+  <!-- Generated from NAV_GROUPS by renderMobileDrawer() so it matches the
+       active edition (Harbour hides Performance/Tax/Dividends/etc). -->
+  <div id="drawerSections"></div>
 
   <div class="drawer-section-title">Actions</div>
   <button class="drawer-item" onclick="openModal('addModal');toggleMobileDrawer(false);"><i class="fas fa-plus-circle"></i>Add holding</button>
@@ -4352,21 +4366,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=65"></script>
-<script src="js/05-content.js?b=65"></script>
-<script src="js/10-helpers.js?b=65"></script>
-<script src="js/20-state.js?b=65"></script>
-<script src="js/30-cloud.js?b=65"></script>
-<script src="js/40-auth.js?b=65"></script>
-<script src="js/45-auth-security.js?b=65"></script>
-<script src="js/60-import.js?b=65"></script>
-<script src="js/50-portfolio.js?b=65"></script>
-<script src="js/70-ai.js?b=65"></script>
-<script src="js/80-trader.js?b=65"></script>
-<script src="js/85-calendar-reports.js?b=65"></script>
-<script src="js/88-onboarding-tour.js?b=65"></script>
-<script src="js/90-goals.js?b=65"></script>
-<script src="js/95-integrations.js?b=65"></script>
+<script src="js/00-config.js?b=66"></script>
+<script src="js/05-content.js?b=66"></script>
+<script src="js/10-helpers.js?b=66"></script>
+<script src="js/20-state.js?b=66"></script>
+<script src="js/30-cloud.js?b=66"></script>
+<script src="js/40-auth.js?b=66"></script>
+<script src="js/45-auth-security.js?b=66"></script>
+<script src="js/60-import.js?b=66"></script>
+<script src="js/50-portfolio.js?b=66"></script>
+<script src="js/70-ai.js?b=66"></script>
+<script src="js/80-trader.js?b=66"></script>
+<script src="js/85-calendar-reports.js?b=66"></script>
+<script src="js/88-onboarding-tour.js?b=66"></script>
+<script src="js/90-goals.js?b=66"></script>
+<script src="js/95-integrations.js?b=66"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -14379,6 +14393,7 @@ function applyEdition() {
   // Regenerate the sidebar + mobile tabs from the (possibly restructured) NAV_GROUPS.
   try { renderPrimaryNav(); } catch(e) { console.warn('[nav]', e); }
   try { renderMobileTabs(); } catch(e) { console.warn('[mobtabs]', e); }
+  try { renderMobileDrawer(); } catch(e) { console.warn('[mobdrawer]', e); }
 }
 
 async function init() {
@@ -14623,6 +14638,28 @@ function renderMobileTabs() {
   html += `<div class="mob-tab" id="mobileAdminTab" data-section="admin" onclick="showSection('admin',null)" style="display:none;color:var(--color-amber);"><i class="fas fa-shield-alt"></i><span>Admin</span></div>`;
   html += `<div class="mob-tab" onclick="openModal('addModal')" style="color:var(--accent);"><i class="fas fa-plus-circle"></i><span>Add</span></div>`;
   bar.innerHTML = html;
+}
+
+// Mobile hamburger drawer — generated from NAV_GROUPS so it matches the active
+// edition (was a static InvestIQ list that leaked personal sections onto
+// Harbour: Performance/Tax/Dividends/Calendar/Goals/TraderIQ). Admin + Family
+// keep their ids so updateAdminVisibility() role-gates them as before.
+function renderMobileDrawer() {
+  const wrap = document.getElementById('drawerSections');
+  if (!wrap || typeof NAV_GROUPS === 'undefined') return;
+  const esc = (typeof _escape === 'function') ? _escape : (s => s);
+  const hidden = (s) => (typeof isCmsSectionHidden === 'function') && isCmsSectionHidden(s);
+  const sections = [];
+  NAV_GROUPS.forEach(g => (g.children || []).forEach(s => { if (!hidden(s) && !sections.includes(s)) sections.push(s); }));
+  wrap.innerHTML = sections.map(s => {
+    const label = SECTION_LABELS[s] || (s.charAt(0).toUpperCase() + s.slice(1));
+    const icon  = SECTION_ICONS[s] || NAV_GROUP_ICONS[s] || 'fa-circle';
+    if (s === 'admin')  return `<button class="drawer-item" id="drawerAdminLink"  style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas ${icon}" style="color:var(--color-amber);"></i>${esc(label)}</button>`;
+    if (s === 'family') return `<button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas ${icon}"></i>${esc(label)}</button>`;
+    return `<button class="drawer-item" onclick="showSection('${s}');toggleMobileDrawer(false);"><i class="fas ${icon}"></i>${esc(label)}</button>`;
+  }).join('');
+  // Re-apply role gating to the freshly-generated admin/family links.
+  if (typeof updateAdminVisibility === 'function') { try { updateAdminVisibility(); } catch(e) {} }
 }
 
 // Open a group from the sidebar → show its remembered (or first) child.
