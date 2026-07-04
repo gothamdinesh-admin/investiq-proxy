@@ -232,6 +232,45 @@
       --scrollbar-bg:     #E4E7E9;
       --scrollbar-fg:     #BFC8CC;
     }
+
+    /* ═══ Harbour design-system layer (v0.66) — the 80/12/5/3 budget ═══
+       80% white/grey · 12% Harbour Blue (nav, primary, logo — the constant)
+       · 5% aqua/cyan · 3% sand/bronze. Accents are EDGE SIGNALS only (rails,
+       washes, icon fills, progress) — never body text (contrast + calm).
+       A single "page accent" whispers per section; blue always leads. */
+    :root[data-edition="harbour"] {
+      --h-blue:#005A79; --h-blue-deep:#003A4F; --h-slate:#44546A; --h-bluegrey:#6CA0B1;
+      --h-aqua:#76CED9; --h-cyan:#2BB0D4; --h-sand:#D9BB8A; --h-bronze:#C29144;
+      /* status rails — colour encodes state, paired with icons/labels elsewhere */
+      --rail-idle:#BFC8CC; --rail-sent:#2BB0D4; --rail-opened:#76CED9; --rail-done:#005A79;
+      /* per-page accent — set at runtime by applyPageAccent(); default = blue */
+      --page-accent:#005A79; --page-accent-soft:rgba(0,90,121,0.10);
+      --tide:linear-gradient(90deg,#005A79 0%,#2BB0D4 62%,#76CED9 100%);
+    }
+    /* Signature: a controlled accent rule under each page's title. */
+    :root[data-edition="harbour"] .section-accent-rule {
+      height:3px; width:56px; border-radius:3px; background:var(--page-accent);
+      margin:10px 0 2px; transition:background .2s, width .2s;
+    }
+    :root[data-edition="harbour"][data-page-tide="1"] .section-accent-rule { background:var(--tide); width:104px; }
+    /* Edge-signal top rail on signal/selected tiles (not every card). */
+    :root[data-edition="harbour"] .rail-top { border-top:3px solid var(--page-accent) !important; }
+    /* Left-rail status signal (grey→cyan→aqua→blue). */
+    :root[data-edition="harbour"] .rail-left { border-left:3px solid var(--rail-idle); }
+    :root[data-edition="harbour"] .rail-left.is-sent   { border-left-color:var(--rail-sent); }
+    :root[data-edition="harbour"] .rail-left.is-opened { border-left-color:var(--rail-opened); }
+    :root[data-edition="harbour"] .rail-left.is-done   { border-left-color:var(--rail-done); }
+    /* Sail-glass plate — premium logo moment: translucent, aqua top highlight,
+       faint bronze underside. Lighting AROUND the mark, no gradient inside it. */
+    :root[data-edition="harbour"] .sail-glass {
+      background:rgba(255,255,255,0.10);
+      border:1px solid rgba(118,206,217,0.40);
+      border-radius:12px; padding:8px 12px;
+      box-shadow:inset 0 1px 0 rgba(118,206,217,0.55), 0 8px 16px -10px rgba(194,145,68,0.6);
+    }
+    /* Tide-line progress fill (blue→aqua). Bronze reserved for final moments. */
+    :root[data-edition="harbour"] .tide-progress { background:var(--h-blue); }
+    :root[data-edition="harbour"] .tide-progress.is-fill { background:var(--tide) !important; }
     /* HARBOUR — BLUE-FORWARD chrome (v0.34): Harbour Blue #005A79 is the
        DOMINANT colour across every tab (sidebar + top nav) and the login gate;
        content stays on the greys (#E4E7E9 page, white cards). Text/icons on the
@@ -1825,7 +1864,7 @@
     <button id="mobileDrawerBtn" onclick="toggleMobileDrawer()" class="btn btn-sm btn-secondary" title="Menu" style="display:none;padding:8px 11px;font-size:16px;">
       <i class="fas fa-bars"></i>
     </button>
-    <a href="#" onclick="event.preventDefault(); showSection('overview');" class="flex items-center gap-2" style="text-decoration:none;">
+    <a href="#" onclick="event.preventDefault(); showSection('overview');" class="flex items-center gap-2 sail-glass" style="text-decoration:none;">
       <span class="brand-icon"><i class="fas fa-chart-line"></i></span>
       <span class="brand-mark text-lg" style="font-size:18px;">
         <span class="bm-invest">Invest</span><span class="bm-iq">IQ</span><span class="bm-dot" aria-hidden="true"></span>
@@ -4385,21 +4424,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=68"></script>
-<script src="js/05-content.js?b=68"></script>
-<script src="js/10-helpers.js?b=68"></script>
-<script src="js/20-state.js?b=68"></script>
-<script src="js/30-cloud.js?b=68"></script>
-<script src="js/40-auth.js?b=68"></script>
-<script src="js/45-auth-security.js?b=68"></script>
-<script src="js/60-import.js?b=68"></script>
-<script src="js/50-portfolio.js?b=68"></script>
-<script src="js/70-ai.js?b=68"></script>
-<script src="js/80-trader.js?b=68"></script>
-<script src="js/85-calendar-reports.js?b=68"></script>
-<script src="js/88-onboarding-tour.js?b=68"></script>
-<script src="js/90-goals.js?b=68"></script>
-<script src="js/95-integrations.js?b=68"></script>
+<script src="js/00-config.js?b=69"></script>
+<script src="js/05-content.js?b=69"></script>
+<script src="js/10-helpers.js?b=69"></script>
+<script src="js/20-state.js?b=69"></script>
+<script src="js/30-cloud.js?b=69"></script>
+<script src="js/40-auth.js?b=69"></script>
+<script src="js/45-auth-security.js?b=69"></script>
+<script src="js/60-import.js?b=69"></script>
+<script src="js/50-portfolio.js?b=69"></script>
+<script src="js/70-ai.js?b=69"></script>
+<script src="js/80-trader.js?b=69"></script>
+<script src="js/85-calendar-reports.js?b=69"></script>
+<script src="js/88-onboarding-tour.js?b=69"></script>
+<script src="js/90-goals.js?b=69"></script>
+<script src="js/95-integrations.js?b=69"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6105,7 +6144,7 @@ function renderFundForm(type) {
 
   el.innerHTML = `
     <datalist id="fundList">${_fundDatalistOptions()}</datalist>
-    <div class="card p-5">
+    <div class="card p-5 rail-top">
       <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;font-size:12px;color:#92400E;margin-bottom:16px;">
         <i class="fas fa-triangle-exclamation mr-1"></i><b>Prototype.</b> This prepares a signed instruction email to Harbour operations for manual verification — it is <b>not</b> a live transaction and does not itself move money or units.
       </div>
@@ -10883,6 +10922,30 @@ async function clearAllData() {
 }
 
 // ===== NAVIGATION =====
+// Harbour design-system: a controlled accent per section (the constant is
+// always blue; this is the whisper). Sets --page-accent + a tide flag, and
+// drops a small accent rule under the section's title. Edge-signal only.
+const HARBOUR_PAGE_ACCENT = {
+  overview:'tide', holdings:'tide', exposure:'tide', disclosure:'slate',
+  invest:'bronze', redeem:'bronze', mandate:'sand', insights:'bronze',
+  market:'bluegrey', news:'cyan', askiq:'cyan', reports:'bronze', admin:'slate'
+};
+const _ACCENT_HEX = { blue:'#005A79', slate:'#44546A', bluegrey:'#6CA0B1', aqua:'#76CED9', cyan:'#2BB0D4', sand:'#D9BB8A', bronze:'#C29144', tide:'#005A79' };
+function applyPageAccent(section) {
+  if (!(typeof EDITION !== 'undefined' && EDITION.id === 'harbour')) return;
+  const key = HARBOUR_PAGE_ACCENT[section] || 'blue';
+  const root = document.documentElement;
+  root.style.setProperty('--page-accent', _ACCENT_HEX[key] || '#005A79');
+  root.setAttribute('data-page-tide', key === 'tide' ? '1' : '0');
+  const sec = document.getElementById('section-' + section);
+  const head = sec && sec.querySelector('h2, .section-title');
+  if (head && head.parentElement && !head.parentElement.querySelector(':scope > .section-accent-rule')) {
+    const rule = document.createElement('div');
+    rule.className = 'section-accent-rule';
+    head.parentElement.appendChild(rule);
+  }
+}
+
 function _showSectionCore(name, el) {
   // CMS nav: a section hidden via Content Studio is unreachable — bounce to Overview.
   if (name !== 'overview' && typeof isCmsSectionHidden === 'function' && isCmsSectionHidden(name)) name = 'overview';
@@ -10895,6 +10958,7 @@ function _showSectionCore(name, el) {
   _highlightGroupNav(name);
   _groupLastChild[_groupOf(name)] = name;
   renderGroupSubNav(name);
+  try { applyPageAccent(name); } catch(e) {}
   currentSection = name;
   if (name === 'market') renderMarketSection();
   if (name === 'admin') { loadAdminData().then(() => loadActivityLog()); }
