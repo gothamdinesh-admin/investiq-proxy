@@ -2935,8 +2935,8 @@
       <div id="officialReportsCard" class="card p-5 mb-5" style="display:none;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="section-title" style="margin:0;"><i class="fas fa-file-shield" style="color:var(--accent);"></i> Official Harbour reports</div>
-          <label id="officialReportsUpload" class="btn btn-sm btn-secondary" style="cursor:pointer;display:none;" title="Upload the official monthly PDF(s) for this fund (admin only)">
-            <i class="fas fa-upload mr-1"></i>Upload PDF
+          <label id="officialReportsUpload" class="btn btn-sm btn-secondary" style="cursor:pointer;display:none;" title="Dump the monthly PDFs (named by fund code, e.g. Reporting_HARAEQ_Apr26.pdf) into the shared library — admin only. Each holder auto-matches by code.">
+            <i class="fas fa-upload mr-1"></i>Upload PDFs
             <input type="file" accept=".pdf" multiple style="display:none;" onchange="uploadOfficialReports(event)">
           </label>
         </div>
@@ -4352,21 +4352,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=64"></script>
-<script src="js/05-content.js?b=64"></script>
-<script src="js/10-helpers.js?b=64"></script>
-<script src="js/20-state.js?b=64"></script>
-<script src="js/30-cloud.js?b=64"></script>
-<script src="js/40-auth.js?b=64"></script>
-<script src="js/45-auth-security.js?b=64"></script>
-<script src="js/60-import.js?b=64"></script>
-<script src="js/50-portfolio.js?b=64"></script>
-<script src="js/70-ai.js?b=64"></script>
-<script src="js/80-trader.js?b=64"></script>
-<script src="js/85-calendar-reports.js?b=64"></script>
-<script src="js/88-onboarding-tour.js?b=64"></script>
-<script src="js/90-goals.js?b=64"></script>
-<script src="js/95-integrations.js?b=64"></script>
+<script src="js/00-config.js?b=65"></script>
+<script src="js/05-content.js?b=65"></script>
+<script src="js/10-helpers.js?b=65"></script>
+<script src="js/20-state.js?b=65"></script>
+<script src="js/30-cloud.js?b=65"></script>
+<script src="js/40-auth.js?b=65"></script>
+<script src="js/45-auth-security.js?b=65"></script>
+<script src="js/60-import.js?b=65"></script>
+<script src="js/50-portfolio.js?b=65"></script>
+<script src="js/70-ai.js?b=65"></script>
+<script src="js/80-trader.js?b=65"></script>
+<script src="js/85-calendar-reports.js?b=65"></script>
+<script src="js/88-onboarding-tour.js?b=65"></script>
+<script src="js/90-goals.js?b=65"></script>
+<script src="js/95-integrations.js?b=65"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).

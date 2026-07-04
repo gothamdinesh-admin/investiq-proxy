@@ -4,10 +4,11 @@
 --
 -- RUN IN THE HARBOUR PROJECT (SQL Editor). Idempotent. Optional in personal.
 --
--- Layout:  fund-reports/<FUND KEY>/<filename>.pdf
---   e.g.   fund-reports/AUSTRALASIAN-EQUITY/Reporting_HARAEQ_Apr26.pdf
--- The app derives <FUND KEY> from the normalised fund name, so uploaded
--- reports automatically show on the matching fund book's Reports page.
+-- Layout:  ONE FLAT LIBRARY — files live in the bucket root, named by fund
+--          code, e.g.  fund-reports/Reporting_HARAEQ_Apr26.pdf
+-- The app matches a report to a user by the fund CODE in its filename against
+-- the codes the user holds (resolved via the imported unit-price feed), so a
+-- single admin dump auto-distributes to the right holders. No per-fund folders.
 --
 -- Access model (these are internal documents):
 --   READ   → any signed-in, APPROVED user (the Harbour IQ trial group)

@@ -198,37 +198,69 @@ async function renderCalendarSection() {
 // ─────────────────────────────────────────────────────────────────────────
 
 // ── Official Harbour report PDFs (Supabase Storage bucket: fund-reports) ─
-// The real monthly Reporting_<CODE>_<MMMYY>.pdf documents, stored per fund
-// under fund-reports/<FUND KEY>/. Approved users read via signed URLs;
-// admins upload. Requires migration 020 in the Harbour project.
-function _officialReportKey() {
+// ONE flat library: admins dump every monthly PDF (named by fund CODE, e.g.
+// Reporting_HARAEQ_Apr26.pdf) into the bucket root. Each user sees the reports
+// whose filename contains a fund CODE they hold — matched via the imported
+// unit-price feed (which maps fund name → code). Approved users read via
+// short-lived signed URLs; admins upload/delete. Requires migration 020.
+
+// Fund code(s) for the active book, resolved from the unit-price feed store
+// (keyed by code, carrying the normalised fund name). A name like "Australasian
+// Equity Fund" may map to both retail + wholesale codes — return all.
+function _activeFundCodes() {
   const fund = (typeof _activeFund === 'function') ? _activeFund() : null;
   const name = (fund && fund.name) || (typeof getActivePortfolio === 'function' ? getActivePortfolio().name : '');
-  if (!name || typeof _normFundName !== 'function') return null;
-  const norm = _normFundName(name);
-  return norm ? norm.replace(/\s+/g, '-') : null;
+  if (!name || typeof _normFundName !== 'function') return [];
+  const want = _normFundName(name);
+  const codes = [];
+  if (fund && fund.code) codes.push(String(fund.code).toUpperCase());
+  try {
+    const feed = (typeof _loadFundFeed === 'function') ? _loadFundFeed() : {};
+    Object.keys(feed).forEach(code => { if (feed[code] && feed[code].norm === want) codes.push(code.toUpperCase()); });
+  } catch(e) {}
+  return [...new Set(codes)];
+}
+
+// Does a filename belong to one of these fund codes? Exact-token match so
+// HARAEQ doesn't match a HARAER file.
+function _reportMatchesCodes(filename, codes) {
+  const up = String(filename || '').toUpperCase();
+  return codes.some(c => new RegExp('(^|[^A-Z0-9])' + c.replace(/[^A-Z0-9]/g, '') + '([^A-Z0-9]|$)').test(up));
 }
 
 async function renderOfficialReports() {
   const card = document.getElementById('officialReportsCard');
   if (!card) return;
   const isFund = (typeof _isFundWeightView === 'function') && _isFundWeightView();
-  const key = isFund ? _officialReportKey() : null;
-  if (!isFund || !key || typeof _supabase === 'undefined' || !_supabase || !_supaUser) { card.style.display = 'none'; return; }
+  if (!isFund || typeof _supabase === 'undefined' || !_supabase || !_supaUser) { card.style.display = 'none'; return; }
   card.style.display = '';
+  const isAdmin = (typeof _isAdmin !== 'undefined' && _isAdmin);
   const up = document.getElementById('officialReportsUpload');
-  if (up) up.style.display = (typeof _isAdmin !== 'undefined' && _isAdmin) ? '' : 'none';
+  if (up) up.style.display = isAdmin ? '' : 'none';
   const list = document.getElementById('officialReportsList');
+  const codes = _activeFundCodes();
   try {
+    // Flat library — list the bucket root.
     const { data, error } = await _supabase.storage.from('fund-reports')
-      .list(key, { limit: 36, sortBy: { column: 'name', order: 'desc' } });
+      .list('', { limit: 500, sortBy: { column: 'name', order: 'desc' } });
     if (error) throw error;
-    const files = (data || []).filter(f => f.name && /\.pdf$/i.test(f.name));
-    if (!files.length) {
-      list.innerHTML = `<div class="text-xs neutral py-2">No official reports uploaded for this fund yet.${(typeof _isAdmin !== 'undefined' && _isAdmin) ? ' Use <b>Upload PDF</b> to add the monthly Reporting_*.pdf documents.' : ''}</div>`;
+    const all = (data || []).filter(f => f.name && /\.pdf$/i.test(f.name));
+    // Match by fund code. Admin with no code match still sees all (to manage the library).
+    let files = codes.length ? all.filter(f => _reportMatchesCodes(f.name, codes)) : [];
+    const showingAll = isAdmin && !files.length && all.length;
+    if (showingAll) files = all;
+
+    if (!codes.length && !isAdmin) {
+      list.innerHTML = `<div class="text-xs neutral py-2">Reports are matched by fund code — import this fund's unit-price feed and they'll appear here.</div>`;
       return;
     }
-    list.innerHTML = files.map(f => `
+    if (!files.length) {
+      list.innerHTML = `<div class="text-xs neutral py-2">${all.length ? 'No reports match this fund' + (codes.length ? ` (code ${codes.join(', ')})` : '') + ' yet.' : 'No reports in the library yet.'}${isAdmin ? ' Use <b>Upload PDFs</b> to add the monthly documents — name them by fund code (e.g. Reporting_HARAEQ_Apr26.pdf).' : ''}</div>`;
+      return;
+    }
+    const codeNote = codes.length ? `<div class="text-xs neutral mb-2">Showing reports for <b>${_escape(codes.join(', '))}</b>${isAdmin ? ` · ${all.length} in library` : ''}.</div>`
+      : (isAdmin ? `<div class="text-xs neutral mb-2" style="color:var(--color-amber);">No fund code resolved for this book — showing the whole library (${all.length}). Import the unit-price feed to auto-match.</div>` : '');
+    list.innerHTML = codeNote + files.map(f => `
       <div class="flex items-center justify-between gap-3" style="padding:9px 4px;border-bottom:1px solid var(--border);">
         <div class="flex items-center gap-3" style="min-width:0;">
           <i class="fas fa-file-pdf" style="color:var(--color-red);font-size:16px;"></i>
@@ -238,8 +270,8 @@ async function renderOfficialReports() {
           </div>
         </div>
         <div class="flex items-center gap-2" style="flex-shrink:0;">
-          <button onclick="openOfficialReport('${_escape(key)}/${_escape(f.name)}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 12px;"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open</button>
-          ${(typeof _isAdmin !== 'undefined' && _isAdmin) ? `<button onclick="deleteOfficialReport('${_escape(key)}/${_escape(f.name)}')" class="btn btn-sm btn-danger" style="font-size:11px;padding:4px 8px;" title="Delete (admin)"><i class="fas fa-trash"></i></button>` : ''}
+          <button onclick="openOfficialReport('${_escape(f.name)}')" class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 12px;"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open</button>
+          ${isAdmin ? `<button onclick="deleteOfficialReport('${_escape(f.name)}')" class="btn btn-sm btn-danger" style="font-size:11px;padding:4px 8px;" title="Delete (admin)"><i class="fas fa-trash"></i></button>` : ''}
         </div>
       </div>`).join('');
   } catch(e) {
@@ -259,21 +291,23 @@ async function openOfficialReport(path) {
 async function uploadOfficialReports(event) {
   const files = Array.from(event.target.files || []);
   event.target.value = '';
-  const key = _officialReportKey();
-  if (!files.length || !key) return;
+  if (!files.length) return;
+  // Flat shared library — dump every PDF to the bucket root under its own
+  // filename (which carries the fund code). Holders auto-match by code.
   let ok = 0, failed = [];
-  toast.info(`Uploading ${files.length} PDF(s)…`);
+  toast.info(`Uploading ${files.length} report(s) to the shared library…`);
   for (const f of files) {
     try {
+      const safe = f.name.replace(/[^A-Za-z0-9._-]/g, '_');   // keep the code + date, sanitise the rest
       const { error } = await _supabase.storage.from('fund-reports')
-        .upload(`${key}/${f.name}`, f, { upsert: true, contentType: 'application/pdf' });
+        .upload(safe, f, { upsert: true, contentType: 'application/pdf' });
       if (error) throw error;
       ok++;
     } catch(e) { failed.push(`${f.name}: ${e.message || e}`); }
   }
-  if (ok) toast.success(`${ok} report(s) uploaded for this fund.`);
+  if (ok) toast.success(`${ok} report(s) added to the library — each shows to holders of the matching fund code.`);
   if (failed.length) toast.error({ title: `${failed.length} failed`, message: failed.slice(0, 2).join('\n') });
-  logActivity('official_report_upload', { fund: key, ok, failed: failed.length });
+  logActivity('official_report_upload', { ok, failed: failed.length });
   renderOfficialReports();
 }
 
