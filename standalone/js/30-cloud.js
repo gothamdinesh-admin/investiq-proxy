@@ -19,7 +19,15 @@ function initSupabase() {
     return false;
   }
   try {
-    _supabase = window.supabase.createClient(url, key);
+    // Explicit auth options: keep the session in localStorage and refresh the
+    // JWT automatically in the background. These are supabase-js defaults, but
+    // pinning them documents intent + guards against a lib default changing.
+    // NOTE: if users are being signed out every ~2 min, the cause is the
+    // project's *Access Token (JWT) expiry* in the Supabase dashboard being set
+    // too low (e.g. 120s) — set it back to 3600. Client config can't fix that.
+    _supabase = window.supabase.createClient(url, key, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
     return true;
   } catch(e) {
     console.warn('Supabase init failed:', e);

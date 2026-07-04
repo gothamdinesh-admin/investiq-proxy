@@ -4352,21 +4352,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=63"></script>
-<script src="js/05-content.js?b=63"></script>
-<script src="js/10-helpers.js?b=63"></script>
-<script src="js/20-state.js?b=63"></script>
-<script src="js/30-cloud.js?b=63"></script>
-<script src="js/40-auth.js?b=63"></script>
-<script src="js/45-auth-security.js?b=63"></script>
-<script src="js/60-import.js?b=63"></script>
-<script src="js/50-portfolio.js?b=63"></script>
-<script src="js/70-ai.js?b=63"></script>
-<script src="js/80-trader.js?b=63"></script>
-<script src="js/85-calendar-reports.js?b=63"></script>
-<script src="js/88-onboarding-tour.js?b=63"></script>
-<script src="js/90-goals.js?b=63"></script>
-<script src="js/95-integrations.js?b=63"></script>
+<script src="js/00-config.js?b=64"></script>
+<script src="js/05-content.js?b=64"></script>
+<script src="js/10-helpers.js?b=64"></script>
+<script src="js/20-state.js?b=64"></script>
+<script src="js/30-cloud.js?b=64"></script>
+<script src="js/40-auth.js?b=64"></script>
+<script src="js/45-auth-security.js?b=64"></script>
+<script src="js/60-import.js?b=64"></script>
+<script src="js/50-portfolio.js?b=64"></script>
+<script src="js/70-ai.js?b=64"></script>
+<script src="js/80-trader.js?b=64"></script>
+<script src="js/85-calendar-reports.js?b=64"></script>
+<script src="js/88-onboarding-tour.js?b=64"></script>
+<script src="js/90-goals.js?b=64"></script>
+<script src="js/95-integrations.js?b=64"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -8392,14 +8392,17 @@ function populateSettingsForm() {
   const familySection = document.getElementById('familySection');
   const alertsSection = document.getElementById('alertsSection');
   const planSection   = document.getElementById('planSection');
-  const familyEnabled = !(typeof EDITION !== 'undefined' && EDITION.features && EDITION.features.family === false);
+  const feat = (name) => !(typeof EDITION !== 'undefined' && EDITION.features && EDITION.features[name] === false);
+  const familyEnabled = feat('family');
+  const alertsEnabled = feat('alerts');
+  const planEnabled   = feat('plan');
   if (familySection) familySection.style.display = (_supaUser && familyEnabled) ? 'block' : 'none';
-  if (alertsSection) alertsSection.style.display = _supaUser ? 'block' : 'none';
-  if (planSection)   planSection.style.display   = _supaUser ? 'block' : 'none';
+  if (alertsSection) alertsSection.style.display = (_supaUser && alertsEnabled) ? 'block' : 'none';
+  if (planSection)   planSection.style.display   = (_supaUser && planEnabled)   ? 'block' : 'none';
   if (_supaUser) {
     if (familyEnabled) renderFamilySection();
-    renderAlertsSection();
-    renderPlanSection();
+    if (alertsEnabled) renderAlertsSection();
+    if (planEnabled)   renderPlanSection();
   }
 
   // Account info section — visible to ALL signed-in users

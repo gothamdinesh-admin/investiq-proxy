@@ -37,7 +37,9 @@ const EDITIONS = {
     supportEmail: 'dinesh.muthusamy@harbourasset.co.nz',  // TODO: confirm the right Harbour support contact
     // Brand (official quick guide): Harbour Blue #005A79 + slate #44546A;
     // secondary cyan #2BB0D4 / aqua #76CED9 / sand #D9BB8A / bronze #C29144.
-    features: { family: false, goals: false },        // no Family, no Goals (per CEO trial scope)
+    // Trial scope: no Family, Goals, Price Alerts, or subscription Plan — this
+    // is an internal fund tool, not a personal-investor product.
+    features: { family: false, goals: false, alerts: false, plan: false },
     // Harbour's OWN Supabase project (data isolation). Key is the browser-safe
     // PUBLISHABLE key (RLS enforces security) — not a secret key.
     supabaseUrl: 'https://sxbzvvzsvvkaukqrqgjt.supabase.co',
