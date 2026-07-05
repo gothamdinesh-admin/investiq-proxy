@@ -2105,6 +2105,11 @@
     <!-- OVERVIEW SECTION -->
     <div id="section-overview">
 
+      <!-- CLIENT ROLL-UP (Harbour) — the individual's portfolio across funds,
+           valued from the unit-price feed. Hero of the Overview when the client
+           has holdings loaded; hidden otherwise. Populated by renderClientRollup(). -->
+      <div id="clientRollup" class="mb-6" style="display:none;"></div>
+
       <!-- Personalised greeting strip — time-aware + portfolio headline -->
       <div id="overviewGreeting" class="mb-5" style="display:none;">
         <div class="flex items-center justify-between flex-wrap gap-3">
@@ -4436,21 +4441,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=76"></script>
-<script src="js/05-content.js?b=76"></script>
-<script src="js/10-helpers.js?b=76"></script>
-<script src="js/20-state.js?b=76"></script>
-<script src="js/30-cloud.js?b=76"></script>
-<script src="js/40-auth.js?b=76"></script>
-<script src="js/45-auth-security.js?b=76"></script>
-<script src="js/60-import.js?b=76"></script>
-<script src="js/50-portfolio.js?b=76"></script>
-<script src="js/70-ai.js?b=76"></script>
-<script src="js/80-trader.js?b=76"></script>
-<script src="js/85-calendar-reports.js?b=76"></script>
-<script src="js/88-onboarding-tour.js?b=76"></script>
-<script src="js/90-goals.js?b=76"></script>
-<script src="js/95-integrations.js?b=76"></script>
+<script src="js/00-config.js?b=77"></script>
+<script src="js/05-content.js?b=77"></script>
+<script src="js/10-helpers.js?b=77"></script>
+<script src="js/20-state.js?b=77"></script>
+<script src="js/30-cloud.js?b=77"></script>
+<script src="js/40-auth.js?b=77"></script>
+<script src="js/45-auth-security.js?b=77"></script>
+<script src="js/60-import.js?b=77"></script>
+<script src="js/50-portfolio.js?b=77"></script>
+<script src="js/70-ai.js?b=77"></script>
+<script src="js/80-trader.js?b=77"></script>
+<script src="js/85-calendar-reports.js?b=77"></script>
+<script src="js/88-onboarding-tour.js?b=77"></script>
+<script src="js/90-goals.js?b=77"></script>
+<script src="js/95-integrations.js?b=77"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -5892,6 +5897,7 @@ function renderAll() {
   try { renderOvernightBrief(metrics); } catch(e) { console.warn('[brief]', e); }
   try { renderFundExposure(metrics); } catch(e) { console.warn('[fund-exposure]', e); }
   try { renderFundReturns(); } catch(e) { console.warn('[fund-returns]', e); }
+  try { renderClientRollup(); } catch(e) { console.warn('[client-rollup]', e); }
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
@@ -6080,6 +6086,58 @@ function _clientFundInfo(h) {
   let rec = (code && feed[code]) ? feed[code] : null;
   if (!rec && typeof getFundMarketData === 'function') rec = getFundMarketData(h.name);
   return { price: rec && rec.price != null ? rec.price : null, code: code || (rec && rec.code) || '', name: (rec && rec.name) || h.name };
+}
+
+// Overview hero (Harbour) — the client's portfolio rolled up across funds:
+// total value, gain, and allocation BY FUND. Shown only when client holdings
+// exist; each fund drills into its Library. Fund composition sits below/in Fund.
+function renderClientRollup() {
+  const el = document.getElementById('clientRollup'); if (!el) return;
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  const list = (typeof _loadClientHoldings === 'function') ? _loadClientHoldings() : [];
+  if (!harbour || !list.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const acct = state.settings.clientAccount || {};
+  const rows = list.map(h => {
+    const info = _clientFundInfo(h);
+    const hasValue = h.value != null && h.value !== '';
+    const value = hasValue ? (parseFloat(h.value) || 0) : (info.price != null ? (parseFloat(h.units) || 0) * info.price : 0);
+    const cost = h.cost != null && h.cost !== '' ? (parseFloat(h.units) || 0) * parseFloat(h.cost) : null;
+    return { name: info.name, value, cost };
+  }).sort((a, b) => b.value - a.value);
+  const total = rows.reduce((s, r) => s + (r.value || 0), 0) || 0;
+  const totalCost = rows.reduce((s, r) => s + (r.cost || 0), 0);
+  const gain = totalCost ? total - totalCost : null;
+  const gainPct = (gain != null && totalCost) ? gain / totalCost * 100 : null;
+  const fmtNZ = (n) => 'NZ$' + (n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Harbour-blue ramp for the by-fund allocation bars.
+  const RAMP = ['#005A79', '#2E7D8F', '#3F8BA8', '#6CA0B1', '#7FB0C4', '#9FB3BD', '#BFC8CC'];
+  const bars = rows.map((r, i) => {
+    const pct = total ? r.value / total * 100 : 0;
+    return `<div style="margin-bottom:9px;cursor:pointer;" onclick="viewClientFund('${_escape((r.name || '').replace(/'/g, "\\'"))}')" title="Open fund information">
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%;">${_escape(r.name)}</span>
+        <span class="mono neutral">${fmtNZ(r.value)} · ${fmt(pct)}%</span>
+      </div>
+      <div style="height:9px;border-radius:5px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(pct, 100).toFixed(1)}%;background:${RAMP[i % RAMP.length]};border-radius:5px;"></div></div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="card p-5 rail-top">
+      <div class="flex items-start justify-between flex-wrap gap-3 mb-4">
+        <div>
+          <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:.5px;">My Portfolio${acct.name ? ' · ' + _escape(acct.name) : ''}</div>
+          <div class="text-3xl font-bold mono" style="color:var(--text-primary);margin-top:2px;">${fmtNZ(total)}</div>
+          <div class="text-sm mt-1">${gain != null
+            ? `<span style="color:${gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};font-weight:600;">${gain >= 0 ? '+' : ''}${fmtNZ(gain)} (${gainPct >= 0 ? '+' : ''}${fmt(gainPct)}%)</span> <span class="neutral">total return</span>`
+            : `<span class="neutral">${rows.length} fund${rows.length === 1 ? '' : 's'} · valued from latest unit price</span>`}</div>
+        </div>
+        <button onclick="showSection('positions')" class="btn btn-sm btn-secondary" style="font-size:11px;"><i class="fas fa-wallet mr-1"></i>Manage holdings</button>
+      </div>
+      <div class="text-xs neutral uppercase font-semibold mb-2" style="letter-spacing:.4px;">Allocation by fund</div>
+      ${bars}
+      <div class="text-xs neutral mt-2"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Click a fund to open its composition, returns and reports.</div>
+    </div>`;
 }
 
 function renderClientHoldings() {
