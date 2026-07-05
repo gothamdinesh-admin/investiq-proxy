@@ -2157,9 +2157,9 @@
             <i class="fas fa-chart-pie" style="color:var(--accent);"></i>
             <span data-cms="chart.allocTitle">Allocation</span>
             <div class="flex gap-2 ml-auto">
-              <span class="tab active text-xs" onclick="switchAllocTab(this,'type')">Type</span>
-              <span class="tab text-xs" onclick="switchAllocTab(this,'platform')">Platform</span>
-              <span class="tab text-xs" onclick="switchAllocTab(this,'sector')">Sector</span>
+              <span class="tab active text-xs" id="allocTabType" onclick="switchAllocTab(this,'type')">Type</span>
+              <span class="tab text-xs" id="allocTabPlatform" onclick="switchAllocTab(this,'platform')">Platform</span>
+              <span class="tab text-xs" id="allocTabSector" onclick="switchAllocTab(this,'sector')">Sector</span>
             </div>
           </div>
           <div style="height:200px;position:relative;">
@@ -4424,21 +4424,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=69"></script>
-<script src="js/05-content.js?b=69"></script>
-<script src="js/10-helpers.js?b=69"></script>
-<script src="js/20-state.js?b=69"></script>
-<script src="js/30-cloud.js?b=69"></script>
-<script src="js/40-auth.js?b=69"></script>
-<script src="js/45-auth-security.js?b=69"></script>
-<script src="js/60-import.js?b=69"></script>
-<script src="js/50-portfolio.js?b=69"></script>
-<script src="js/70-ai.js?b=69"></script>
-<script src="js/80-trader.js?b=69"></script>
-<script src="js/85-calendar-reports.js?b=69"></script>
-<script src="js/88-onboarding-tour.js?b=69"></script>
-<script src="js/90-goals.js?b=69"></script>
-<script src="js/95-integrations.js?b=69"></script>
+<script src="js/00-config.js?b=70"></script>
+<script src="js/05-content.js?b=70"></script>
+<script src="js/10-helpers.js?b=70"></script>
+<script src="js/20-state.js?b=70"></script>
+<script src="js/30-cloud.js?b=70"></script>
+<script src="js/40-auth.js?b=70"></script>
+<script src="js/45-auth-security.js?b=70"></script>
+<script src="js/60-import.js?b=70"></script>
+<script src="js/50-portfolio.js?b=70"></script>
+<script src="js/70-ai.js?b=70"></script>
+<script src="js/80-trader.js?b=70"></script>
+<script src="js/85-calendar-reports.js?b=70"></script>
+<script src="js/88-onboarding-tour.js?b=70"></script>
+<script src="js/90-goals.js?b=70"></script>
+<script src="js/95-integrations.js?b=70"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -7116,6 +7116,17 @@ function renderCharts(metrics) {
 function renderAllocChart(metrics) {
   const isEmpty = metrics.holdings.length === 0;
   document.getElementById('allocEmpty').style.display = isEmpty ? 'flex' : 'none';
+
+  // Fund books: every holding is "Fund holdings", so the Platform breakdown is
+  // one meaningless slice — hide that toggle and fall back off it if selected.
+  const fundView = (typeof _isFundWeightView === 'function') && _isFundWeightView();
+  const platTab = document.getElementById('allocTabPlatform');
+  if (platTab) platTab.style.display = fundView ? 'none' : '';
+  if (fundView && state.allocMode === 'platform') {
+    state.allocMode = 'type';
+    document.getElementById('allocTabType')?.classList.add('active');
+    platTab?.classList.remove('active');
+  }
 
   let groups = {};
   metrics.holdings.forEach(h => {
