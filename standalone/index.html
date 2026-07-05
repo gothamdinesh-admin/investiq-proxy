@@ -4441,21 +4441,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=77"></script>
-<script src="js/05-content.js?b=77"></script>
-<script src="js/10-helpers.js?b=77"></script>
-<script src="js/20-state.js?b=77"></script>
-<script src="js/30-cloud.js?b=77"></script>
-<script src="js/40-auth.js?b=77"></script>
-<script src="js/45-auth-security.js?b=77"></script>
-<script src="js/60-import.js?b=77"></script>
-<script src="js/50-portfolio.js?b=77"></script>
-<script src="js/70-ai.js?b=77"></script>
-<script src="js/80-trader.js?b=77"></script>
-<script src="js/85-calendar-reports.js?b=77"></script>
-<script src="js/88-onboarding-tour.js?b=77"></script>
-<script src="js/90-goals.js?b=77"></script>
-<script src="js/95-integrations.js?b=77"></script>
+<script src="js/00-config.js?b=79"></script>
+<script src="js/05-content.js?b=79"></script>
+<script src="js/10-helpers.js?b=79"></script>
+<script src="js/20-state.js?b=79"></script>
+<script src="js/30-cloud.js?b=79"></script>
+<script src="js/40-auth.js?b=79"></script>
+<script src="js/45-auth-security.js?b=79"></script>
+<script src="js/60-import.js?b=79"></script>
+<script src="js/50-portfolio.js?b=79"></script>
+<script src="js/70-ai.js?b=79"></script>
+<script src="js/80-trader.js?b=79"></script>
+<script src="js/85-calendar-reports.js?b=79"></script>
+<script src="js/88-onboarding-tour.js?b=79"></script>
+<script src="js/90-goals.js?b=79"></script>
+<script src="js/95-integrations.js?b=79"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6103,12 +6103,19 @@ function renderClientRollup() {
     const hasValue = h.value != null && h.value !== '';
     const value = hasValue ? (parseFloat(h.value) || 0) : (info.price != null ? (parseFloat(h.units) || 0) * info.price : 0);
     const cost = h.cost != null && h.cost !== '' ? (parseFloat(h.units) || 0) * parseFloat(h.cost) : null;
-    return { name: info.name, value, cost };
+    const earnings = _holdingEarnings(h);
+    const opening = (h.opening != null && h.opening !== '') ? parseFloat(h.opening) : null;
+    return { name: info.name, value, cost, earnings, opening };
   }).sort((a, b) => b.value - a.value);
   const total = rows.reduce((s, r) => s + (r.value || 0), 0) || 0;
   const totalCost = rows.reduce((s, r) => s + (r.cost || 0), 0);
-  const gain = totalCost ? total - totalCost : null;
-  const gainPct = (gain != null && totalCost) ? gain / totalCost * 100 : null;
+  // Prefer the APEX period return (real, no cost basis); else cost-based gain.
+  const hasPeriod = rows.some(r => r.earnings != null);
+  const totalEarn = rows.reduce((s, r) => s + (r.earnings || 0), 0);
+  const openBase = rows.reduce((s, r) => s + (r.opening != null ? r.opening : (r.earnings != null ? r.value - r.earnings : 0)), 0);
+  const costGain = totalCost ? total - totalCost : null;
+  const costGainPct = (costGain != null && totalCost) ? costGain / totalCost * 100 : null;
+  const period = state.settings.clientAccount && state.settings.clientAccount.period;
   const fmtNZ = (n) => 'NZ$' + (n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Harbour-blue ramp for the by-fund allocation bars.
   const RAMP = ['#005A79', '#2E7D8F', '#3F8BA8', '#6CA0B1', '#7FB0C4', '#9FB3BD', '#BFC8CC'];
@@ -6128,16 +6135,35 @@ function renderClientRollup() {
         <div>
           <div class="text-xs neutral uppercase font-semibold" style="letter-spacing:.5px;">My Portfolio${acct.name ? ' · ' + _escape(acct.name) : ''}</div>
           <div class="text-3xl font-bold mono" style="color:var(--text-primary);margin-top:2px;">${fmtNZ(total)}</div>
-          <div class="text-sm mt-1">${gain != null
-            ? `<span style="color:${gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};font-weight:600;">${gain >= 0 ? '+' : ''}${fmtNZ(gain)} (${gainPct >= 0 ? '+' : ''}${fmt(gainPct)}%)</span> <span class="neutral">total return</span>`
-            : `<span class="neutral">${rows.length} fund${rows.length === 1 ? '' : 's'} · valued from latest unit price</span>`}</div>
+          <div class="text-sm mt-1">${hasPeriod
+            ? `<span style="color:${totalEarn >= 0 ? 'var(--color-green)' : 'var(--color-red)'};font-weight:600;">${totalEarn >= 0 ? '+' : ''}${fmtNZ(totalEarn)}${openBase ? ' (' + (totalEarn >= 0 ? '+' : '') + fmt(totalEarn / openBase * 100) + '%)' : ''}</span> <span class="neutral">return this period${period ? ' · ' + _escape(period) : ''}</span>`
+            : costGain != null
+              ? `<span style="color:${costGain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};font-weight:600;">${costGain >= 0 ? '+' : ''}${fmtNZ(costGain)} (${costGainPct >= 0 ? '+' : ''}${fmt(costGainPct)}%)</span> <span class="neutral">total return</span>`
+              : `<span class="neutral">${rows.length} fund${rows.length === 1 ? '' : 's'} · valued from latest unit price</span>`}</div>
         </div>
         <button onclick="showSection('positions')" class="btn btn-sm btn-secondary" style="font-size:11px;"><i class="fas fa-wallet mr-1"></i>Manage holdings</button>
       </div>
-      <div class="text-xs neutral uppercase font-semibold mb-2" style="letter-spacing:.4px;">Allocation by fund</div>
-      ${bars}
-      <div class="text-xs neutral mt-2"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Click a fund to open its composition, returns and reports.</div>
+      <div class="text-xs neutral uppercase font-semibold mb-3" style="letter-spacing:.4px;">Allocation by fund</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 items-center">
+        <div style="height:180px;position:relative;"><canvas id="clientAllocChart"></canvas></div>
+        <div>${bars}</div>
+      </div>
+      <div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Click a fund to open its composition, returns and reports.</div>
     </div>`;
+  // Donut of allocation by fund (Harbour-blue ramp), if Chart.js is present.
+  try {
+    if (window.Chart) {
+      if (charts.clientAlloc) charts.clientAlloc.destroy();
+      const ctx = document.getElementById('clientAllocChart').getContext('2d');
+      charts.clientAlloc = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: rows.map(r => r.name), datasets: [{ data: rows.map(r => r.value), backgroundColor: rows.map((_, i) => RAMP[i % RAMP.length]), borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: (c) => ` ${c.label}: ${fmtNZ(c.parsed)} (${total ? fmt(c.parsed / total * 100) : 0}%)` } } } }
+      });
+    }
+  } catch(e) { console.warn('[client-donut]', e); }
 }
 
 function renderClientHoldings() {
@@ -6149,15 +6175,22 @@ function renderClientHoldings() {
     const hasValue = h.value != null && h.value !== '';
     const value = hasValue ? (parseFloat(h.value) || 0) : (info.price != null ? (parseFloat(h.units) || 0) * info.price : null);
     const units = hasValue ? (info.price ? value / info.price : null) : (parseFloat(h.units) || 0);
-    const cost  = h.cost != null && h.cost !== '' ? (parseFloat(h.units) || 0) * parseFloat(h.cost) : null;
-    const gain  = (value != null && cost != null) ? value - cost : null;
-    const gainPct = (gain != null && cost) ? gain / cost * 100 : null;
-    return { i, name: h.name, code: info.code, units, price: info.price, value, cost, gain, gainPct };
+    const cost  = (h.cost != null && h.cost !== '' && units != null) ? units * parseFloat(h.cost) : null;
+    // Real APEX period return (no cost basis needed); falls back to cost gain.
+    const earnings = _holdingEarnings(h);
+    const openBase = (h.opening != null && h.opening !== '') ? parseFloat(h.opening) : (earnings != null && value != null ? value - earnings : null);
+    const gain  = earnings != null ? earnings : ((value != null && cost != null) ? value - cost : null);
+    const gainPct = earnings != null ? (openBase ? earnings / openBase * 100 : null) : ((gain != null && cost) ? gain / cost * 100 : null);
+    return { i, name: h.name, code: info.code, units, price: info.price, value, cost, gain, gainPct, isPeriod: earnings != null, costRaw: h.cost || '' };
   });
   const totalValue = rows.reduce((s, r) => s + (r.value || 0), 0);
   const totalCost  = rows.reduce((s, r) => s + (r.cost || 0), 0);
-  const totalGain  = totalValue - totalCost;
   const anyPriced  = rows.some(r => r.value != null);
+  // Prefer the APEX period return; else cost-based total gain.
+  const hasPeriod  = rows.some(r => r.isPeriod);
+  const totalGain  = hasPeriod ? rows.reduce((s, r) => s + (r.isPeriod ? (r.gain || 0) : 0), 0) : (totalValue - totalCost);
+  const showGain   = hasPeriod || totalCost > 0;
+  const gainLabel  = hasPeriod ? 'Return (period)' : 'Gain';
   const fmtNZ = (n) => n == null ? '—' : 'NZ$' + n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const dl = (typeof _fundDatalistOptions === 'function') ? _fundDatalistOptions() : '';
@@ -6169,7 +6202,7 @@ function renderClientHoldings() {
     <div class="grid grid-cols-3 gap-3 mb-4">
       <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Total value</div><div class="text-2xl font-bold mt-1 mono">${anyPriced ? fmtNZ(totalValue) : '—'}</div></div>
       <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Total cost</div><div class="text-2xl font-bold mt-1 mono">${totalCost ? fmtNZ(totalCost) : '—'}</div></div>
-      <div class="card2 p-4 rail-top"><div class="text-xs neutral uppercase font-semibold">Gain</div><div class="text-2xl font-bold mt-1 mono" style="color:${totalGain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${totalCost ? (totalGain >= 0 ? '+' : '') + fmtNZ(totalGain) : '—'}</div></div>
+      <div class="card2 p-4 rail-top"><div class="text-xs neutral uppercase font-semibold">${gainLabel}</div><div class="text-2xl font-bold mt-1 mono" style="color:${totalGain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${showGain ? (totalGain >= 0 ? '+' : '') + fmtNZ(totalGain) : '—'}</div></div>
     </div>
     <div class="card">
       <div class="flex items-center justify-between p-4 flex-wrap gap-2" style="border-bottom:1px solid var(--border);">
@@ -6180,13 +6213,14 @@ function renderClientHoldings() {
         </div>
       </div>
       ${window._pendingApex ? _apexPickerHtml() : ''}
-      ${rows.length ? `<div class="table-header" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;"><span>Fund</span><span class="text-right">Units</span><span class="text-right">Unit price</span><span class="text-right">Value</span><span class="text-right">Gain</span><span></span></div>` : ''}
-      ${rows.map(r => `<div class="table-row" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;align-items:center;">
+      ${rows.length ? `<div class="table-header" style="display:grid;grid-template-columns:2fr 0.8fr 0.9fr 1fr 0.9fr 0.9fr 0.8fr;"><span>Fund</span><span class="text-right">Units</span><span class="text-right">Unit price</span><span class="text-right">Value</span><span class="text-right">Cost/unit</span><span class="text-right">Return</span><span></span></div>` : ''}
+      ${rows.map(r => `<div class="table-row" style="display:grid;grid-template-columns:2fr 0.8fr 0.9fr 1fr 0.9fr 0.9fr 0.8fr;align-items:center;">
         <div><div class="font-semibold text-sm">${_escape(r.name)}</div>${r.code ? `<div class="text-xs neutral mono">${_escape(r.code)}</div>` : ''}</div>
         <div class="text-right mono">${r.units == null ? '—' : r.units.toLocaleString('en-NZ', { maximumFractionDigits: 2 })}</div>
         <div class="text-right mono neutral">${r.price != null ? r.price.toFixed(4) : '<span title="No unit-price feed for this fund yet">—</span>'}</div>
         <div class="text-right mono">${fmtNZ(r.value)}</div>
-        <div class="text-right mono" style="color:${r.gain == null ? 'var(--text-muted)' : r.gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${r.gainPct != null ? (r.gainPct >= 0 ? '+' : '') + fmt(r.gainPct) + '%' : '—'}</div>
+        <div class="text-right"><input value="${r.costRaw}" onchange="setHoldingCost(${r.i}, this.value)" placeholder="—" title="Cost per unit (for total return)" style="width:74px;text-align:right;font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text-body);" inputmode="decimal"></div>
+        <div class="text-right mono" style="color:${r.gain == null ? 'var(--text-muted)' : r.gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};" title="${r.isPeriod ? 'APEX period return' : 'Total return vs cost'}">${r.gainPct != null ? (r.gainPct >= 0 ? '+' : '') + fmt(r.gainPct) + '%' : '—'}</div>
         <div class="text-right flex items-center justify-end gap-2">
           <button onclick="viewClientFund('${_escape((r.name||'').replace(/'/g,"\\'"))}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Open this fund's information">Fund <i class="fas fa-arrow-right"></i></button>
           <button onclick="removeClientHolding(${r.i})" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 7px;" title="Remove"><i class="fas fa-trash"></i></button>
@@ -6224,6 +6258,16 @@ function removeClientHolding(i) {
   list.splice(i, 1);
   _saveClientHoldings(list);
   renderClientHoldings();
+}
+
+// Inline-edit a holding's cost per unit → total return appears immediately.
+function setHoldingCost(i, val) {
+  const list = _loadClientHoldings();
+  if (i < 0 || i >= list.length) return;
+  list[i].cost = String(val).replace(/[$,\s]/g, '').trim();
+  _saveClientHoldings(list);
+  renderClientHoldings();
+  try { renderClientRollup(); } catch(e) {}
 }
 
 // CSV: header row with fund/name + units (+ optional cost). Flexible column names.
@@ -6303,14 +6347,21 @@ function _parseApexWorkbook(XLSX, buf) {
     const iId = find(['account id', 'account_id']);
     const iAcctNo = find(['account number', 'account_number']);
     const iClient = find(['client number', 'client_number', 'client account']);
+    // Period-movement columns → a real return for the disclosure month (no cost
+    // basis needed). "Investment Earnings" is the period P&L when present.
+    const iOpen = find(['opening']);
+    const iInv = find(['investments']);
+    const iWd = find(['withdrawals']);
+    const iEarn = find(['investment earnings', 'earnings']);
     const codeCol = iHiport >= 0 ? iHiport : iFundCode;
     if (iName >= 0 && codeCol >= 0 && iClose >= 0) {
       const score = (iHiport >= 0 ? 1e6 : 0) + grid.length;
-      if (!best || score > best.score) best = { sn, grid, iName, codeCol, iClose, iId, iAcctNo, iClient, hiport: iHiport >= 0, score };
+      if (!best || score > best.score) best = { sn, grid, iName, codeCol, iClose, iId, iAcctNo, iClient, iOpen, iInv, iWd, iEarn, hiport: iHiport >= 0, score };
     }
   });
   if (!best) return null;
   const idOf = (r) => String((best.iId >= 0 && r[best.iId]) || (best.iAcctNo >= 0 && r[best.iAcctNo]) || (best.iClient >= 0 && r[best.iClient]) || '').trim();
+  const num = (r, i) => i >= 0 ? (parseFloat(String(r[i]).replace(/[$,\s]/g, '')) || 0) : null;
   const accounts = {};
   for (let i = 1; i < best.grid.length; i++) {
     const r = best.grid[i];
@@ -6320,9 +6371,20 @@ function _parseApexWorkbook(XLSX, buf) {
     if (!name || !code) continue;
     const acct = accounts[name] || (accounts[name] = { id: '', rows: [] });
     if (!acct.id) acct.id = idOf(r);
-    acct.rows.push({ code, value });
+    acct.rows.push({ code, value, opening: num(r, best.iOpen), invested: num(r, best.iInv), withdrawn: num(r, best.iWd), earnings: num(r, best.iEarn) });
   }
   return { sheet: best.sn, usesHiport: best.hiport, accounts };
+}
+
+// Period P&L for a holding from APEX movement fields (the disclosure month).
+// Uses "Investment Earnings" when present, else closing − opening − net flows.
+function _holdingEarnings(h) {
+  if (h.earnings != null && h.earnings !== '') return parseFloat(h.earnings) || 0;
+  if (h.opening != null && h.opening !== '') {
+    const op = parseFloat(h.opening) || 0, inv = parseFloat(h.invested) || 0, wd = parseFloat(h.withdrawn) || 0, cl = parseFloat(h.value) || 0;
+    return cl - op - (inv - wd);
+  }
+  return null;
 }
 
 async function handleApexFile(event) {
@@ -6364,7 +6426,8 @@ function confirmApexImport() {
   const feed = (typeof _loadFundFeed === 'function') ? _loadFundFeed() : {};
   const list = acct.rows.map(r => {
     const rec = feed[r.code];
-    return { name: (rec && rec.name) || r.code, code: r.code, value: r.value };   // $ closing balance
+    return { name: (rec && rec.name) || r.code, code: r.code, value: r.value,   // $ closing balance
+             opening: r.opening, invested: r.invested, withdrawn: r.withdrawn, earnings: r.earnings };
   }).filter(h => h.value);
   _saveClientHoldings(list);
   // Persist the account's unique id + name — the future join key to provision
@@ -15420,6 +15483,7 @@ function showSection(name, el) {
   if (name === 'disclosure') { try { renderDisclosurePage(getMetrics()); } catch(e) { console.warn('[disclosure]', e); } }
   if (name === 'invest' || name === 'redeem') { try { renderFundForm(name); } catch(e) { console.warn('[fundform]', e); } }
   if (name === 'positions') { try { renderClientHoldings(); } catch(e) { console.warn('[positions]', e); } }
+  if (name === 'overview') { try { renderClientRollup(); } catch(e) { console.warn('[client-rollup]', e); } }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
     // network call. Replaced by renderTraderIQ() once the cache loads.
