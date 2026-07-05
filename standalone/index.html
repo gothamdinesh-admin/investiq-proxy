@@ -4436,21 +4436,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=73"></script>
-<script src="js/05-content.js?b=73"></script>
-<script src="js/10-helpers.js?b=73"></script>
-<script src="js/20-state.js?b=73"></script>
-<script src="js/30-cloud.js?b=73"></script>
-<script src="js/40-auth.js?b=73"></script>
-<script src="js/45-auth-security.js?b=73"></script>
-<script src="js/60-import.js?b=73"></script>
-<script src="js/50-portfolio.js?b=73"></script>
-<script src="js/70-ai.js?b=73"></script>
-<script src="js/80-trader.js?b=73"></script>
-<script src="js/85-calendar-reports.js?b=73"></script>
-<script src="js/88-onboarding-tour.js?b=73"></script>
-<script src="js/90-goals.js?b=73"></script>
-<script src="js/95-integrations.js?b=73"></script>
+<script src="js/00-config.js?b=75"></script>
+<script src="js/05-content.js?b=75"></script>
+<script src="js/10-helpers.js?b=75"></script>
+<script src="js/20-state.js?b=75"></script>
+<script src="js/30-cloud.js?b=75"></script>
+<script src="js/40-auth.js?b=75"></script>
+<script src="js/45-auth-security.js?b=75"></script>
+<script src="js/60-import.js?b=75"></script>
+<script src="js/50-portfolio.js?b=75"></script>
+<script src="js/70-ai.js?b=75"></script>
+<script src="js/80-trader.js?b=75"></script>
+<script src="js/85-calendar-reports.js?b=75"></script>
+<script src="js/88-onboarding-tour.js?b=75"></script>
+<script src="js/90-goals.js?b=75"></script>
+<script src="js/95-integrations.js?b=75"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6075,8 +6075,11 @@ function _saveClientHoldings(list) { state.settings.clientHoldings = list; try {
 
 // Resolve a held fund's unit price + display name from the feed (by name/code).
 function _clientFundInfo(h) {
-  const fd = (typeof getFundMarketData === 'function') ? (getFundMarketData(h.name) || getFundMarketData(h.code)) : null;
-  return { price: fd && fd.price != null ? fd.price : null, code: (fd && fd.code) || h.code || '', name: h.name };
+  const feed = (typeof _loadFundFeed === 'function') ? _loadFundFeed() : {};
+  const code = (h.code || '').toString().toUpperCase();
+  let rec = (code && feed[code]) ? feed[code] : null;
+  if (!rec && typeof getFundMarketData === 'function') rec = getFundMarketData(h.name);
+  return { price: rec && rec.price != null ? rec.price : null, code: code || (rec && rec.code) || '', name: (rec && rec.name) || h.name };
 }
 
 function renderClientHoldings() {
@@ -6084,9 +6087,11 @@ function renderClientHoldings() {
   const list = _loadClientHoldings();
   const rows = list.map((h, i) => {
     const info = _clientFundInfo(h);
-    const units = parseFloat(h.units) || 0;
-    const value = info.price != null ? units * info.price : null;
-    const cost  = h.cost != null && h.cost !== '' ? units * parseFloat(h.cost) : null;
+    // APEX feed gives a $ closing balance directly; manual entry gives units.
+    const hasValue = h.value != null && h.value !== '';
+    const value = hasValue ? (parseFloat(h.value) || 0) : (info.price != null ? (parseFloat(h.units) || 0) * info.price : null);
+    const units = hasValue ? (info.price ? value / info.price : null) : (parseFloat(h.units) || 0);
+    const cost  = h.cost != null && h.cost !== '' ? (parseFloat(h.units) || 0) * parseFloat(h.cost) : null;
     const gain  = (value != null && cost != null) ? value - cost : null;
     const gainPct = (gain != null && cost) ? gain / cost * 100 : null;
     return { i, name: h.name, code: info.code, units, price: info.price, value, cost, gain, gainPct };
@@ -6111,12 +6116,16 @@ function renderClientHoldings() {
     <div class="card">
       <div class="flex items-center justify-between p-4 flex-wrap gap-2" style="border-bottom:1px solid var(--border);">
         <div class="section-title" style="margin:0;font-size:14px;"><i class="fas fa-wallet" style="color:var(--accent);"></i> Positions <span class="text-xs neutral">· ${rows.length}</span></div>
-        <label class="btn btn-sm btn-secondary" style="cursor:pointer;font-size:11px;"><i class="fas fa-upload mr-1"></i>Import CSV<input type="file" accept=".csv" style="display:none;" onchange="importClientHoldingsCSV(event)"></label>
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="btn btn-sm btn-secondary" style="cursor:pointer;font-size:11px;" title="APEX account-upload workbook — parsed in your browser, pick your account"><i class="fas fa-file-excel mr-1"></i>Import from APEX<input type="file" accept=".xlsx,.xlsm,.xls" style="display:none;" onchange="handleApexFile(event)"></label>
+          <label class="btn btn-sm btn-secondary" style="cursor:pointer;font-size:11px;"><i class="fas fa-upload mr-1"></i>CSV<input type="file" accept=".csv" style="display:none;" onchange="importClientHoldingsCSV(event)"></label>
+        </div>
       </div>
+      ${window._pendingApex ? _apexPickerHtml() : ''}
       ${rows.length ? `<div class="table-header" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;"><span>Fund</span><span class="text-right">Units</span><span class="text-right">Unit price</span><span class="text-right">Value</span><span class="text-right">Gain</span><span></span></div>` : ''}
       ${rows.map(r => `<div class="table-row" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;align-items:center;">
         <div><div class="font-semibold text-sm">${_escape(r.name)}</div>${r.code ? `<div class="text-xs neutral mono">${_escape(r.code)}</div>` : ''}</div>
-        <div class="text-right mono">${r.units.toLocaleString('en-NZ')}</div>
+        <div class="text-right mono">${r.units == null ? '—' : r.units.toLocaleString('en-NZ', { maximumFractionDigits: 2 })}</div>
         <div class="text-right mono neutral">${r.price != null ? r.price.toFixed(4) : '<span title="No unit-price feed for this fund yet">—</span>'}</div>
         <div class="text-right mono">${fmtNZ(r.value)}</div>
         <div class="text-right mono" style="color:${r.gain == null ? 'var(--text-muted)' : r.gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${r.gainPct != null ? (r.gainPct >= 0 ? '+' : '') + fmt(r.gainPct) + '%' : '—'}</div>
@@ -6194,6 +6203,108 @@ function viewClientFund(name) {
     .find(p => (typeof _normFundName === 'function' ? _normFundName((p.fund && p.fund.name) || p.name) : (p.name)) === norm);
   if (book) { setActivePortfolio(book.id); renderAll(); showSection('exposure'); }
   else toast.info({ title: 'Fund info not loaded', message: `Import the Disclose holdings for "${name}" to see its composition, returns and reports.`, duration: 6000 });
+}
+
+// ── APEX account-upload workbook → client holdings ───────────────────────
+// Parsed ENTIRELY in-browser (SheetJS, lazy-loaded + SRI). The workbook holds
+// every client's positions incl. IRD numbers — we NEVER store or sync anyone
+// but the account the user explicitly picks. Others are held transiently in
+// memory only, then discarded.
+let _sheetjsPromise = null;
+function _loadSheetJS() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (_sheetjsPromise) return _sheetjsPromise;
+  _sheetjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.integrity = 'sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw';
+    s.crossOrigin = 'anonymous';
+    s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error('Excel parser failed to initialise'));
+    s.onerror = () => reject(new Error('Could not load the Excel parser (offline or blocked)'));
+    document.head.appendChild(s);
+  });
+  return _sheetjsPromise;
+}
+
+// Find the best account-holdings sheet and group rows by account name.
+function _parseApexWorkbook(XLSX, buf) {
+  const wb = XLSX.read(buf, { type: 'array' });
+  let best = null;
+  wb.SheetNames.forEach(sn => {
+    const ws = wb.Sheets[sn]; if (!ws) return;
+    const grid = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false, defval: '' });
+    if (grid.length < 2) return;
+    const hdr = grid[0].map(h => String(h).trim().toLowerCase());
+    const find = (preds) => hdr.findIndex(h => preds.some(p => h.includes(p)));
+    const iName = find(['account name', 'account_name']);
+    const iHiport = find(['hiport']);
+    const iFundCode = find(['fund code', 'fund_code']);
+    const iClose = find(['closing']);
+    const codeCol = iHiport >= 0 ? iHiport : iFundCode;
+    if (iName >= 0 && codeCol >= 0 && iClose >= 0) {
+      const score = (iHiport >= 0 ? 1e6 : 0) + grid.length;
+      if (!best || score > best.score) best = { sn, grid, iName, codeCol, iClose, hiport: iHiport >= 0, score };
+    }
+  });
+  if (!best) return null;
+  const accounts = {};
+  for (let i = 1; i < best.grid.length; i++) {
+    const r = best.grid[i];
+    const name = String(r[best.iName] || '').trim();
+    const code = String(r[best.codeCol] || '').trim().toUpperCase();
+    const value = parseFloat(String(r[best.iClose]).replace(/[$,\s]/g, '')) || 0;
+    if (!name || !code) continue;
+    (accounts[name] = accounts[name] || []).push({ code, value });
+  }
+  return { sheet: best.sn, usesHiport: best.hiport, accounts };
+}
+
+async function handleApexFile(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    toast.info('Reading APEX workbook in your browser…');
+    const XLSX = await _loadSheetJS();
+    const parsed = _parseApexWorkbook(XLSX, await file.arrayBuffer());
+    if (!parsed || !Object.keys(parsed.accounts).length) { toast.error('No account-holdings sheet found (need Account Name + HiPort/Fund Code + Closing Balance).'); return; }
+    window._pendingApex = parsed;   // in-memory only; never persisted
+    renderClientHoldings();
+    toast.success({ title: `Parsed ${Object.keys(parsed.accounts).length} accounts`, message: `From sheet “${parsed.sheet}”. Select your account below — no data is stored until you do.`, duration: 7000 });
+  } catch (e) { toast.error('APEX import failed: ' + (e.message || e)); }
+}
+
+function _apexPickerHtml() {
+  const acc = window._pendingApex && window._pendingApex.accounts;
+  if (!acc) return '';
+  const names = Object.keys(acc).sort();
+  return `<div style="background:var(--bg-panel-2);border:1px solid var(--h-bronze);border-radius:10px;padding:14px;margin:12px 0;">
+    <div class="section-title" style="margin:0 0 6px;font-size:13px;"><i class="fas fa-user-shield" style="color:var(--h-bronze);"></i> Select your account</div>
+    <div class="text-xs neutral mb-3">${names.length} accounts parsed in-memory. Only the account you pick is imported; the rest are discarded — nothing else is stored or synced.</div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <input list="apexAccList" id="apexAccPick" class="input" placeholder="Start typing your account name…" style="min-width:320px;">
+      <datalist id="apexAccList">${names.map(n => `<option value="${_escape(n)}"></option>`).join('')}</datalist>
+      <button onclick="confirmApexImport()" class="btn btn-primary btn-sm"><i class="fas fa-download mr-1"></i>Import this account</button>
+      <button onclick="window._pendingApex=null;renderClientHoldings();" class="btn btn-secondary btn-sm">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function confirmApexImport() {
+  const parsed = window._pendingApex; if (!parsed) return;
+  const pick = (document.getElementById('apexAccPick')?.value || '').trim();
+  const acctRows = parsed.accounts[pick];
+  if (!acctRows) { toast.warning('Pick an account from the list.'); return; }
+  const feed = (typeof _loadFundFeed === 'function') ? _loadFundFeed() : {};
+  const list = acctRows.map(r => {
+    const rec = feed[r.code];
+    return { name: (rec && rec.name) || r.code, code: r.code, value: r.value };   // $ closing balance
+  }).filter(h => h.value);
+  _saveClientHoldings(list);
+  window._pendingApex = null;
+  renderClientHoldings();
+  toast.success({ title: 'Holdings imported', message: `${list.length} position(s) for “${pick}”. Only this account was stored.`, duration: 7000 });
+  if (typeof logActivity === 'function') logActivity('apex_import', { positions: list.length });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
