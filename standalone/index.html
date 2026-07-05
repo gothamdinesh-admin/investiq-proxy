@@ -2387,6 +2387,18 @@
       <div id="exposurePageBody"></div>
     </div>
 
+    <!-- MY HOLDINGS — the INDIVIDUAL/client tier: units held per Harbour fund,
+         valued from the unit-price feed. Prototype input (manual + CSV); an
+         APEX/registry feed replaces the source later. Each position drills into
+         the fund-level Library (composition/exposure/returns/reports). -->
+    <div id="section-positions" style="display:none;">
+      <div class="mb-6">
+        <h2 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-wallet" style="color:var(--accent);"></i> <span>My Holdings</span></h2>
+        <div class="text-xs neutral mt-1">Units held across Harbour funds, valued from the latest unit price. Drill into any fund for its composition, returns and reports.</div>
+      </div>
+      <div id="positionsBody" style="max-width:960px;"></div>
+    </div>
+
     <!-- TRANSACT — Additional Investment + Redemption instruction forms
          (Harbour edition). Modelled on the official Harbour PDFs; submits a
          signed instruction email to ops for manual processing. -->
@@ -4424,21 +4436,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=72"></script>
-<script src="js/05-content.js?b=72"></script>
-<script src="js/10-helpers.js?b=72"></script>
-<script src="js/20-state.js?b=72"></script>
-<script src="js/30-cloud.js?b=72"></script>
-<script src="js/40-auth.js?b=72"></script>
-<script src="js/45-auth-security.js?b=72"></script>
-<script src="js/60-import.js?b=72"></script>
-<script src="js/50-portfolio.js?b=72"></script>
-<script src="js/70-ai.js?b=72"></script>
-<script src="js/80-trader.js?b=72"></script>
-<script src="js/85-calendar-reports.js?b=72"></script>
-<script src="js/88-onboarding-tour.js?b=72"></script>
-<script src="js/90-goals.js?b=72"></script>
-<script src="js/95-integrations.js?b=72"></script>
+<script src="js/00-config.js?b=73"></script>
+<script src="js/05-content.js?b=73"></script>
+<script src="js/10-helpers.js?b=73"></script>
+<script src="js/20-state.js?b=73"></script>
+<script src="js/30-cloud.js?b=73"></script>
+<script src="js/40-auth.js?b=73"></script>
+<script src="js/45-auth-security.js?b=73"></script>
+<script src="js/60-import.js?b=73"></script>
+<script src="js/50-portfolio.js?b=73"></script>
+<script src="js/70-ai.js?b=73"></script>
+<script src="js/80-trader.js?b=73"></script>
+<script src="js/85-calendar-reports.js?b=73"></script>
+<script src="js/88-onboarding-tour.js?b=73"></script>
+<script src="js/90-goals.js?b=73"></script>
+<script src="js/95-integrations.js?b=73"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6049,6 +6061,139 @@ function renderFundReturns() {
   }
   html += `<div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>${hasFeed ? 'Gross returns from the Harbour unit-price feed; "bmk" = benchmark. ' : ''}${hasMonthly ? 'Monthly series from the Disclose FUND RETURNS file. ' : ''}Educational display — not investment advice.</div>`;
   document.getElementById('fundReturnsBody').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CLIENT HOLDINGS (Harbour) — the INDIVIDUAL tier. A client's units per
+// Harbour fund, valued from the unit-price feed. Distinct from the fund
+// composition books (that's the reference/Library tier). Stored per-user in
+// settings for now (prototype); an APEX/registry feed replaces the source
+// later. Each row drills into the fund-level Library.
+// ═══════════════════════════════════════════════════════════════════════
+function _loadClientHoldings() { return (state.settings && Array.isArray(state.settings.clientHoldings)) ? state.settings.clientHoldings : []; }
+function _saveClientHoldings(list) { state.settings.clientHoldings = list; try { saveState(); } catch(e) {} }
+
+// Resolve a held fund's unit price + display name from the feed (by name/code).
+function _clientFundInfo(h) {
+  const fd = (typeof getFundMarketData === 'function') ? (getFundMarketData(h.name) || getFundMarketData(h.code)) : null;
+  return { price: fd && fd.price != null ? fd.price : null, code: (fd && fd.code) || h.code || '', name: h.name };
+}
+
+function renderClientHoldings() {
+  const el = document.getElementById('positionsBody'); if (!el) return;
+  const list = _loadClientHoldings();
+  const rows = list.map((h, i) => {
+    const info = _clientFundInfo(h);
+    const units = parseFloat(h.units) || 0;
+    const value = info.price != null ? units * info.price : null;
+    const cost  = h.cost != null && h.cost !== '' ? units * parseFloat(h.cost) : null;
+    const gain  = (value != null && cost != null) ? value - cost : null;
+    const gainPct = (gain != null && cost) ? gain / cost * 100 : null;
+    return { i, name: h.name, code: info.code, units, price: info.price, value, cost, gain, gainPct };
+  });
+  const totalValue = rows.reduce((s, r) => s + (r.value || 0), 0);
+  const totalCost  = rows.reduce((s, r) => s + (r.cost || 0), 0);
+  const totalGain  = totalValue - totalCost;
+  const anyPriced  = rows.some(r => r.value != null);
+  const fmtNZ = (n) => n == null ? '—' : 'NZ$' + n.toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const dl = (typeof _fundDatalistOptions === 'function') ? _fundDatalistOptions() : '';
+  el.innerHTML = `
+    <datalist id="clientFundList">${dl}</datalist>
+    <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:9px 12px;font-size:12px;color:#92400E;margin-bottom:14px;">
+      <i class="fas fa-circle-info mr-1"></i>Prototype client holdings — entered manually or via CSV, valued from the unit-price feed. A registry (APEX) feed will populate these automatically later.
+    </div>
+    <div class="grid grid-cols-3 gap-3 mb-4">
+      <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Total value</div><div class="text-2xl font-bold mt-1 mono">${anyPriced ? fmtNZ(totalValue) : '—'}</div></div>
+      <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Total cost</div><div class="text-2xl font-bold mt-1 mono">${totalCost ? fmtNZ(totalCost) : '—'}</div></div>
+      <div class="card2 p-4 rail-top"><div class="text-xs neutral uppercase font-semibold">Gain</div><div class="text-2xl font-bold mt-1 mono" style="color:${totalGain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${totalCost ? (totalGain >= 0 ? '+' : '') + fmtNZ(totalGain) : '—'}</div></div>
+    </div>
+    <div class="card">
+      <div class="flex items-center justify-between p-4 flex-wrap gap-2" style="border-bottom:1px solid var(--border);">
+        <div class="section-title" style="margin:0;font-size:14px;"><i class="fas fa-wallet" style="color:var(--accent);"></i> Positions <span class="text-xs neutral">· ${rows.length}</span></div>
+        <label class="btn btn-sm btn-secondary" style="cursor:pointer;font-size:11px;"><i class="fas fa-upload mr-1"></i>Import CSV<input type="file" accept=".csv" style="display:none;" onchange="importClientHoldingsCSV(event)"></label>
+      </div>
+      ${rows.length ? `<div class="table-header" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;"><span>Fund</span><span class="text-right">Units</span><span class="text-right">Unit price</span><span class="text-right">Value</span><span class="text-right">Gain</span><span></span></div>` : ''}
+      ${rows.map(r => `<div class="table-row" style="display:grid;grid-template-columns:2.2fr 0.9fr 1fr 1.1fr 1fr 0.9fr;align-items:center;">
+        <div><div class="font-semibold text-sm">${_escape(r.name)}</div>${r.code ? `<div class="text-xs neutral mono">${_escape(r.code)}</div>` : ''}</div>
+        <div class="text-right mono">${r.units.toLocaleString('en-NZ')}</div>
+        <div class="text-right mono neutral">${r.price != null ? r.price.toFixed(4) : '<span title="No unit-price feed for this fund yet">—</span>'}</div>
+        <div class="text-right mono">${fmtNZ(r.value)}</div>
+        <div class="text-right mono" style="color:${r.gain == null ? 'var(--text-muted)' : r.gain >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${r.gainPct != null ? (r.gainPct >= 0 ? '+' : '') + fmt(r.gainPct) + '%' : '—'}</div>
+        <div class="text-right flex items-center justify-end gap-2">
+          <button onclick="viewClientFund('${_escape((r.name||'').replace(/'/g,"\\'"))}')" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 8px;" title="Open this fund's information">Fund <i class="fas fa-arrow-right"></i></button>
+          <button onclick="removeClientHolding(${r.i})" class="btn btn-sm btn-secondary" style="font-size:10px;padding:3px 7px;" title="Remove"><i class="fas fa-trash"></i></button>
+        </div>
+      </div>`).join('')}
+      ${!rows.length ? '<div class="p-6 text-sm neutral text-center">No holdings yet — add one below or import a CSV.</div>' : ''}
+      <div class="p-4" style="border-top:1px solid var(--border);">
+        <div class="text-xs neutral uppercase font-semibold mb-2">Add a holding</div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <input list="clientFundList" id="chFund" class="input" placeholder="Harbour Fund" style="width:100%;">
+          <input id="chUnits" class="input" type="number" step="any" placeholder="Units" style="width:100%;">
+          <input id="chCost" class="input" type="number" step="any" placeholder="Cost / unit (opt.)" style="width:100%;">
+          <button onclick="addClientHolding()" class="btn btn-primary" style="font-size:12px;"><i class="fas fa-plus mr-1"></i>Add</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addClientHolding() {
+  const name = (document.getElementById('chFund')?.value || '').trim();
+  const units = (document.getElementById('chUnits')?.value || '').trim();
+  const cost = (document.getElementById('chCost')?.value || '').trim();
+  if (!name || !units) { toast.warning('Enter a fund and units.'); return; }
+  const info = _clientFundInfo({ name });
+  const list = _loadClientHoldings();
+  list.push({ name, code: info.code, units, cost });
+  _saveClientHoldings(list);
+  renderClientHoldings();
+  toast.success(`Added ${name}.`);
+}
+
+function removeClientHolding(i) {
+  const list = _loadClientHoldings();
+  if (i < 0 || i >= list.length) return;
+  list.splice(i, 1);
+  _saveClientHoldings(list);
+  renderClientHoldings();
+}
+
+// CSV: header row with fund/name + units (+ optional cost). Flexible column names.
+async function importClientHoldingsCSV(event) {
+  const file = event.target.files && event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+    if (!lines.length) return;
+    const hdr = (typeof parseCSVLine === 'function' ? parseCSVLine(lines[0]) : lines[0].split(',')).map(h => h.trim().toLowerCase());
+    const idx = (names) => hdr.findIndex(h => names.some(n => h.includes(n)));
+    const iName = idx(['fund', 'name']), iUnits = idx(['unit', 'quantity', 'qty', 'holding']), iCost = idx(['cost', 'price']);
+    if (iName < 0 || iUnits < 0) { toast.error('CSV needs a fund/name column and a units column.'); return; }
+    const list = _loadClientHoldings();
+    let added = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const c = (typeof parseCSVLine === 'function' ? parseCSVLine(lines[i]) : lines[i].split(','));
+      const name = (c[iName] || '').trim(); const units = (c[iUnits] || '').trim();
+      if (!name || !units) continue;
+      list.push({ name, code: _clientFundInfo({ name }).code, units, cost: iCost >= 0 ? (c[iCost] || '').trim() : '' });
+      added++;
+    }
+    _saveClientHoldings(list);
+    renderClientHoldings();
+    toast.success(`Imported ${added} holding(s).`);
+  } catch (e) { toast.error('CSV import failed: ' + (e.message || e)); }
+}
+
+// Drill into the fund-level Library for a held fund (if its disclosure is imported).
+function viewClientFund(name) {
+  const norm = (typeof _normFundName === 'function') ? _normFundName(name) : name;
+  const book = (typeof listPortfolios === 'function' ? listPortfolios() : [])
+    .find(p => (typeof _normFundName === 'function' ? _normFundName((p.fund && p.fund.name) || p.name) : (p.name)) === norm);
+  if (book) { setActivePortfolio(book.id); renderAll(); showSection('exposure'); }
+  else toast.info({ title: 'Fund info not loaded', message: `Import the Disclose holdings for "${name}" to see its composition, returns and reports.`, duration: 6000 });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -11001,7 +11146,7 @@ async function clearAllData() {
 // always blue; this is the whisper). Sets --page-accent + a tide flag, and
 // drops a small accent rule under the section's title. Edge-signal only.
 const HARBOUR_PAGE_ACCENT = {
-  overview:'tide', holdings:'tide', exposure:'tide', disclosure:'slate',
+  overview:'tide', positions:'tide', holdings:'tide', exposure:'tide', disclosure:'slate',
   invest:'bronze', redeem:'bronze', mandate:'sand', insights:'bronze',
   market:'bluegrey', news:'cyan', askiq:'cyan', reports:'bronze', admin:'slate'
 };
@@ -11024,7 +11169,7 @@ function applyPageAccent(section) {
 function _showSectionCore(name, el) {
   // CMS nav: a section hidden via Content Studio is unreachable — bounce to Overview.
   if (name !== 'overview' && typeof isCmsSectionHidden === 'function' && isCmsSectionHidden(name)) name = 'overview';
-  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms','exposure','disclosure','mandate','invest','redeem'].forEach(s => {
+  ['overview','holdings','performance','market','insights','askiq','watchlist','news','tax','dividends','family','admin','trader','goals','calendar','reports','cms','exposure','disclosure','mandate','invest','redeem','positions'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     if (sec) sec.style.display = s === name ? '' : 'none';
   });
@@ -14720,6 +14865,7 @@ function applyEdition() {
       NAV_GROUPS.length = 0;
       NAV_GROUPS.push(
         { id:'overview', label:'Overview', children:['overview'] },
+        { id:'client',   label:'My Holdings', children:['positions'] },
         { id:'fund',     label:'Fund',     children:['holdings','exposure','disclosure'] },
         { id:'transact', label:'Transact', children:['invest','redeem'] },
         { id:'risk',     label:'Risk',     children:['mandate','insights'] },
@@ -14727,8 +14873,8 @@ function applyEdition() {
         { id:'reports',  label:'Reports',  children:['reports'] },
         { id:'admin',    label:'Admin',    children:['admin'] }
       );
-      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Risk Review', invest:'Additional Investment', redeem:'Redemption' });
-      Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', insights:'fa-clipboard-check', invest:'fa-circle-plus', redeem:'fa-money-bill-transfer' });
+      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Risk Review', invest:'Additional Investment', redeem:'Redemption', positions:'My Holdings' });
+      Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', insights:'fa-clipboard-check', invest:'fa-circle-plus', redeem:'fa-money-bill-transfer', positions:'fa-wallet' });
     } else {
       // Personal edition — drop Goals / Family per feature flags.
       if (!feat.goals) {
@@ -14946,7 +15092,7 @@ function _groupDef(groupId) { return NAV_GROUPS.find(g => g.id === groupId); }
 // Sidebar is generated from NAV_GROUPS so an edition restructure (e.g. the
 // Harbour fund nav) + role-gating + CMS toggles all flow from one source.
 const NAV_GROUP_ICONS = {
-  overview:'fa-gauge-high', portfolio:'fa-wallet', fund:'fa-layer-group', transact:'fa-right-left',
+  overview:'fa-gauge-high', portfolio:'fa-wallet', client:'fa-wallet', fund:'fa-layer-group', transact:'fa-right-left',
   intelligence:'fa-brain', risk:'fa-shield-halved', planning:'fa-compass',
   market:'fa-globe', watchlist:'fa-eye', trader:'fa-arrow-trend-up',
   reports:'fa-file-pdf', family:'fa-users', admin:'fa-shield-alt'
@@ -15092,6 +15238,7 @@ function showSection(name, el) {
   if (name === 'mandate')    { try { renderMandatePage(getMetrics()); } catch(e) { console.warn('[mandate]', e); } }
   if (name === 'disclosure') { try { renderDisclosurePage(getMetrics()); } catch(e) { console.warn('[disclosure]', e); } }
   if (name === 'invest' || name === 'redeem') { try { renderFundForm(name); } catch(e) { console.warn('[fundform]', e); } }
+  if (name === 'positions') { try { renderClientHoldings(); } catch(e) { console.warn('[positions]', e); } }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
     // network call. Replaced by renderTraderIQ() once the cache loads.
