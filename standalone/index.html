@@ -4424,21 +4424,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=70"></script>
-<script src="js/05-content.js?b=70"></script>
-<script src="js/10-helpers.js?b=70"></script>
-<script src="js/20-state.js?b=70"></script>
-<script src="js/30-cloud.js?b=70"></script>
-<script src="js/40-auth.js?b=70"></script>
-<script src="js/45-auth-security.js?b=70"></script>
-<script src="js/60-import.js?b=70"></script>
-<script src="js/50-portfolio.js?b=70"></script>
-<script src="js/70-ai.js?b=70"></script>
-<script src="js/80-trader.js?b=70"></script>
-<script src="js/85-calendar-reports.js?b=70"></script>
-<script src="js/88-onboarding-tour.js?b=70"></script>
-<script src="js/90-goals.js?b=70"></script>
-<script src="js/95-integrations.js?b=70"></script>
+<script src="js/00-config.js?b=72"></script>
+<script src="js/05-content.js?b=72"></script>
+<script src="js/10-helpers.js?b=72"></script>
+<script src="js/20-state.js?b=72"></script>
+<script src="js/30-cloud.js?b=72"></script>
+<script src="js/40-auth.js?b=72"></script>
+<script src="js/45-auth-security.js?b=72"></script>
+<script src="js/60-import.js?b=72"></script>
+<script src="js/50-portfolio.js?b=72"></script>
+<script src="js/70-ai.js?b=72"></script>
+<script src="js/80-trader.js?b=72"></script>
+<script src="js/85-calendar-reports.js?b=72"></script>
+<script src="js/88-onboarding-tour.js?b=72"></script>
+<script src="js/90-goals.js?b=72"></script>
+<script src="js/95-integrations.js?b=72"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6298,43 +6298,107 @@ async function editMandateLimits() {
   if (window.toast) toast.success('Mandate limits updated');
 }
 
-function renderMandatePage(metrics) {
+// HOUSE-WIDE Risk Review — aggregates across ALL imported fund books rather
+// than grading one fund against generic limits (per-fund pass/fail was
+// misleading — e.g. an equity fund always "breaches" an equity cap). Shows
+// cross-fund concentration, AUM-weighted mix, and a watch list.
+function renderMandatePage(_metrics) {
   const el = document.getElementById('mandatePageBody'); if (!el) return;
-  if (!_isFundWeightView()) { el.innerHTML = '<div class="card p-6 text-sm neutral">Import a fund holdings disclosure to run mandate checks.</div>'; return; }
-  const tv = metrics.totalValue || 1;
-  const L = _mandateLimits();
-  const real = metrics.holdings.filter(h => !_isSyntheticFundRow(h));
-  const top = [...real].sort((a,b) => (b.currentValue||0) - (a.currentValue||0));
-  const largest = top[0];
-  const top10 = top.slice(0,10).reduce((s,h) => s + (h.currentValue||0), 0) / tv * 100;
-  const fm = _fundMetrics(metrics);
-  const equityPct = (fm.mixPct.find(m => m[0] === 'Equity') || ['',0])[1];
-  const checks = [
-    { label:'Largest single holding', value: largest ? largest.currentValue : 0, limit:L.largest,  note: largest ? _fundLabel(largest) : '—' },
-    { label:'Top-10 concentration',   value: top10,            limit:L.top10,    note:'sum of 10 largest' },
-    { label:'Offshore (non-NZD)',     value: fm.offshorePct,   limit:L.offshore, note:'FX exposure' },
-    { label:'Equity allocation',      value: equityPct,        limit:L.equity,   note:'asset class' }
-  ];
-  const row = (c) => {
-    const breach = c.value > c.limit, watch = !breach && c.value > c.limit * 0.85;
-    const col = breach ? 'var(--color-red)' : watch ? 'var(--color-amber)' : 'var(--color-green)';
-    const status = breach ? 'Breach' : watch ? 'Watch' : 'OK';
-    return `<div class="table-row" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;align-items:center;"><div><div class="font-semibold text-sm">${_escape(c.label)}</div><div class="text-xs neutral">${_escape(c.note)}</div></div><div class="text-right mono">${fmt(c.value)}%</div><div class="text-right mono neutral">&le; ${c.limit}%</div><div class="text-right"><span style="color:${col};font-weight:600;font-size:12px;">${status}</span></div></div>`;
-  };
-  const breaches = checks.filter(c => c.value > c.limit).length;
-  const watches  = checks.filter(c => c.value <= c.limit && c.value > c.limit * 0.85).length;
-  const summary = breaches ? `<span style="color:var(--color-red);font-weight:600;">${breaches} breach${breaches>1?'es':''}</span>`
-                : watches ? `<span style="color:var(--color-amber);font-weight:600;">${watches} on watch</span>`
-                : `<span style="color:var(--color-green);font-weight:600;">All within guidelines</span>`;
-  el.innerHTML = `<div class="card">
-    <div class="flex items-center justify-between p-4" style="border-bottom:1px solid var(--border);">
-      <div class="text-sm">${summary}</div>
-      <button onclick="editMandateLimits()" class="btn btn-sm btn-secondary" title="Edit guideline limits"><i class="fas fa-sliders mr-1"></i>Edit limits</button>
+  const sec = document.getElementById('section-mandate');
+  if (sec) {
+    const h = sec.querySelector('h2 span'); if (h) h.textContent = 'Risk Review';
+    const sub = sec.querySelector('.text-xs.neutral'); if (sub) sub.textContent = 'A house-wide read across every fund you\'ve imported — concentration, exposure and items to watch. Educational, not a compliance determination.';
+  }
+  const books = (typeof listPortfolios === 'function' ? listPortfolios() : [])
+    .filter(p => p.fund || (p.holdings || []).some(h => h && h.source === 'disclose'))
+    .map(p => {
+      const name = (p.fund && p.fund.name) || p.name;
+      const fd = (typeof getFundMarketData === 'function') ? getFundMarketData(name) : null;
+      const w = (h) => (h.lots && h.lots[0] ? h.lots[0].quantity : 0) || 0;
+      return { name, asAt: (p.fund && p.fund.asAt) || '', asAtISO: (p.fund && p.fund.asAtISO) || '',
+               nav: fd && fd.nav != null ? fd.nav : null, holdings: p.holdings || [],
+               named: (p.holdings || []).filter(h => h.source === 'disclose' && !_isSyntheticFundRow(h)), w };
+    });
+  if (!books.length) {
+    el.innerHTML = '<div class="card p-6 text-sm neutral">Import one or more fund holdings disclosures to see the house-wide risk review.</div>';
+    return;
+  }
+  const CLASS = { stock:'Equity', etf:'Equity', bond:'Fixed income', cash:'Cash', fund:'Alternatives', mutualfund:'Alternatives', other:'Other' };
+  const CLASS_COLOR = { 'Equity':'#005A79','Fixed income':'#3F8BA8','Alternatives':'#7FB0C4','Cash':'#BFC8CC','Other':'#9FB3BD' };
+  const navBooks = books.filter(b => b.nav != null);
+  const totalAUM = navBooks.reduce((s, b) => s + b.nav, 0);
+  const fmtAUM = (n) => n >= 1e9 ? `$${(n/1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n/1e6).toFixed(1)}M` : `$${Math.round(n/1e3)}k`;
+
+  // Cross-fund concentration.
+  const byName = {};
+  books.forEach(b => b.named.forEach(h => {
+    const k = (h.name || h.symbol || '').trim(); if (!k) return;
+    const wt = b.w(h);
+    const rec = byName[k] || (byName[k] = { name: k, funds: new Set(), maxW: 0, navContrib: 0 });
+    rec.funds.add(b.name); rec.maxW = Math.max(rec.maxW, wt);
+    if (b.nav != null) rec.navContrib += wt / 100 * b.nav;
+  }));
+  const cross = Object.values(byName)
+    .map(r => ({ name: r.name, fundCount: r.funds.size, maxW: r.maxW, house: totalAUM > 0 ? r.navContrib / totalAUM * 100 : null }))
+    .sort((a, b) => (b.fundCount - a.fundCount) || (b.maxW - a.maxW)).slice(0, 12);
+
+  // Aggregate asset-class mix (AUM-weighted where NAV known, else equal).
+  const classAgg = {};
+  books.forEach(b => {
+    const booked = b.holdings.filter(h => h.overlayNet == null);
+    const bt = booked.reduce((s, h) => s + b.w(h), 0) || 1;
+    const wgt = (b.nav != null && totalAUM > 0) ? b.nav / totalAUM : 1 / books.length;
+    booked.forEach(h => { const c = CLASS[h.type] || 'Other'; classAgg[c] = (classAgg[c] || 0) + (b.w(h) / bt) * wgt * 100; });
+  });
+  const classRows = Object.entries(classAgg).sort((a, b) => b[1] - a[1]);
+
+  // Watch list (sand/bronze = attention, not alarm).
+  const newest = books.map(b => b.asAtISO).filter(Boolean).sort().slice(-1)[0] || '';
+  const watch = [];
+  books.forEach(b => {
+    const largest = [...b.named].sort((x, y) => b.w(y) - b.w(x))[0];
+    if (largest && b.w(largest) > 10) watch.push({ fund: b.name, why: `Largest position ${_escape(largest.name || largest.symbol)} at ${fmt(b.w(largest))}% of fund` });
+    if (newest && b.asAtISO && b.asAtISO < newest) {
+      const days = Math.round((new Date(newest) - new Date(b.asAtISO)) / 86400000);
+      if (days >= 90) watch.push({ fund: b.name, why: `Disclosure ${days} days behind the latest${b.asAt ? ' (' + _escape(b.asAt) + ')' : ''}` });
+    }
+  });
+
+  const bar = ([label, pct]) => `<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;"><span>${_escape(label)}</span><span class="mono neutral">${fmt(pct)}%</span></div><div style="height:8px;border-radius:4px;background:var(--border);overflow:hidden;"><div style="height:100%;width:${Math.min(pct,100).toFixed(1)}%;background:${CLASS_COLOR[label]||'var(--accent)'};"></div></div></div>`;
+  const crossNames = Object.values(byName).filter(r => r.funds.size > 1).length;
+
+  el.innerHTML = `
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Funds tracked</div><div class="text-2xl font-bold mt-1">${books.length}</div></div>
+      <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Disclosed AUM</div><div class="text-2xl font-bold mt-1 mono">${totalAUM > 0 ? 'NZ' + fmtAUM(totalAUM) : '—'}</div><div class="text-xs neutral">${navBooks.length}/${books.length} with feed</div></div>
+      <div class="card2 p-4"><div class="text-xs neutral uppercase font-semibold">Cross-fund names</div><div class="text-2xl font-bold mt-1">${crossNames}</div><div class="text-xs neutral">held in &gt;1 fund</div></div>
+      <div class="card2 p-4 rail-top" style="${watch.length ? 'border-top-color:var(--h-bronze) !important;' : ''}"><div class="text-xs neutral uppercase font-semibold">On watch</div><div class="text-2xl font-bold mt-1" style="color:${watch.length ? 'var(--h-bronze)' : 'var(--color-green)'};">${watch.length}</div></div>
     </div>
-    <div class="table-header" style="display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr;"><span>Check</span><span class="text-right">Current</span><span class="text-right">Guideline</span><span class="text-right">Status</span></div>
-    ${checks.map(row).join('')}
-    <div class="text-xs neutral p-3" style="border-top:1px solid var(--border);"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Limits are editable per fund and saved to your account. Educational only — not a compliance determination.</div>
-  </div>`;
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <div class="section-title" style="font-size:14px;margin-bottom:8px;"><i class="fas fa-layer-group" style="color:var(--accent);"></i> Cross-fund concentration</div>
+        <div class="text-xs neutral mb-3">Securities appearing across the most funds — the house's shared exposure.</div>
+        <div class="table-header" style="display:grid;grid-template-columns:2.4fr 0.7fr 0.8fr 0.9fr;"><span>Security</span><span class="text-right">Funds</span><span class="text-right">Max wt</span><span class="text-right">House</span></div>
+        ${cross.map(r => `<div class="table-row" style="display:grid;grid-template-columns:2.4fr 0.7fr 0.8fr 0.9fr;align-items:center;">
+          <div class="text-sm" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escape(r.name)}</div>
+          <div class="text-right mono">${r.fundCount}</div><div class="text-right mono neutral">${fmt(r.maxW)}%</div>
+          <div class="text-right mono" style="color:var(--accent);">${r.house != null ? fmt(r.house) + '%' : '—'}</div></div>`).join('')}
+        ${totalAUM > 0 ? '' : '<div class="text-xs neutral mt-2">Import the unit-price feed to AUM-weight the “House” column.</div>'}
+      </div>
+      <div class="flex flex-col gap-4">
+        <div class="card p-5">
+          <div class="section-title" style="font-size:14px;margin-bottom:8px;"><i class="fas fa-chart-pie" style="color:var(--accent);"></i> Aggregate asset mix</div>
+          <div class="text-xs neutral mb-3">${totalAUM > 0 ? 'AUM-weighted' : 'Equal-weighted (no NAVs yet)'} across all funds.</div>
+          ${classRows.map(bar).join('')}
+        </div>
+        <div class="card p-5">
+          <div class="section-title" style="font-size:14px;margin-bottom:8px;"><i class="fas fa-flag" style="color:var(--h-bronze);"></i> Watch list</div>
+          ${watch.length ? watch.map(w => `<div class="rail-left" style="border-left-color:var(--h-bronze);padding:8px 12px;margin-bottom:8px;background:rgba(217,187,138,0.10);border-radius:0 8px 8px 0;"><div class="font-semibold text-sm">${_escape(w.fund)}</div><div class="text-xs neutral">${w.why}</div></div>`).join('')
+            : '<div class="text-xs neutral">Nothing flagged — no oversized single positions or stale disclosures.</div>'}
+          <div class="text-xs neutral mt-2" style="font-size:10px;">Sand/bronze = attention, not alarm. Educational only.</div>
+        </div>
+      </div>
+    </div>`;
 }
 
 // Disclosure history is kept in localStorage (reference data, not synced to the
@@ -14663,7 +14727,7 @@ function applyEdition() {
         { id:'reports',  label:'Reports',  children:['reports'] },
         { id:'admin',    label:'Admin',    children:['admin'] }
       );
-      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Mandate & Limits', invest:'Additional Investment', redeem:'Redemption' });
+      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Risk Review', invest:'Additional Investment', redeem:'Redemption' });
       Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', insights:'fa-clipboard-check', invest:'fa-circle-plus', redeem:'fa-money-bill-transfer' });
     } else {
       // Personal edition — drop Goals / Family per feature flags.
