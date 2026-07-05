@@ -4436,21 +4436,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=75"></script>
-<script src="js/05-content.js?b=75"></script>
-<script src="js/10-helpers.js?b=75"></script>
-<script src="js/20-state.js?b=75"></script>
-<script src="js/30-cloud.js?b=75"></script>
-<script src="js/40-auth.js?b=75"></script>
-<script src="js/45-auth-security.js?b=75"></script>
-<script src="js/60-import.js?b=75"></script>
-<script src="js/50-portfolio.js?b=75"></script>
-<script src="js/70-ai.js?b=75"></script>
-<script src="js/80-trader.js?b=75"></script>
-<script src="js/85-calendar-reports.js?b=75"></script>
-<script src="js/88-onboarding-tour.js?b=75"></script>
-<script src="js/90-goals.js?b=75"></script>
-<script src="js/95-integrations.js?b=75"></script>
+<script src="js/00-config.js?b=76"></script>
+<script src="js/05-content.js?b=76"></script>
+<script src="js/10-helpers.js?b=76"></script>
+<script src="js/20-state.js?b=76"></script>
+<script src="js/30-cloud.js?b=76"></script>
+<script src="js/40-auth.js?b=76"></script>
+<script src="js/45-auth-security.js?b=76"></script>
+<script src="js/60-import.js?b=76"></script>
+<script src="js/50-portfolio.js?b=76"></script>
+<script src="js/70-ai.js?b=76"></script>
+<script src="js/80-trader.js?b=76"></script>
+<script src="js/85-calendar-reports.js?b=76"></script>
+<script src="js/88-onboarding-tour.js?b=76"></script>
+<script src="js/90-goals.js?b=76"></script>
+<script src="js/95-integrations.js?b=76"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -6240,13 +6240,19 @@ function _parseApexWorkbook(XLSX, buf) {
     const iHiport = find(['hiport']);
     const iFundCode = find(['fund code', 'fund_code']);
     const iClose = find(['closing']);
+    // Stable unique id for the account — the join key to a Harbour IQ user.
+    // Prefer the registry UUID, then the HR account number, then client number.
+    const iId = find(['account id', 'account_id']);
+    const iAcctNo = find(['account number', 'account_number']);
+    const iClient = find(['client number', 'client_number', 'client account']);
     const codeCol = iHiport >= 0 ? iHiport : iFundCode;
     if (iName >= 0 && codeCol >= 0 && iClose >= 0) {
       const score = (iHiport >= 0 ? 1e6 : 0) + grid.length;
-      if (!best || score > best.score) best = { sn, grid, iName, codeCol, iClose, hiport: iHiport >= 0, score };
+      if (!best || score > best.score) best = { sn, grid, iName, codeCol, iClose, iId, iAcctNo, iClient, hiport: iHiport >= 0, score };
     }
   });
   if (!best) return null;
+  const idOf = (r) => String((best.iId >= 0 && r[best.iId]) || (best.iAcctNo >= 0 && r[best.iAcctNo]) || (best.iClient >= 0 && r[best.iClient]) || '').trim();
   const accounts = {};
   for (let i = 1; i < best.grid.length; i++) {
     const r = best.grid[i];
@@ -6254,7 +6260,9 @@ function _parseApexWorkbook(XLSX, buf) {
     const code = String(r[best.codeCol] || '').trim().toUpperCase();
     const value = parseFloat(String(r[best.iClose]).replace(/[$,\s]/g, '')) || 0;
     if (!name || !code) continue;
-    (accounts[name] = accounts[name] || []).push({ code, value });
+    const acct = accounts[name] || (accounts[name] = { id: '', rows: [] });
+    if (!acct.id) acct.id = idOf(r);
+    acct.rows.push({ code, value });
   }
   return { sheet: best.sn, usesHiport: best.hiport, accounts };
 }
@@ -6293,18 +6301,22 @@ function _apexPickerHtml() {
 function confirmApexImport() {
   const parsed = window._pendingApex; if (!parsed) return;
   const pick = (document.getElementById('apexAccPick')?.value || '').trim();
-  const acctRows = parsed.accounts[pick];
-  if (!acctRows) { toast.warning('Pick an account from the list.'); return; }
+  const acct = parsed.accounts[pick];
+  if (!acct) { toast.warning('Pick an account from the list.'); return; }
   const feed = (typeof _loadFundFeed === 'function') ? _loadFundFeed() : {};
-  const list = acctRows.map(r => {
+  const list = acct.rows.map(r => {
     const rec = feed[r.code];
     return { name: (rec && rec.name) || r.code, code: r.code, value: r.value };   // $ closing balance
   }).filter(h => h.value);
   _saveClientHoldings(list);
+  // Persist the account's unique id + name — the future join key to provision
+  // this data to the right client login (client → APEX account by id).
+  state.settings.clientAccount = { id: acct.id || '', name: pick };
+  try { saveState(); } catch(e) {}
   window._pendingApex = null;
   renderClientHoldings();
-  toast.success({ title: 'Holdings imported', message: `${list.length} position(s) for “${pick}”. Only this account was stored.`, duration: 7000 });
-  if (typeof logActivity === 'function') logActivity('apex_import', { positions: list.length });
+  toast.success({ title: 'Holdings imported', message: `${list.length} position(s) for “${pick}”${acct.id ? ' (id ' + acct.id.slice(0, 10) + '…)' : ''}. Only this account was stored.`, duration: 7000 });
+  if (typeof logActivity === 'function') logActivity('apex_import', { positions: list.length, hasId: !!acct.id });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
