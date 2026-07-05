@@ -682,6 +682,7 @@
       #syncIndicator,                                /* sync chip — visible in notifications/settings */
       #proxyStatusDot, #proxyStatusLabel,            /* Proxy status indicator */
       .nav-sep,                                      /* desktop dividers */
+      #portfolioSwitcher,                            /* moved to the drawer on mobile (see renderMobileDrawer) */
       #portfolioPulse                                /* movers strip — too cramped on phones */
       { display: none !important; }
 
@@ -689,6 +690,7 @@
          via bottom tab bar; help/theme/refresh via Settings menu. */
       nav button[onclick="openModal('helpModal')"],
       nav button[onclick="toggleTheme()"],
+      nav button[onclick="openModal('settingsModal')"],   /* gear — reachable via drawer */
       nav button[onclick="refreshAll()"],
       nav button[onclick="openModal('agentsModal')"] { display: none !important; }
 
@@ -711,6 +713,13 @@
       nav .brand-mark { font-size: 16px !important; }
       nav .brand-icon { width: 28px !important; height: 28px !important; }
       nav .brand-icon i { font-size: 12px !important; }
+      /* Brand must never wrap onto two lines ("Harbour IQ" was breaking mid-
+         wordmark) and must not be squeezed by its neighbours. */
+      nav a.sail-glass, nav .brand-mark { flex-shrink: 0 !important; }
+      nav .brand-mark, nav .brand-mark > span { white-space: nowrap !important; }
+      /* Slim the sail-glass plate on mobile so the logo + wordmark sit cleanly
+         inside one box instead of overflowing it. */
+      :root[data-edition="harbour"] nav a.sail-glass { padding: 5px 9px !important; }
       #refreshBtn .mr-1 ~ * { display: none; }      /* Refresh: icon only (legacy) */
 
       /* Bottom tab bar — cap visible items so we don't horizontally scroll.
@@ -1914,7 +1923,7 @@
         <span id="notifBadge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--color-red);color:white;font-size:10px;min-width:18px;height:18px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0 5px;font-weight:700;border:2px solid var(--bg-panel);box-shadow:0 0 0 2px rgba(248,113,113,0.25);"></span>
       </button>
       <!-- Dropdown panel -->
-      <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:380px;max-width:calc(100vw - 20px);max-height:480px;background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.3);z-index:1000;overflow:hidden;display:flex;flex-direction:column;">
+      <div id="notifPanel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:380px;max-width:calc(100vw - 20px);max-height:480px;background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,0.3);z-index:1000;overflow:hidden;flex-direction:column;">
         <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
           <div class="font-semibold text-sm" style="color:var(--text-primary);">Notifications</div>
           <div class="flex items-center gap-1">
@@ -15394,13 +15403,35 @@ function renderMobileDrawer() {
   const hidden = (s) => (typeof isCmsSectionHidden === 'function') && isCmsSectionHidden(s);
   const sections = [];
   NAV_GROUPS.forEach(g => (g.children || []).forEach(s => { if (!hidden(s) && !sections.includes(s)) sections.push(s); }));
-  wrap.innerHTML = sections.map(s => {
+  const sectionsHtml = sections.map(s => {
     const label = SECTION_LABELS[s] || (s.charAt(0).toUpperCase() + s.slice(1));
     const icon  = SECTION_ICONS[s] || NAV_GROUP_ICONS[s] || 'fa-circle';
     if (s === 'admin')  return `<button class="drawer-item" id="drawerAdminLink"  style="display:none;color:var(--color-amber);" onclick="showSection('admin');toggleMobileDrawer(false);"><i class="fas ${icon}" style="color:var(--color-amber);"></i>${esc(label)}</button>`;
     if (s === 'family') return `<button class="drawer-item" id="drawerFamilyLink" style="display:none;" onclick="showSection('family');toggleMobileDrawer(false);"><i class="fas ${icon}"></i>${esc(label)}</button>`;
     return `<button class="drawer-item" onclick="showSection('${s}');toggleMobileDrawer(false);"><i class="fas ${icon}"></i>${esc(label)}</button>`;
   }).join('');
+
+  // Portfolio switcher relocated here on mobile — the top bar hides it to stay
+  // a single clean row. Only surface it when there's more than one portfolio
+  // (a single "Personal" book needs no switcher and would just be clutter).
+  let portHtml = '';
+  try {
+    if (typeof listPortfolios === 'function') {
+      const ports = listPortfolios() || [];
+      if (ports.length > 1) {
+        const active = (typeof getActivePortfolio === 'function') ? getActivePortfolio() : null;
+        const viewingAll = (typeof isViewingAll === 'function') && isViewingAll();
+        const allRow = `<button class="drawer-item" onclick="_switchToAllPortfoliosUI();toggleMobileDrawer(false);" style="${viewingAll ? 'color:var(--accent);font-weight:700;' : ''}"><i class="fas fa-layer-group"></i>All portfolios</button>`;
+        const rows = ports.map(p => {
+          const on = !viewingAll && active && p.id === active.id;
+          return `<button class="drawer-item" onclick="_switchPortfolioUI('${p.id}');toggleMobileDrawer(false);" style="${on ? 'color:var(--accent);font-weight:700;' : ''}"><i class="fas ${on ? 'fa-check-circle' : 'fa-folder'}"></i>${esc(p.name || 'Portfolio')}</button>`;
+        }).join('');
+        portHtml = `<div class="drawer-section-title">Portfolio</div>${allRow}${rows}`;
+      }
+    }
+  } catch (e) { /* switcher is best-effort on mobile */ }
+
+  wrap.innerHTML = portHtml + sectionsHtml;
   // Re-apply role gating to the freshly-generated admin/family links.
   if (typeof updateAdminVisibility === 'function') { try { updateAdminVisibility(); } catch(e) {} }
 }
