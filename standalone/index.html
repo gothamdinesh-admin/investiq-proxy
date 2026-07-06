@@ -313,6 +313,23 @@
     :root[data-edition="harbour"] nav.glass #navTagline { background: rgba(255,255,255,0.14) !important; color:#FFFFFF !important; }
     :root[data-edition="harbour"] nav.glass #lastUpdated { color: rgba(255,255,255,0.85) !important; }
     :root[data-edition="harbour"] nav.glass #portfolioSwitcherBtn { background: rgba(255,255,255,0.14) !important; border-color: rgba(255,255,255,0.28) !important; color:#FFFFFF !important; }
+    /* v0.73 — the fund switcher moves into the Fund section (its own picker),
+       and the holding-movers strip is fund-book chrome irrelevant to a client. */
+    :root[data-edition="harbour"] #portfolioSwitcher,
+    :root[data-edition="harbour"] #portfolioPulse { display: none !important; }
+    /* v0.73 — Overview is the client's money only. Hide the personal / fund-book
+       blocks (!important beats the inline display renderAll() sets on them). The
+       client roll-up + plain-English read + holdings summary are what remain. */
+    :root[data-edition="harbour"] #section-overview > [data-block="kpis"],
+    :root[data-edition="harbour"] #section-overview > [data-block="overnight"],
+    :root[data-edition="harbour"] #section-overview > [data-block="charts"],
+    :root[data-edition="harbour"] #section-overview > [data-block="topholdings"],
+    :root[data-edition="harbour"] #section-overview > [data-block="riskrow"],
+    :root[data-edition="harbour"] #section-overview > #overviewGreeting,
+    :root[data-edition="harbour"] #section-overview > #todaysMovesCard,
+    :root[data-edition="harbour"] #section-overview > #fundReturnsCard,
+    :root[data-edition="harbour"] #section-overview > #fundExposureCard,
+    :root[data-edition="harbour"] #section-overview > #platformBreakdownCard { display: none !important; }
     :root[data-edition="harbour"] nav.glass .btn-secondary,
     :root[data-edition="harbour"] nav.glass [style*="99,102,241"] {
       background: rgba(255,255,255,0.14) !important; color:#FFFFFF !important; border:1px solid rgba(255,255,255,0.28) !important;
@@ -2119,6 +2136,10 @@
            has holdings loaded; hidden otherwise. Populated by renderClientRollup(). -->
       <div id="clientRollup" class="mb-6" style="display:none;"></div>
 
+      <!-- CLIENT OVERVIEW EXTRA (Harbour) — plain-English "this month" read +
+           a compact holdings summary. Populated by renderClientOverviewExtra(). -->
+      <div id="clientOverviewExtra" style="display:none;"></div>
+
       <!-- Personalised greeting strip — time-aware + portfolio headline -->
       <div id="overviewGreeting" class="mb-5" style="display:none;">
         <div class="flex items-center justify-between flex-wrap gap-3">
@@ -2260,7 +2281,7 @@
       </div>
 
       <!-- Risk Analysis row -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6" data-block="riskrow">
         <div class="card p-5">
           <div class="section-title mb-4">
             <i class="fas fa-shield-alt" style="color:var(--color-red);"></i>
@@ -5907,6 +5928,7 @@ function renderAll() {
   try { renderFundExposure(metrics); } catch(e) { console.warn('[fund-exposure]', e); }
   try { renderFundReturns(); } catch(e) { console.warn('[fund-returns]', e); }
   try { renderClientRollup(); } catch(e) { console.warn('[client-rollup]', e); }
+  try { renderClientOverviewExtra(); } catch(e) { console.warn('[client-extra]', e); }
   if (state.agentResults) renderInsightsSection(state.agentResults);
   populatePlatformFilter();
   filterHoldings();
@@ -6173,6 +6195,110 @@ function renderClientRollup() {
       });
     }
   } catch(e) { console.warn('[client-donut]', e); }
+}
+
+// Shared, normalised view of the client's holdings — used by the roll-up,
+// the plain-English read and the compact Overview list.
+function _clientSummary() {
+  const list = (typeof _loadClientHoldings === 'function') ? _loadClientHoldings() : [];
+  const rows = list.map(h => {
+    const info = _clientFundInfo(h);
+    const hasValue = h.value != null && h.value !== '';
+    const value = hasValue ? (parseFloat(h.value) || 0) : (info.price != null ? (parseFloat(h.units) || 0) * info.price : 0);
+    const earnings = _holdingEarnings(h);
+    const opening = (h.opening != null && h.opening !== '') ? parseFloat(h.opening) : (earnings != null ? value - earnings : null);
+    return { name: info.name, code: info.code, value, earnings, opening };
+  }).sort((a, b) => b.value - a.value);
+  const total = rows.reduce((s, r) => s + (r.value || 0), 0);
+  const hasPeriod = rows.some(r => r.earnings != null);
+  const totalEarn = rows.reduce((s, r) => s + (r.earnings || 0), 0);
+  const openBase = rows.reduce((s, r) => s + (r.opening != null ? r.opening : 0), 0);
+  return { rows, total, hasPeriod, totalEarn, openBase, period: (state.settings.clientAccount || {}).period || '' };
+}
+
+// Overview extras (Harbour, client view): plain-English read + compact list.
+function renderClientOverviewExtra() {
+  const el = document.getElementById('clientOverviewExtra'); if (!el) return;
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  const s = _clientSummary();
+  if (!harbour || !s.rows.length) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const fmtNZ = (n) => 'NZ$' + (n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const listHtml = s.rows.map(r => {
+    const pct = s.total ? r.value / s.total * 100 : 0;
+    const ret = (r.earnings != null && r.opening) ? r.earnings / r.opening * 100 : null;
+    return `<div class="flex items-center justify-between" style="padding:9px 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="viewClientFund('${_escape((r.name || '').replace(/'/g, "\\'"))}')" title="Open fund information">
+      <div style="min-width:0;"><div class="font-semibold text-sm" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_escape(r.name)}</div>${r.code ? `<div class="text-xs neutral mono">${_escape(r.code)}</div>` : ''}</div>
+      <div class="text-right" style="flex-shrink:0;padding-left:10px;"><div class="mono text-sm">${fmtNZ(r.value)}</div><div class="text-xs neutral">${fmt(pct)}%${ret != null ? ` · <span style="color:${ret >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${ret >= 0 ? '+' : ''}${fmt(ret)}%</span>` : ''}</div></div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div id="clientAiRead" class="card p-5 mb-6"></div>
+    <div class="card p-5 mb-6">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div class="section-title" style="margin:0;font-size:14px;"><i class="fas fa-wallet" style="color:var(--accent);"></i> Your holdings <span class="text-xs neutral">· ${s.rows.length}</span></div>
+        <button onclick="showSection('positions')" class="btn btn-sm btn-secondary" style="font-size:11px;"><i class="fas fa-sliders mr-1"></i>Manage holdings</button>
+      </div>
+      ${listHtml}
+      <div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Click a fund to open its composition, returns and reports.</div>
+    </div>`;
+  try { renderClientAiRead(); } catch(e) { console.warn('[ai-read]', e); }
+}
+
+// A cache key so a saved read invalidates when holdings or the period change.
+function _clientReadSignature(s) {
+  return (s.period || '') + '|' + s.rows.map(r => `${r.code}:${Math.round(r.value)}:${r.earnings != null ? Math.round(r.earnings) : ''}`).join(',');
+}
+
+function renderClientAiRead() {
+  const el = document.getElementById('clientAiRead'); if (!el) return;
+  const s = _clientSummary();
+  const cached = state.clientAiRead;
+  const fresh = cached && cached.sig === _clientReadSignature(s) && cached.text;
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div class="section-title" style="margin:0;font-size:14px;"><i class="fas fa-comment-dots" style="color:var(--accent);"></i> This period, in plain English</div>
+      <button onclick="generateClientRead()" id="clientReadBtn" class="btn btn-sm btn-secondary" style="font-size:11px;"><i class="fas fa-wand-magic-sparkles mr-1"></i>${fresh ? 'Refresh' : 'Generate'}</button>
+    </div>
+    <div id="clientReadBody" class="text-sm" style="line-height:1.65;color:var(--text-body);">${fresh ? formatMarkdown(cached.text) : '<span class="neutral">A plain-English summary of what your holdings are worth and how they moved this period — a readable description of your statement, not advice.</span>'}</div>
+    ${fresh && cached.when ? `<div class="text-xs neutral mt-2"><i class="fas fa-clock mr-1"></i>${_escape(cached.when)}</div>` : ''}
+    <div class="text-xs neutral mt-3" style="border-top:1px solid var(--border);padding-top:8px;">Descriptive summary generated by AI for your information only — not financial advice or a recommendation. Your Harbour statement is the source of truth.</div>`;
+}
+
+async function generateClientRead() {
+  const btn = document.getElementById('clientReadBtn');
+  const body = document.getElementById('clientReadBody');
+  const s = _clientSummary();
+  if (!s.rows.length) { toast.warning('No holdings to summarise yet.'); return; }
+  const fmtNZ = (n) => 'NZ$' + (n || 0).toLocaleString('en-NZ', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const lines = s.rows.map(r => {
+    const pct = s.total ? (r.value / s.total * 100).toFixed(1) : '0';
+    const ret = (r.earnings != null && r.opening) ? (r.earnings / r.opening * 100).toFixed(1) + '%' : 'n/a';
+    return `- ${r.name}: ${fmtNZ(r.value)} (${pct}% of total); this period ${r.earnings != null ? (r.earnings >= 0 ? '+' : '') + fmtNZ(r.earnings) : 'n/a'} (${ret})`;
+  }).join('\n');
+  const totalRet = (s.hasPeriod && s.openBase) ? (s.totalEarn / s.openBase * 100).toFixed(1) + '%' : 'n/a';
+  const acct = state.settings.clientAccount || {};
+  const userMsg = `Client holdings roll-up${acct.name ? ` for ${acct.name}` : ''}${s.period ? ` — period: ${s.period}` : ''}:
+Total portfolio value: ${fmtNZ(s.total)}
+Total movement this period: ${s.hasPeriod ? ((s.totalEarn >= 0 ? '+' : '') + fmtNZ(s.totalEarn) + ' (' + totalRet + ')') : 'n/a'}
+Holdings across ${s.rows.length} Harbour fund(s):
+${lines}
+
+Write a short, warm, plain-English summary (3-4 sentences, prose — no bullet points) describing what this investor holds and how it moved this period. Cover: the total value, the overall movement, which fund is the largest part of their portfolio, and which fund contributed most and least to this period's movement. Use plain language a non-expert understands. STRICT RULES: describe only — no recommendations, no buy/sell/hold, no "you should", no forecasts, no opinions on whether holdings are good/bad, no comment on diversification quality or risk level. End with one sentence reminding them their Harbour statement is the source of truth.`;
+  try {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Writing…'; }
+    AGENT_DEFS.read = { label: 'Holdings read', model: 'claude-haiku-4-5', modelOpenAI: 'local-model', maxTokens: 400,
+      system: 'You are a Harbour Asset Management client-reporting assistant. You write clear, plain-English descriptions of an investor\'s own fund holdings for their information. You are strictly descriptive: never give advice, recommendations, opinions, or suggest any action. NZ audience, currency NZD.' };
+    const out = await callClaude('read', userMsg);
+    delete AGENT_DEFS.read;
+    state.clientAiRead = { sig: _clientReadSignature(s), text: out, when: 'Generated ' + new Date().toLocaleString('en-NZ', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) };
+    try { saveState(); } catch(e) {}
+    renderClientAiRead();
+  } catch(e) {
+    delete AGENT_DEFS.read;
+    if (body) body.innerHTML = `<span style="color:var(--color-red);">Couldn't generate the summary: ${_escape(e.message || e)}</span>`;
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-wand-magic-sparkles mr-1"></i>Generate'; }
+  }
 }
 
 function renderClientHoldings() {
@@ -15121,13 +15247,18 @@ function applyEdition() {
         { id:'client',   label:'My Holdings', children:['positions'] },
         { id:'fund',     label:'Fund',     children:['holdings','exposure','disclosure'] },
         { id:'transact', label:'Transact', children:['invest','redeem'] },
-        { id:'risk',     label:'Risk',     children:['mandate','insights'] },
+        { id:'risk',     label:'Risk',     children:['mandate'] },
         { id:'market',   label:'Market',   children:['market','news','askiq'] },
         { id:'reports',  label:'Reports',  children:['reports'] },
         { id:'admin',    label:'Admin',    children:['admin'] }
       );
-      Object.assign(SECTION_LABELS, { insights:'AI Review', exposure:'Exposure', disclosure:'Disclosure History', mandate:'Risk Review', invest:'Additional Investment', redeem:'Redemption', positions:'My Holdings' });
-      Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', insights:'fa-clipboard-check', invest:'fa-circle-plus', redeem:'fa-money-bill-transfer', positions:'fa-wallet' });
+      Object.assign(SECTION_LABELS, { exposure:'Exposure', disclosure:'Disclosure History', mandate:'Risk Review', invest:'Additional Investment', redeem:'Redemption', positions:'My Holdings' });
+      Object.assign(SECTION_ICONS, { exposure:'fa-chart-pie', disclosure:'fa-clock-rotate-left', mandate:'fa-scale-balanced', invest:'fa-circle-plus', redeem:'fa-money-bill-transfer', positions:'fa-wallet' });
+      // Overview is the CLIENT'S money only — the personal / fund-book blocks
+      // are hidden via CSS (see the harbour #section-overview rule), which beats
+      // the inline display renderAll() sets on them. The Overview shows the
+      // roll-up + plain-English read + holdings summary; fund reference lives
+      // in the Fund section now.
     } else {
       // Personal edition — drop Goals / Family per feature flags.
       if (!feat.goals) {
@@ -15384,7 +15515,7 @@ function renderMobileTabs() {
   const esc = (typeof _escape === 'function') ? _escape : (s => s);
   const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
   const tabs = harbour
-    ? [['overview','fa-gauge-high','Overview'],['holdings','fa-layer-group','Holdings'],['exposure','fa-chart-pie','Exposure'],['insights','fa-clipboard-check','Review']]
+    ? [['overview','fa-gauge-high','Overview'],['positions','fa-wallet','Holdings'],['holdings','fa-layer-group','Fund'],['reports','fa-file-lines','Reports']]
     : [['overview','fa-gauge-high','Overview'],['holdings','fa-wallet','Portfolio'],['performance','fa-chart-line','Performance'],['insights','fa-brain','Intel']];
   let html = tabs.map(([s,ic,lb],i) => `<div class="mob-tab${i===0?' active':''}" data-section="${s}" onclick="showSection('${s}',null)"><i class="fas ${ic}"></i><span>${esc(lb)}</span></div>`).join('');
   html += `<div class="mob-tab" id="mobileAdminTab" data-section="admin" onclick="showSection('admin',null)" style="display:none;color:var(--color-amber);"><i class="fas fa-shield-alt"></i><span>Admin</span></div>`;
@@ -15455,13 +15586,31 @@ function renderGroupSubNav(section) {
   const g = _groupDef(_groupOf(section));
   // Drop any children hidden via the CMS nav toggles.
   const kids = g ? g.children.filter(c => typeof isCmsSectionHidden !== 'function' || !isCmsSectionHidden(c)) : [];
-  if (!g || kids.length <= 1) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  // Fund switcher (Harbour) — lives here now, not the top bar. Shown on the
+  // Fund group so you pick which fund's composition/exposure/disclosure to view.
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  let fundPicker = '';
+  if (harbour && g && g.id === 'fund' && typeof listPortfolios === 'function') {
+    const ports = listPortfolios() || [];
+    const active = (typeof getActivePortfolio === 'function') ? getActivePortfolio() : null;
+    if (ports.length) {
+      const opts = ports.map(p => `<option value="${p.id}"${active && p.id === active.id ? ' selected' : ''}>${_escape(p.name || 'Fund')}</option>`).join('');
+      fundPicker = `<div class="flex items-center gap-2">
+        <span class="text-xs neutral" style="white-space:nowrap;"><i class="fas fa-layer-group mr-1" style="opacity:.7;"></i>Viewing</span>
+        <select onchange="_switchPortfolioUI(this.value)" class="input" style="font-size:12px;padding:5px 9px;max-width:260px;font-weight:600;cursor:pointer;">${opts}</select>
+      </div>`;
+    }
+  }
+  if (!g || (kids.length <= 1 && !fundPicker)) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
   const pills = kids.map(c => {
     const active = c === section ? ' active' : '';
     const icon = SECTION_ICONS[c] ? `<i class="fas ${SECTION_ICONS[c]} mr-2"></i>` : '';
     return `<button class="seg-btn${active}" onclick="showSection('${c}',null)">${icon}${SECTION_LABELS[c] || c}</button>`;
   }).join('');
-  bar.innerHTML = `<div class="segmented-control">${pills}</div>`;
+  const pillsHtml = kids.length > 1 ? `<div class="segmented-control">${pills}</div>` : '';
+  bar.innerHTML = fundPicker
+    ? `<div class="flex items-center justify-between flex-wrap gap-3">${fundPicker}${pillsHtml}</div>`
+    : pillsHtml;
   bar.style.display = '';
 }
 
@@ -15514,7 +15663,7 @@ function showSection(name, el) {
   if (name === 'disclosure') { try { renderDisclosurePage(getMetrics()); } catch(e) { console.warn('[disclosure]', e); } }
   if (name === 'invest' || name === 'redeem') { try { renderFundForm(name); } catch(e) { console.warn('[fundform]', e); } }
   if (name === 'positions') { try { renderClientHoldings(); } catch(e) { console.warn('[positions]', e); } }
-  if (name === 'overview') { try { renderClientRollup(); } catch(e) { console.warn('[client-rollup]', e); } }
+  if (name === 'overview') { try { renderClientRollup(); renderClientOverviewExtra(); } catch(e) { console.warn('[client-rollup]', e); } }
   if (name === 'trader') {
     // Immediate paint so the section never appears blank during the
     // network call. Replaced by renderTraderIQ() once the cache loads.
