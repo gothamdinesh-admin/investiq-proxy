@@ -228,39 +228,88 @@ function _reportMatchesCodes(filename, codes) {
   return codes.some(c => new RegExp('(^|[^A-Z0-9])' + c.replace(/[^A-Z0-9]/g, '') + '([^A-Z0-9]|$)').test(up));
 }
 
+// Funds the user can pick reports for: the funds they HOLD (client tier,
+// name + code) plus the active fund book. De-duplicated by code.
+function _reportsFundList() {
+  const map = new Map(); // CODE -> display name
+  try {
+    const holds = (typeof _loadClientHoldings === 'function') ? _loadClientHoldings() : [];
+    holds.forEach(h => {
+      const info = (typeof _clientFundInfo === 'function') ? _clientFundInfo(h) : {};
+      const code = String((info && info.code) || h.code || '').toUpperCase();
+      if (code) map.set(code, (info && info.name) || h.name || code);
+    });
+  } catch(e) {}
+  try {
+    _activeFundCodes().forEach(c => {
+      const cu = String(c).toUpperCase();
+      if (!map.has(cu)) { const fund = (typeof _activeFund === 'function') ? _activeFund() : null; map.set(cu, (fund && fund.name) || cu); }
+    });
+  } catch(e) {}
+  return [...map.entries()].map(([code, name]) => ({ code, name }));
+}
+
+// Which fund's reports the Reports section is showing. 'all' = every held fund,
+// '__lib' = whole library (admin), else a single fund code.
+let _reportsFundSel = 'all';
+function onOfficialReportsFundChange() {
+  const s = document.getElementById('officialReportsFund');
+  if (s) _reportsFundSel = s.value;
+  renderOfficialReports();
+}
+
 async function renderOfficialReports() {
   const card = document.getElementById('officialReportsCard');
   if (!card) return;
-  const isFund = (typeof _isFundWeightView === 'function') && _isFundWeightView();
-  if (!isFund || typeof _supabase === 'undefined' || !_supabase || !_supaUser) { card.style.display = 'none'; return; }
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  if (!harbour || typeof _supabase === 'undefined' || !_supabase || !_supaUser) { card.style.display = 'none'; return; }
   card.style.display = '';
   const isAdmin = (typeof _isAdmin !== 'undefined' && _isAdmin);
   const up = document.getElementById('officialReportsUpload');
   if (up) up.style.display = isAdmin ? '' : 'none';
+
+  // Populate the fund picker (held funds + active book, + whole-library for admin).
+  const funds = _reportsFundList();
+  const sel = document.getElementById('officialReportsFund');
+  if (sel) {
+    const opts = [`<option value="all">All my funds</option>`]
+      .concat(funds.map(f => `<option value="${f.code}">${_escape(f.name)} · ${f.code}</option>`));
+    if (isAdmin) opts.push(`<option value="__lib">Whole library (admin)</option>`);
+    sel.innerHTML = opts.join('');
+    if (![...sel.options].some(o => o.value === _reportsFundSel)) _reportsFundSel = 'all';
+    sel.value = _reportsFundSel;
+    sel.style.display = (funds.length || isAdmin) ? '' : 'none';
+  }
+
+  // Resolve the codes to match on from the current selection.
+  let codes;
+  if (_reportsFundSel === '__lib') codes = null;                 // whole library
+  else if (_reportsFundSel === 'all') codes = funds.map(f => f.code);
+  else codes = [_reportsFundSel];
+
   const list = document.getElementById('officialReportsList');
-  const codes = _activeFundCodes();
   try {
     // Flat library — list the bucket root.
     const { data, error } = await _supabase.storage.from('fund-reports')
       .list('', { limit: 500, sortBy: { column: 'name', order: 'desc' } });
     if (error) throw error;
     const all = (data || []).filter(f => f.name && /\.pdf$/i.test(f.name));
-    // Match by fund code. Admin with no code match still sees all (to manage the library).
-    let files = codes.length ? all.filter(f => _reportMatchesCodes(f.name, codes)) : [];
-    const showingAll = isAdmin && !files.length && all.length;
-    if (showingAll) files = all;
 
-    if (!codes.length && !isAdmin) {
-      list.innerHTML = `<div class="text-xs neutral py-2">Reports are matched by fund code — import this fund's unit-price feed and they'll appear here.</div>`;
+    let files;
+    if (codes === null) files = all;                              // whole library (admin)
+    else if (!codes.length) {
+      list.innerHTML = `<div class="text-xs neutral py-2">${funds.length ? 'Pick a fund above to see its reports.' : 'No funds yet — add a holding (or import a fund) and its reports appear here.'}</div>`;
       return;
-    }
+    } else files = all.filter(f => _reportMatchesCodes(f.name, codes));
+
     if (!files.length) {
-      list.innerHTML = `<div class="text-xs neutral py-2">${all.length ? 'No reports match this fund' + (codes.length ? ` (code ${codes.join(', ')})` : '') + ' yet.' : 'No reports in the library yet.'}${isAdmin ? ' Use <b>Upload PDFs</b> to add the monthly documents — name them by fund code (e.g. Reporting_HARAEQ_Apr26.pdf).' : ''}</div>`;
+      list.innerHTML = `<div class="text-xs neutral py-2">${all.length ? 'No reports match' + (codes ? ` (code ${codes.join(', ')})` : '') + ' yet.' : 'No reports in the library yet.'}${isAdmin ? ' Use <b>Upload PDFs</b> to add the monthly documents — name them by fund code (e.g. Reporting_HARAEQ_Apr26.pdf).' : ''}</div>`;
       return;
     }
-    const codeNote = codes.length ? `<div class="text-xs neutral mb-2">Showing reports for <b>${_escape(codes.join(', '))}</b>${isAdmin ? ` · ${all.length} in library` : ''}.</div>`
-      : (isAdmin ? `<div class="text-xs neutral mb-2" style="color:var(--color-amber);">No fund code resolved for this book — showing the whole library (${all.length}). Import the unit-price feed to auto-match.</div>` : '');
-    list.innerHTML = codeNote + files.map(f => `
+    const note = codes === null
+      ? `<div class="text-xs neutral mb-2" style="color:var(--color-amber);">Whole library — ${all.length} report(s).</div>`
+      : `<div class="text-xs neutral mb-2">Showing ${files.length} report(s) for <b>${_escape(codes.join(', '))}</b>${isAdmin ? ` · ${all.length} in library` : ''}.</div>`;
+    list.innerHTML = note + files.map(f => `
       <div class="flex items-center justify-between gap-3" style="padding:9px 4px;border-bottom:1px solid var(--border);">
         <div class="flex items-center gap-3" style="min-width:0;">
           <i class="fas fa-file-pdf" style="color:var(--color-red);font-size:16px;"></i>
