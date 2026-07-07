@@ -290,7 +290,10 @@
       border-right-color: #00485F !important;
       color: #FFFFFF;
     }
-    :root[data-edition="harbour"] #sidebarSummary { background: transparent !important; padding: 0 !important; }
+    /* v0.73 — the sidebar summary showed the ACTIVE FUND BOOK (name / holding
+       count / as-at). That's fund-book chrome: the client's money now leads the
+       Overview and the fund switcher lives in the Fund section, so hide it. */
+    :root[data-edition="harbour"] #sidebarSummary { display: none !important; }
     /* Force WHITE across the whole blue sidebar — beats base .nav-link colour,
        inline colours (TraderIQ blue, Admin amber, Family teal) AND the light-
        theme inline-hex remaps that would otherwise leave dark text on blue. */
