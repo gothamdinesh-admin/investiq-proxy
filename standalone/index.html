@@ -6239,6 +6239,7 @@ function renderClientOverviewExtra() {
     </div>`;
   }).join('');
   el.innerHTML = `
+    <div id="clientPerfCard" class="card p-5 mb-6"></div>
     <div id="clientAiRead" class="card p-5 mb-6"></div>
     <div class="card p-5 mb-6">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -6248,7 +6249,98 @@ function renderClientOverviewExtra() {
       ${listHtml}
       <div class="text-xs neutral mt-3"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>Click a fund to open its composition, returns and reports.</div>
     </div>`;
+  try { renderClientPerf(); } catch(e) { console.warn('[client-perf]', e); }
   try { renderClientAiRead(); } catch(e) { console.warn('[ai-read]', e); }
+}
+
+// ── Performance chart (Harbour, client view) ─────────────────────────────
+// Two modes via a fund picker: "All my funds" (holdings blended by current
+// weight) or a single fund. Prefers the Disclose monthly-returns series
+// (cumulative growth of $100); falls back to the APEX opening→latest period
+// movement so it always renders. Weights are current, so the blend is an
+// INDICATIVE fund-performance curve, not a money-weighted client return.
+let _clientPerfSel = 'all';
+function onClientPerfFundChange() {
+  const s = document.getElementById('clientPerfFund');
+  if (s) _clientPerfSel = s.value;
+  renderClientPerf();
+}
+function _parseDMY(s) { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '').trim()); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : NaN; }
+function _monthLabel(s) { const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s || '')); return m ? MON[(+m[2]) - 1] + ' ' + m[3].slice(2) : String(s || ''); }
+function _fundMonthlySeries(name) {
+  const dm = (typeof getFundDiscloseMeta === 'function') ? getFundDiscloseMeta(name) : null;
+  return (dm && dm.monthly && dm.monthly.length) ? dm.monthly.slice().sort((a, b) => _parseDMY(a.d) - _parseDMY(b.d)) : null;
+}
+function _cumFromMonthly(monthly) {
+  let v = 100; const labels = ['Start'], data = [100];
+  monthly.forEach(m => { v *= (1 + (parseFloat(m.pct) || 0) / 100); labels.push(_monthLabel(m.d)); data.push(+v.toFixed(2)); });
+  return { labels, data };
+}
+function _blendMonthly(withM) {
+  const dateStr = new Map();
+  withM.forEach(x => x.m.forEach(pt => { const ts = _parseDMY(pt.d); if (!isNaN(ts)) dateStr.set(ts, pt.d); }));
+  const tss = [...dateStr.keys()].sort((a, b) => a - b);
+  if (!tss.length) return null;
+  let v = 100; const labels = ['Start'], data = [100];
+  tss.forEach(ts => {
+    let wsum = 0, acc = 0;
+    withM.forEach(x => { const pt = x.m.find(p => _parseDMY(p.d) === ts); if (pt) { const w = x.r.value || 0; wsum += w; acc += w * (parseFloat(pt.pct) || 0); } });
+    const pct = wsum ? acc / wsum : 0;
+    v *= (1 + pct / 100); labels.push(_monthLabel(dateStr.get(ts))); data.push(+v.toFixed(2));
+  });
+  return { labels, data };
+}
+function _twoPointGrowth(open, now) { open = parseFloat(open) || 0; now = parseFloat(now) || 0; if (!open) return null; return { labels: ['Opening', 'Latest'], data: [100, +(now / open * 100).toFixed(2)] }; }
+function renderClientPerf() {
+  const card = document.getElementById('clientPerfCard'); if (!card) return;
+  const s = _clientSummary(); const rows = s.rows;
+  if (!rows.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const opts = [`<option value="all">All my funds</option>`].concat(rows.map(r => `<option value="${_escape(r.name)}">${_escape(r.name)}</option>`));
+  let series = null, note = '', indicative = false;
+  if (_clientPerfSel !== 'all') {
+    const r = rows.find(x => x.name === _clientPerfSel) || rows[0];
+    const m = _fundMonthlySeries(r.name);
+    if (m) { series = _cumFromMonthly(m); note = 'Cumulative growth of $100 from the fund’s published monthly returns.'; }
+    else {
+      // Return only (opening → opening+earnings) so a mid-period contribution
+      // isn't mistaken for performance. Falls back to value if no period P&L.
+      const end = (r.earnings != null && r.opening != null) ? r.opening + r.earnings : r.value;
+      series = _twoPointGrowth(r.opening, end); note = 'Period return (opening → latest). Import the Disclose fund returns for the full monthly series.'; indicative = true;
+    }
+  } else {
+    const withM = rows.map(r => ({ r, m: _fundMonthlySeries(r.name) })).filter(x => x.m);
+    if (withM.length) {
+      series = _blendMonthly(withM);
+      note = `Blends ${withM.length} fund${withM.length > 1 ? 's’' : '’s'} published monthly returns at your current mix.`;
+      if (withM.length < rows.length) note += ` (${rows.length - withM.length} without a returns series excluded.)`;
+      indicative = true;
+    } else { const end = s.hasPeriod ? s.openBase + s.totalEarn : s.total; series = _twoPointGrowth(s.openBase, end); note = 'Period return across your funds (opening → latest). Import the Disclose fund returns for the monthly series.'; indicative = true; }
+  }
+  if (!series || !series.data.length) { card.style.display = 'none'; return; }
+  const first = series.data[0], last = series.data[series.data.length - 1];
+  const chg = first ? (last - first) / first * 100 : 0;
+  card.innerHTML = `
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <div class="section-title" style="margin:0;font-size:14px;"><i class="fas fa-chart-line" style="color:var(--accent);"></i> Performance</div>
+      <select id="clientPerfFund" onchange="onClientPerfFundChange()" class="input" style="font-size:12px;padding:5px 9px;max-width:250px;cursor:pointer;font-weight:600;">${opts.join('')}</select>
+    </div>
+    <div class="text-sm mb-2"><span class="mono" style="font-weight:700;color:${chg >= 0 ? 'var(--color-green)' : 'var(--color-red)'};">${chg >= 0 ? '+' : ''}${fmt(chg)}%</span> <span class="neutral">over the period shown</span></div>
+    <div style="height:240px;position:relative;"><canvas id="clientPerfChart"></canvas></div>
+    <div class="text-xs neutral mt-2"><i class="fas fa-circle-info mr-1" style="color:var(--accent);"></i>${note}${indicative ? ' Indicative only — not your actual money-weighted return. Your Harbour statement is the source of truth.' : ''}</div>`;
+  try {
+    if (window.Chart) {
+      if (charts.clientPerf) charts.clientPerf.destroy();
+      const ctx = document.getElementById('clientPerfChart').getContext('2d');
+      charts.clientPerf = new Chart(ctx, {
+        type: 'line',
+        data: { labels: series.labels, datasets: [{ data: series.data, borderColor: '#005A79', backgroundColor: 'rgba(0,90,121,0.10)', fill: true, tension: 0.25, pointRadius: series.data.length > 14 ? 0 : 3, borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ' ' + c.parsed.y.toFixed(1) } } },
+          scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { size: 10 } } }, y: { grid: { color: 'rgba(148,163,184,0.15)' }, ticks: { font: { size: 10 } } } } }
+      });
+    }
+  } catch(e) { console.warn('[client-perf-chart]', e); }
 }
 
 // A cache key so a saved read invalidates when holdings or the period change.
