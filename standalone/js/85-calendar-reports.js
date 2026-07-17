@@ -501,6 +501,43 @@ function _harbourFundReportHtml(metrics, asOf) {
   return html;
 }
 
+// Portfolios that are imported fund books (Disclose composition), i.e. what a
+// Harbour fund report can be generated from.
+function _fundBookPortfolios() {
+  return (typeof listPortfolios === 'function' ? listPortfolios() : []).filter(p => {
+    if (p && p.fund) return true;
+    const hs = (p && p.holdings) || [];
+    return hs.length && hs.filter(h => h && h.source === 'disclose').length >= hs.length * 0.8;
+  });
+}
+
+// Harbour report builder = a fund picker (no personal $-templates). Toggles the
+// Report Type / Include columns for a single Fund column and lists fund books.
+function _setupReportBuilder() {
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  const fundCol = document.getElementById('reportFundCol');
+  const typeCol = document.getElementById('reportTypeCol');
+  const scopeCol = document.getElementById('reportScopeCol');
+  if (!harbour) { if (fundCol) fundCol.style.display = 'none'; return; }
+  if (typeCol) typeCol.style.display = 'none';
+  if (scopeCol) scopeCol.style.display = 'none';
+  if (fundCol) fundCol.style.display = '';
+  const sel = document.getElementById('reportFundPicker');
+  if (sel) {
+    const books = _fundBookPortfolios();
+    const active = (typeof getActivePortfolio === 'function') ? getActivePortfolio() : null;
+    sel.innerHTML = books.length
+      ? books.map(p => `<option value="${p.id}"${active && p.id === active.id ? ' selected' : ''}>${_escape((p.fund && p.fund.name) || p.name)}</option>`).join('')
+      : `<option value="">No fund books imported yet</option>`;
+  }
+}
+function onReportFundChange() {
+  const v = document.getElementById('reportFundPicker')?.value;
+  if (!v) { renderReportPreview(); return; }
+  if (typeof _switchPortfolioUI === 'function') _switchPortfolioUI(v);   // switches active fund + repaints (re-renders reports)
+  else if (typeof setActivePortfolio === 'function') { setActivePortfolio(v); renderReportPreview(); }
+}
+
 function renderReportPreview() {
   const wrap = document.getElementById('reportPreview');
   if (!wrap) return;
@@ -510,6 +547,9 @@ function renderReportPreview() {
   const metrics = (typeof getMetrics === 'function') ? getMetrics() : null;
   if (!metrics) { wrap.innerHTML = '<div class="text-center py-10">Portfolio data not loaded yet.</div>'; return; }
 
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  try { _setupReportBuilder(); } catch(e) {}
+
   // Weight-based fund book → the Harbour fund report (modelled on the official
   // monthly PDF: headline stats, top-10, mix, monthly returns, profile). The
   // personal $-based templates are meaningless for a fund, whatever "type" says.
@@ -518,6 +558,13 @@ function renderReportPreview() {
     if (_repSub) _repSub.textContent = 'Official monthly PDFs above; the generated snapshot below is built live from the connected data. PDF-ready via Print.';
     try { renderOfficialReports(); } catch(e) { console.warn('[official-reports]', e); }
     wrap.innerHTML = _harbourFundReportHtml(metrics, asOf);
+    return;
+  }
+  // Harbour, but no fund book is active — offer the picker, not personal templates.
+  if (harbour) {
+    if (_repSub) _repSub.textContent = 'Pick a fund above to generate its report, modelled on the official monthly PDF.';
+    try { renderOfficialReports(); } catch(e) {}
+    wrap.innerHTML = `<div class="text-center py-10" style="color:#64748B;">${_fundBookPortfolios().length ? 'Select a fund above to generate its report.' : 'No fund books yet — import a fund’s Disclose holdings (Fund section) to generate its report here.'}</div>`;
     return;
   }
   if (_repSub) _repSub.textContent = 'Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.';

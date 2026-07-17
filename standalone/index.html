@@ -3072,7 +3072,13 @@
       <div class="card p-5 mb-5">
         <div class="section-title mb-4"><i class="fas fa-sliders" style="color:var(--accent);"></i> Report Settings</div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <div>
+          <!-- Harbour: pick which fund to generate the report for. Drives the
+               active fund book; hidden in the personal edition. -->
+          <div id="reportFundCol" style="display:none;">
+            <label class="text-xs neutral mb-1 block">Fund</label>
+            <select id="reportFundPicker" class="input w-full" onchange="onReportFundChange()"></select>
+          </div>
+          <div id="reportTypeCol">
             <label class="text-xs neutral mb-1 block">Report Type</label>
             <select id="reportType" class="input w-full" onchange="renderReportPreview()">
               <option value="summary">Portfolio Summary</option>
@@ -3087,7 +3093,7 @@
             <label class="text-xs neutral mb-1 block">As of Date</label>
             <input id="reportDate" type="date" class="input w-full" onchange="renderReportPreview()">
           </div>
-          <div>
+          <div id="reportScopeCol">
             <label class="text-xs neutral mb-1 block">Include</label>
             <select id="reportScope" class="input w-full" onchange="renderReportPreview()">
               <option value="all">All holdings</option>
@@ -4477,21 +4483,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=80"></script>
-<script src="js/05-content.js?b=80"></script>
-<script src="js/10-helpers.js?b=80"></script>
-<script src="js/20-state.js?b=80"></script>
-<script src="js/30-cloud.js?b=80"></script>
-<script src="js/40-auth.js?b=80"></script>
-<script src="js/45-auth-security.js?b=80"></script>
-<script src="js/60-import.js?b=80"></script>
-<script src="js/50-portfolio.js?b=80"></script>
-<script src="js/70-ai.js?b=80"></script>
-<script src="js/80-trader.js?b=80"></script>
-<script src="js/85-calendar-reports.js?b=80"></script>
-<script src="js/88-onboarding-tour.js?b=80"></script>
-<script src="js/90-goals.js?b=80"></script>
-<script src="js/95-integrations.js?b=80"></script>
+<script src="js/00-config.js?b=81"></script>
+<script src="js/05-content.js?b=81"></script>
+<script src="js/10-helpers.js?b=81"></script>
+<script src="js/20-state.js?b=81"></script>
+<script src="js/30-cloud.js?b=81"></script>
+<script src="js/40-auth.js?b=81"></script>
+<script src="js/45-auth-security.js?b=81"></script>
+<script src="js/60-import.js?b=81"></script>
+<script src="js/50-portfolio.js?b=81"></script>
+<script src="js/70-ai.js?b=81"></script>
+<script src="js/80-trader.js?b=81"></script>
+<script src="js/85-calendar-reports.js?b=81"></script>
+<script src="js/88-onboarding-tour.js?b=81"></script>
+<script src="js/90-goals.js?b=81"></script>
+<script src="js/95-integrations.js?b=81"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
