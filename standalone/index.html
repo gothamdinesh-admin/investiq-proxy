@@ -333,6 +333,13 @@
     :root[data-edition="harbour"] #section-overview > #fundReturnsCard,
     :root[data-edition="harbour"] #section-overview > #fundExposureCard,
     :root[data-edition="harbour"] #section-overview > #platformBreakdownCard { display: none !important; }
+    /* v0.77 — Fund → Holdings is a read-only fund composition view in Harbour.
+       Hide the personal portfolio toolbar (CSV import, Add Holding, group-by,
+       filters) and the personal search/hide-ignored bar. The KPI strip is
+       repurposed (Top weight / Offshore / Biggest) and the table adapts to
+       weights, so those stay. Title is relabelled in applyEdition(). */
+    :root[data-edition="harbour"] #section-holdings > .flex.items-center.justify-between > #holdingsToolbar,
+    :root[data-edition="harbour"] #section-holdings > #holdingsSearchBar { display: none !important; }
     :root[data-edition="harbour"] nav.glass .btn-secondary,
     :root[data-edition="harbour"] nav.glass [style*="99,102,241"] {
       background: rgba(255,255,255,0.14) !important; color:#FFFFFF !important; border:1px solid rgba(255,255,255,0.28) !important;
@@ -2321,7 +2328,7 @@
           </h2>
           <div class="text-xs neutral mt-1" id="holdingsSubtitle">Your full portfolio — units, cost, current value, return.</div>
         </div>
-        <div class="flex gap-2 flex-wrap">
+        <div class="flex gap-2 flex-wrap" id="holdingsToolbar">
           <input type="text" id="holdingsSearch" class="input" style="width:170px;" placeholder="Search..." oninput="filterHoldings()">
           <select id="holdingsTypeFilter" class="input" style="width:120px;" onchange="filterHoldings()">
             <option value="">All Types</option>
@@ -2389,7 +2396,7 @@
       </div>
 
       <!-- Search / filter bar -->
-      <div class="flex items-center gap-2 mb-3">
+      <div class="flex items-center gap-2 mb-3" id="holdingsSearchBar">
         <div class="flex items-center gap-2 flex-1" style="background:#0f1729;border:1px solid #1e2d4a;border-radius:8px;padding:6px 12px;">
           <i class="fas fa-search" style="color:#4a6080;font-size:12px;"></i>
           <input type="text" id="holdingsSearch" placeholder="Search tickers, names, platforms, types…" oninput="renderAll()" style="background:none;border:none;outline:none;color:#c8d6ef;font-size:13px;width:100%;">
@@ -4483,21 +4490,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=81"></script>
-<script src="js/05-content.js?b=81"></script>
-<script src="js/10-helpers.js?b=81"></script>
-<script src="js/20-state.js?b=81"></script>
-<script src="js/30-cloud.js?b=81"></script>
-<script src="js/40-auth.js?b=81"></script>
-<script src="js/45-auth-security.js?b=81"></script>
-<script src="js/60-import.js?b=81"></script>
-<script src="js/50-portfolio.js?b=81"></script>
-<script src="js/70-ai.js?b=81"></script>
-<script src="js/80-trader.js?b=81"></script>
-<script src="js/85-calendar-reports.js?b=81"></script>
-<script src="js/88-onboarding-tour.js?b=81"></script>
-<script src="js/90-goals.js?b=81"></script>
-<script src="js/95-integrations.js?b=81"></script>
+<script src="js/00-config.js?b=83"></script>
+<script src="js/05-content.js?b=83"></script>
+<script src="js/10-helpers.js?b=83"></script>
+<script src="js/20-state.js?b=83"></script>
+<script src="js/30-cloud.js?b=83"></script>
+<script src="js/40-auth.js?b=83"></script>
+<script src="js/45-auth-security.js?b=83"></script>
+<script src="js/60-import.js?b=83"></script>
+<script src="js/50-portfolio.js?b=83"></script>
+<script src="js/70-ai.js?b=83"></script>
+<script src="js/80-trader.js?b=83"></script>
+<script src="js/85-calendar-reports.js?b=83"></script>
+<script src="js/88-onboarding-tour.js?b=83"></script>
+<script src="js/90-goals.js?b=83"></script>
+<script src="js/95-integrations.js?b=83"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).
@@ -12152,6 +12159,18 @@ function renderHoldingsKpiStrip(metrics) {
 }
 
 function renderEmptyHoldings() {
+  // Harbour: Fund → Holdings is a fund composition view, not a personal book —
+  // don't show the CSV/manual/sample onboarding.
+  if (typeof EDITION !== 'undefined' && EDITION.id === 'harbour') {
+    return `<div class="p-10 text-center">
+      <div style="font-size:48px;margin-bottom:14px;opacity:0.5;">🗂️</div>
+      <div class="font-bold text-lg mb-2" style="color:var(--text-primary);">No fund selected</div>
+      <div class="neutral text-sm" style="max-width:440px;margin:0 auto;">Pick a fund in the <b>Viewing</b> selector above, or import a fund’s Disclose holdings to see its composition — weights, asset class, region and currency.</div>
+    </div>`;
+  }
+  return _renderEmptyHoldingsPersonal();
+}
+function _renderEmptyHoldingsPersonal() {
   return `<div class="p-10 text-center">
     <div style="font-size:56px;margin-bottom:16px;opacity:0.6;">📊</div>
     <div class="font-bold text-xl mb-2" style="color:var(--text-primary);">${cms('overview.emptyTitle')}</div>
@@ -15363,6 +15382,10 @@ function applyEdition() {
       // the inline display renderAll() sets on them. The Overview shows the
       // roll-up + plain-English read + holdings summary; fund reference lives
       // in the Fund section now.
+      // Fund → Holdings title is relabelled via the CONTENT registry
+      // (cms 'section.holdings.title' → 'Fund Holdings'); the subtitle is set by
+      // renderHoldingsKpis in fund mode. Personal toolbar is hidden via CSS.
+      try { const _hs = document.getElementById('holdingsSubtitle'); if (_hs) _hs.textContent = 'The fund’s disclosed constituents — weight, asset class, region, currency.'; } catch(e) {}
     } else {
       // Personal edition — drop Goals / Family per feature flags.
       if (!feat.goals) {

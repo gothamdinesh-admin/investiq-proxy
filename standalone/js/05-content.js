@@ -48,7 +48,10 @@ const CONTENT = {
     'brand.tagline':             '{tagline}'
   },
   personal: {},
-  harbour:  {}
+  harbour:  {
+    // Fund → Holdings is the fund COMPOSITION view in Harbour, not a personal book.
+    'section.holdings.title': 'Fund Holdings'
+  }
 };
 
 // ── CONTENT STUDIO schema (Phase 2) — groups the editable keys BY SITE AREA,
