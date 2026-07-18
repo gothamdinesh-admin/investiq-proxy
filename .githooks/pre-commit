@@ -7,4 +7,7 @@
 command -v node >/dev/null 2>&1 || exit 0
 node scripts/stamp-cache-bust.js || exit 0
 git add standalone/index.html 2>/dev/null || true
+# Static smoke test — blocks the commit if the SPA won't boot cleanly (syntax
+# error, stale cache-buster, or a showSection() target with no section).
+node scripts/smoke-test.js || { echo "commit aborted: fix the smoke-test issues above (or, emergency only, git commit --no-verify)"; exit 1; }
 exit 0

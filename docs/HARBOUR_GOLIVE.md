@@ -63,7 +63,7 @@ Env vars on the Render service. Auto-deploys from git push.
 
 - [x] **Cache-buster automated.** `scripts/stamp-cache-bust.js` hashes `standalone/js/*.js` → stamps `?b=<hash>` on module tags. Wired via `.githooks/pre-commit`.
   - [ ] **One-time per clone:** `git config core.hooksPath .githooks`
-- [ ] ⚪ Add a headless smoke test (load both editions, assert sections render + no console errors).
+- [x] **Static smoke test.** `scripts/smoke-test.js` checks: all inline + module scripts parse, the cache-buster is stamped + consistent, and every `showSection()` target has a `#section-…`. Runs in the pre-commit hook (blocks a broken commit). Run manually: `node scripts/smoke-test.js`.
 
 ## 8. Infrastructure ownership (long lead — start now) 🔴
 
