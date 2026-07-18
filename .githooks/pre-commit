@@ -1,0 +1,10 @@
+#!/bin/sh
+# Auto-stamp the module cache-buster so a changed standalone/js/*.js module can
+# never be served stale. Restages index.html if the stamp changed. Lenient by
+# design — if node is unavailable it skips rather than blocking the commit.
+#
+# Activate once per clone:  git config core.hooksPath .githooks
+command -v node >/dev/null 2>&1 || exit 0
+node scripts/stamp-cache-bust.js || exit 0
+git add standalone/index.html 2>/dev/null || true
+exit 0
