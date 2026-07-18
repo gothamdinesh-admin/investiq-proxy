@@ -3059,18 +3059,26 @@
         </div>
       </div>
 
+      <!-- UNIFIED FUND SELECTOR (Harbour) — one control drives BOTH the official
+           PDF list and the generated report below. -->
+      <div id="reportsFundBar" class="card p-4 mb-5" style="display:none;">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="text-xs neutral uppercase font-semibold" style="letter-spacing:.4px;white-space:nowrap;"><i class="fas fa-layer-group mr-1" style="opacity:.7;"></i>Fund</span>
+          <select id="reportsFund" onchange="onReportsFundChange()" class="input" style="max-width:320px;font-weight:600;cursor:pointer;"></select>
+          <span class="text-xs neutral" id="reportsFundHint" style="flex:1;min-width:0;"></span>
+        </div>
+      </div>
+
       <!-- OFFICIAL HARBOUR REPORTS — the real monthly PDFs, stored in Supabase
-           Storage (bucket fund-reports, migration 020). Fund books only. -->
+           Storage (bucket fund-reports, migration 020). Filtered by the fund
+           selector above. -->
       <div id="officialReportsCard" class="card p-5 mb-5" style="display:none;">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div class="section-title" style="margin:0;"><i class="fas fa-file-shield" style="color:var(--accent);"></i> Official Harbour reports</div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <select id="officialReportsFund" onchange="onOfficialReportsFundChange()" class="input" style="font-size:12px;padding:5px 9px;max-width:250px;cursor:pointer;font-weight:600;" title="Choose which fund's reports to show"></select>
-            <label id="officialReportsUpload" class="btn btn-sm btn-secondary" style="cursor:pointer;display:none;" title="Dump the monthly PDFs (named by fund code, e.g. Reporting_HARAEQ_Apr26.pdf) into the shared library — admin only. Each holder auto-matches by code.">
-              <i class="fas fa-upload mr-1"></i>Upload PDFs
-              <input type="file" accept=".pdf" multiple style="display:none;" onchange="uploadOfficialReports(event)">
-            </label>
-          </div>
+          <label id="officialReportsUpload" class="btn btn-sm btn-secondary" style="cursor:pointer;display:none;" title="Dump the monthly PDFs (named by fund code, e.g. Reporting_HARAEQ_Apr26.pdf) into the shared library — admin only. Each holder auto-matches by code.">
+            <i class="fas fa-upload mr-1"></i>Upload PDFs
+            <input type="file" accept=".pdf" multiple style="display:none;" onchange="uploadOfficialReports(event)">
+          </label>
         </div>
         <div id="officialReportsList"><div class="text-xs neutral py-2"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div></div>
       </div>
@@ -3079,12 +3087,6 @@
       <div class="card p-5 mb-5">
         <div class="section-title mb-4"><i class="fas fa-sliders" style="color:var(--accent);"></i> Report Settings</div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-          <!-- Harbour: pick which fund to generate the report for. Drives the
-               active fund book; hidden in the personal edition. -->
-          <div id="reportFundCol" style="display:none;">
-            <label class="text-xs neutral mb-1 block">Fund</label>
-            <select id="reportFundPicker" class="input w-full" onchange="onReportFundChange()"></select>
-          </div>
           <div id="reportTypeCol">
             <label class="text-xs neutral mb-1 block">Report Type</label>
             <select id="reportType" class="input w-full" onchange="renderReportPreview()">
@@ -4490,21 +4492,21 @@
 <!-- ============================================================ -->
 <!-- Extracted modules (Phase 1 of split). Load order matters — these
      define globals consumed by the inline <script> below. -->
-<script src="js/00-config.js?b=e64b6037"></script>
-<script src="js/05-content.js?b=e64b6037"></script>
-<script src="js/10-helpers.js?b=e64b6037"></script>
-<script src="js/20-state.js?b=e64b6037"></script>
-<script src="js/30-cloud.js?b=e64b6037"></script>
-<script src="js/40-auth.js?b=e64b6037"></script>
-<script src="js/45-auth-security.js?b=e64b6037"></script>
-<script src="js/60-import.js?b=e64b6037"></script>
-<script src="js/50-portfolio.js?b=e64b6037"></script>
-<script src="js/70-ai.js?b=e64b6037"></script>
-<script src="js/80-trader.js?b=e64b6037"></script>
-<script src="js/85-calendar-reports.js?b=e64b6037"></script>
-<script src="js/88-onboarding-tour.js?b=e64b6037"></script>
-<script src="js/90-goals.js?b=e64b6037"></script>
-<script src="js/95-integrations.js?b=e64b6037"></script>
+<script src="js/00-config.js?b=f7e7a95a"></script>
+<script src="js/05-content.js?b=f7e7a95a"></script>
+<script src="js/10-helpers.js?b=f7e7a95a"></script>
+<script src="js/20-state.js?b=f7e7a95a"></script>
+<script src="js/30-cloud.js?b=f7e7a95a"></script>
+<script src="js/40-auth.js?b=f7e7a95a"></script>
+<script src="js/45-auth-security.js?b=f7e7a95a"></script>
+<script src="js/60-import.js?b=f7e7a95a"></script>
+<script src="js/50-portfolio.js?b=f7e7a95a"></script>
+<script src="js/70-ai.js?b=f7e7a95a"></script>
+<script src="js/80-trader.js?b=f7e7a95a"></script>
+<script src="js/85-calendar-reports.js?b=f7e7a95a"></script>
+<script src="js/88-onboarding-tour.js?b=f7e7a95a"></script>
+<script src="js/90-goals.js?b=f7e7a95a"></script>
+<script src="js/95-integrations.js?b=f7e7a95a"></script>
 <script>
 
 // PLATFORM_CONFIG moved to js/00-config.js (loaded above this <script>).

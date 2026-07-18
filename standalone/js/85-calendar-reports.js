@@ -228,34 +228,73 @@ function _reportMatchesCodes(filename, codes) {
   return codes.some(c => new RegExp('(^|[^A-Z0-9])' + c.replace(/[^A-Z0-9]/g, '') + '([^A-Z0-9]|$)').test(up));
 }
 
-// Funds the user can pick reports for: the funds they HOLD (client tier,
-// name + code) plus the active fund book. De-duplicated by code.
-function _reportsFundList() {
-  const map = new Map(); // CODE -> display name
+// ── Unified Reports fund selector ────────────────────────────────────────
+// ONE control drives the whole Reports page: the official-PDF list AND the
+// generated report. Options = funds the client HOLDS ∪ imported fund BOOKS,
+// de-duped by code. A code with a `bookId` can also generate a composition
+// report; a holdings-only code shows official PDFs but no generated report.
+function _reportsFundOptions() {
+  const map = new Map(); // CODE -> { name, bookId }
   try {
-    const holds = (typeof _loadClientHoldings === 'function') ? _loadClientHoldings() : [];
-    holds.forEach(h => {
+    (typeof _loadClientHoldings === 'function' ? _loadClientHoldings() : []).forEach(h => {
       const info = (typeof _clientFundInfo === 'function') ? _clientFundInfo(h) : {};
       const code = String((info && info.code) || h.code || '').toUpperCase();
-      if (code) map.set(code, (info && info.name) || h.name || code);
+      if (code && !map.has(code)) map.set(code, { name: (info && info.name) || h.name || code, bookId: null });
     });
   } catch(e) {}
   try {
-    _activeFundCodes().forEach(c => {
-      const cu = String(c).toUpperCase();
-      if (!map.has(cu)) { const fund = (typeof _activeFund === 'function') ? _activeFund() : null; map.set(cu, (fund && fund.name) || cu); }
+    (typeof listPortfolios === 'function' ? listPortfolios() : []).forEach(p => {
+      const code = String((p.fund && p.fund.code) || '').toUpperCase();
+      if (!code) return;
+      const name = (p.fund && p.fund.name) || p.name;
+      if (map.has(code)) map.get(code).bookId = p.id; else map.set(code, { name, bookId: p.id });
     });
   } catch(e) {}
-  return [...map.entries()].map(([code, name]) => ({ code, name }));
+  return [...map.entries()].map(([code, v]) => ({ code, name: v.name, bookId: v.bookId }));
 }
 
-// Which fund's reports the Reports section is showing. 'all' = every held fund,
-// '__lib' = whole library (admin), else a single fund code.
-let _reportsFundSel = 'all';
-function onOfficialReportsFundChange() {
-  const s = document.getElementById('officialReportsFund');
-  if (s) _reportsFundSel = s.value;
-  renderOfficialReports();
+// Current selection: 'all' = every held fund, '__lib' = whole library (admin),
+// else a single fund code.
+let _reportsFund = 'all';
+
+// Populate + show the unified fund bar (Harbour only). Sets the hint text.
+function renderReportsFundBar() {
+  const bar = document.getElementById('reportsFundBar');
+  if (!bar) return;
+  const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
+  if (!harbour) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const funds = _reportsFundOptions();
+  const isAdmin = (typeof _isAdmin !== 'undefined' && _isAdmin);
+  const sel = document.getElementById('reportsFund');
+  if (sel) {
+    const opts = [`<option value="all">All my funds</option>`]
+      .concat(funds.map(f => `<option value="${f.code}">${_escape(f.name)} · ${f.code}${f.bookId ? '' : ' (PDFs only)'}</option>`));
+    if (isAdmin) opts.push(`<option value="__lib">Whole library (admin)</option>`);
+    sel.innerHTML = opts.join('');
+    if (![...sel.options].some(o => o.value === _reportsFund)) _reportsFund = 'all';
+    sel.value = _reportsFund;
+  }
+  const hint = document.getElementById('reportsFundHint');
+  if (hint) {
+    const f = funds.find(x => x.code === _reportsFund);
+    hint.textContent = _reportsFund === 'all' ? 'Official PDFs for every fund you hold — pick one fund to also generate its report.'
+      : _reportsFund === '__lib' ? 'Showing the entire PDF library.'
+      : (f && f.bookId) ? 'Official PDFs + a generated report for this fund.'
+      : 'Official PDFs for this fund. Import its Disclose holdings to also generate a report.';
+  }
+}
+
+// Selecting a fund drives BOTH surfaces. If it has an imported book, make it
+// active so the builder can generate its composition report.
+function onReportsFundChange() {
+  const sel = document.getElementById('reportsFund');
+  if (sel) _reportsFund = sel.value;
+  const f = _reportsFundOptions().find(x => x.code === _reportsFund);
+  if (f && f.bookId && typeof setActivePortfolio === 'function') setActivePortfolio(f.bookId);
+  try { renderReportsFundBar(); } catch(e) {}
+  try { renderOfficialReports(); } catch(e) {}
+  try { renderReportPreview(); } catch(e) {}
 }
 
 async function renderOfficialReports() {
@@ -268,24 +307,12 @@ async function renderOfficialReports() {
   const up = document.getElementById('officialReportsUpload');
   if (up) up.style.display = isAdmin ? '' : 'none';
 
-  // Populate the fund picker (held funds + active book, + whole-library for admin).
-  const funds = _reportsFundList();
-  const sel = document.getElementById('officialReportsFund');
-  if (sel) {
-    const opts = [`<option value="all">All my funds</option>`]
-      .concat(funds.map(f => `<option value="${f.code}">${_escape(f.name)} · ${f.code}</option>`));
-    if (isAdmin) opts.push(`<option value="__lib">Whole library (admin)</option>`);
-    sel.innerHTML = opts.join('');
-    if (![...sel.options].some(o => o.value === _reportsFundSel)) _reportsFundSel = 'all';
-    sel.value = _reportsFundSel;
-    sel.style.display = (funds.length || isAdmin) ? '' : 'none';
-  }
-
-  // Resolve the codes to match on from the current selection.
+  // Resolve the codes to match on from the unified selection.
+  const funds = _reportsFundOptions();
   let codes;
-  if (_reportsFundSel === '__lib') codes = null;                 // whole library
-  else if (_reportsFundSel === 'all') codes = funds.map(f => f.code);
-  else codes = [_reportsFundSel];
+  if (_reportsFund === '__lib') codes = null;                    // whole library
+  else if (_reportsFund === 'all') codes = funds.map(f => f.code);
+  else codes = [_reportsFund];
 
   const list = document.getElementById('officialReportsList');
   try {
@@ -511,31 +538,14 @@ function _fundBookPortfolios() {
   });
 }
 
-// Harbour report builder = a fund picker (no personal $-templates). Toggles the
-// Report Type / Include columns for a single Fund column and lists fund books.
+// Harbour hides the personal Report Type / Include columns (the unified fund
+// bar above drives everything). Personal edition keeps them.
 function _setupReportBuilder() {
   const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
-  const fundCol = document.getElementById('reportFundCol');
   const typeCol = document.getElementById('reportTypeCol');
   const scopeCol = document.getElementById('reportScopeCol');
-  if (!harbour) { if (fundCol) fundCol.style.display = 'none'; return; }
-  if (typeCol) typeCol.style.display = 'none';
-  if (scopeCol) scopeCol.style.display = 'none';
-  if (fundCol) fundCol.style.display = '';
-  const sel = document.getElementById('reportFundPicker');
-  if (sel) {
-    const books = _fundBookPortfolios();
-    const active = (typeof getActivePortfolio === 'function') ? getActivePortfolio() : null;
-    sel.innerHTML = books.length
-      ? books.map(p => `<option value="${p.id}"${active && p.id === active.id ? ' selected' : ''}>${_escape((p.fund && p.fund.name) || p.name)}</option>`).join('')
-      : `<option value="">No fund books imported yet</option>`;
-  }
-}
-function onReportFundChange() {
-  const v = document.getElementById('reportFundPicker')?.value;
-  if (!v) { renderReportPreview(); return; }
-  if (typeof _switchPortfolioUI === 'function') _switchPortfolioUI(v);   // switches active fund + repaints (re-renders reports)
-  else if (typeof setActivePortfolio === 'function') { setActivePortfolio(v); renderReportPreview(); }
+  if (typeCol) typeCol.style.display = harbour ? 'none' : '';
+  if (scopeCol) scopeCol.style.display = harbour ? 'none' : '';
 }
 
 function renderReportPreview() {
@@ -544,27 +554,43 @@ function renderReportPreview() {
   const type   = document.getElementById('reportType')?.value || 'summary';
   const asOf   = document.getElementById('reportDate')?.value || new Date().toISOString().slice(0, 10);
   const scope  = document.getElementById('reportScope')?.value || 'all';
-  const metrics = (typeof getMetrics === 'function') ? getMetrics() : null;
+  let metrics = (typeof getMetrics === 'function') ? getMetrics() : null;
   if (!metrics) { wrap.innerHTML = '<div class="text-center py-10">Portfolio data not loaded yet.</div>'; return; }
 
   const harbour = (typeof EDITION !== 'undefined' && EDITION.id === 'harbour');
   try { _setupReportBuilder(); } catch(e) {}
-
-  // Weight-based fund book → the Harbour fund report (modelled on the official
-  // monthly PDF: headline stats, top-10, mix, monthly returns, profile). The
-  // personal $-based templates are meaningless for a fund, whatever "type" says.
   const _repSub = document.getElementById('reportsSubtitle');
+
+  // ── Harbour: the unified fund selector drives official PDFs + the report ──
+  if (harbour) {
+    try { renderReportsFundBar(); } catch(e) {}
+    try { renderOfficialReports(); } catch(e) { console.warn('[official-reports]', e); }
+    const f = _reportsFundOptions().find(x => x.code === _reportsFund);
+    const single = _reportsFund !== 'all' && _reportsFund !== '__lib';
+    if (single && f && f.bookId) {
+      // Make sure the selected fund's book is active, then generate its report.
+      if (typeof getActivePortfolio === 'function' && getActivePortfolio().id !== f.bookId && typeof setActivePortfolio === 'function') {
+        setActivePortfolio(f.bookId); metrics = getMetrics();
+      }
+      if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
+        if (_repSub) _repSub.textContent = 'Official monthly PDFs above; the snapshot below is generated live from the connected data. PDF-ready via Print.';
+        wrap.innerHTML = _harbourFundReportHtml(metrics, asOf);
+        return;
+      }
+    }
+    if (_repSub) _repSub.textContent = 'Pick a fund above to see its official PDFs and generate its report.';
+    wrap.innerHTML = `<div class="text-center py-10" style="color:#64748B;">${
+      single && f && !f.bookId ? 'Official PDFs for this fund are shown above. Import its Disclose holdings (Fund section) to also generate a composition report.'
+      : single ? 'Select a fund with imported holdings to generate its report.'
+      : 'Pick a single fund above to generate its report; “All my funds” shows every held fund’s official PDFs.'}</div>`;
+    return;
+  }
+
+  // Personal edition — weight-based fund book still renders the fund report.
   if (typeof _isFundWeightView === 'function' && _isFundWeightView()) {
     if (_repSub) _repSub.textContent = 'Official monthly PDFs above; the generated snapshot below is built live from the connected data. PDF-ready via Print.';
     try { renderOfficialReports(); } catch(e) { console.warn('[official-reports]', e); }
     wrap.innerHTML = _harbourFundReportHtml(metrics, asOf);
-    return;
-  }
-  // Harbour, but no fund book is active — offer the picker, not personal templates.
-  if (harbour) {
-    if (_repSub) _repSub.textContent = 'Pick a fund above to generate its report, modelled on the official monthly PDF.';
-    try { renderOfficialReports(); } catch(e) {}
-    wrap.innerHTML = `<div class="text-center py-10" style="color:#64748B;">${_fundBookPortfolios().length ? 'Select a fund above to generate its report.' : 'No fund books yet — import a fund’s Disclose holdings (Fund section) to generate its report here.'}</div>`;
     return;
   }
   if (_repSub) _repSub.textContent = 'Generate printable portfolio summaries — for your accountant, spouse, financial adviser, or your own records. PDF-ready.';
