@@ -72,6 +72,20 @@ const missing = [...targets].filter(t => !sectionIds.has(t));
 if (missing.length) fail(`showSection() targets with no #section-… node: ${missing.join(', ')}`);
 else pass(`${targets.size} showSection() target(s) all resolve to a section`);
 
+// ── 4. Theme-hex guardrail (warn-only) ────────────────────────────────────
+// The personal dark theme's OLD palette hexes shouldn't leak into new markup —
+// on Harbour's light theme they render as dark-on-light. We don't retrofit the
+// 245 existing ones (they'd change the personal theme), but we flag GROWTH so
+// new code uses var(--token) instead. Silent unless the count rises.
+console.log('[4] Theme-hex guardrail (advisory)');
+const THEME_HEX_BASELINE = 245;
+const themeHexRe = /#(c8d6ef|4a6080|1e2d4a|141e33|080d1a|0f1729|0b1220|1e293b)/gi;
+let themeHex = (html.match(themeHexRe) || []).length;
+modules.forEach(f => { themeHex += (fs.readFileSync(path.join(jsDir, f), 'utf8').match(themeHexRe) || []).length; });
+if (themeHex > THEME_HEX_BASELINE) console.log(`  ⚠ old-palette hardcoded hexes rose to ${themeHex} (baseline ${THEME_HEX_BASELINE}) — prefer var(--text-*/--border/--bg-panel) so it themes correctly on Harbour.`);
+else if (themeHex < THEME_HEX_BASELINE) console.log(`  ✓ down to ${themeHex} (baseline ${THEME_HEX_BASELINE}) — lower THEME_HEX_BASELINE in scripts/smoke-test.js to lock the win.`);
+else console.log(`  ✓ ${themeHex} (baseline holds; not blocking)`);
+
 // ── Result ────────────────────────────────────────────────────────────────
 console.log('');
 if (fails.length) { console.error(`SMOKE TEST FAILED — ${fails.length} issue(s).`); process.exit(1); }
